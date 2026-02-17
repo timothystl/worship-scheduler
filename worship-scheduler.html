@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worship Schedule Builder</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; }
+
+header { background: #2c3e6b; color: white; padding: 16px 24px; }
+header h1 { font-size: 1.4rem; font-weight: 700; }
+header p { font-size: 0.85rem; opacity: 0.75; margin-top: 2px; }
+
+.tabs { display: flex; background: #1e2d52; flex-wrap: wrap; }
+.tab-btn { padding: 12px 24px; background: none; border: none; color: rgba(255,255,255,0.65); font-size: 0.9rem; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; white-space: nowrap; }
+.tab-btn.active { color: white; border-bottom-color: #f0b429; }
+.tab-btn:hover:not(.active) { color: white; background: rgba(255,255,255,0.07); }
+
+.tab-content { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+.tab-content.active { display: block; }
+
+.card { background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
+.card h2 { font-size: 1.05rem; color: #2c3e6b; margin-bottom: 14px; border-bottom: 2px solid #eef0f5; padding-bottom: 8px; }
+.card h3 { font-size: 0.95rem; color: #2c3e6b; margin: 16px 0 10px; }
+
+label { display: block; font-size: 0.85rem; font-weight: 600; color: #444; margin-bottom: 4px; margin-top: 10px; }
+input[type="text"], input[type="date"], input[type="password"] { width: 100%; padding: 8px 10px; border: 1px solid #d0d4e0; border-radius: 6px; font-size: 0.9rem; outline: none; }
+input[type="text"]:focus, input[type="date"]:focus, input[type="password"]:focus { border-color: #2c3e6b; box-shadow: 0 0 0 3px rgba(44,62,107,0.12); }
+select.form-select { width: 100%; padding: 7px 10px; border: 1px solid #d0d4e0; border-radius: 6px; font-size: 0.9rem; outline: none; }
+
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.checkbox-group label { display: flex; align-items: center; gap: 5px; font-weight: normal; font-size: 0.85rem; cursor: pointer; background: #f5f6fa; border: 1px solid #dde; border-radius: 5px; padding: 4px 9px; margin: 0; transition: all 0.1s; user-select: none; }
+.checkbox-group label:hover { background: #e8eaf5; }
+.checkbox-group label.checked { background: #2c3e6b; color: white; border-color: #2c3e6b; }
+
+.radio-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.radio-group label { display: flex; align-items: center; gap: 5px; font-weight: normal; font-size: 0.85rem; cursor: pointer; background: #f5f6fa; border: 1px solid #dde; border-radius: 5px; padding: 6px 12px; margin: 0; transition: all 0.1s; user-select: none; }
+.radio-group label:hover { background: #e8eaf5; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: #2c3e6b; color: white; }
+.btn-primary:hover { background: #1e2d52; }
+.btn-success { background: #27ae60; color: white; }
+.btn-success:hover { background: #1e9150; }
+.btn-danger { background: #e74c3c; color: white; }
+.btn-danger:hover { background: #c0392b; }
+.btn-warning { background: #f39c12; color: white; }
+.btn-warning:hover { background: #d68910; }
+.btn-outline { background: white; border: 1.5px solid #2c3e6b; color: #2c3e6b; }
+.btn-outline:hover { background: #f0f2f8; }
+.btn-sm { padding: 5px 12px; font-size: 0.82rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* People list */
+.people-grid { display: grid; gap: 12px; }
+.person-card { border: 1px solid #dde; border-radius: 8px; padding: 14px 16px; background: #fafbfc; }
+.person-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.person-name { font-weight: 700; font-size: 1rem; color: #2c3e6b; }
+.person-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { border-radius: 4px; padding: 2px 8px; font-size: 0.78rem; }
+.tag-sunday { background: #e8eaf5; color: #2c3e6b; }
+.tag-service { background: #fef3cd; color: #856404; }
+.tag-role { background: #d4edda; color: #155724; }
+.tag-breeze { background: #cce5ff; color: #004085; }
+
+/* Schedule */
+.schedule-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 16px; }
+.schedule-controls .field { display: flex; flex-direction: column; gap: 4px; }
+.schedule-controls .field label { font-size: 0.85rem; font-weight: 600; color: #444; margin: 0; }
+.schedule-controls .field input { width: 160px; }
+
+.table-wrapper { overflow-x: auto; margin-top: 14px; }
+table { border-collapse: collapse; font-size: 0.82rem; }
+thead th { background: #2c3e6b; color: white; padding: 8px 10px; text-align: center; white-space: nowrap; border: 1px solid #1e2d52; }
+thead th.date-col { background: #1e2d52; }
+thead th.shared-col { background: #4a5a8a; }
+thead th.svc-header { background: #3d5a8a; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+tbody tr:nth-child(even) { background: #f7f8fc; }
+tbody tr:hover { background: #eef0f8; }
+td { padding: 6px 8px; border: 1px solid #dde; text-align: center; vertical-align: middle; min-width: 110px; }
+td.date-cell { font-weight: 700; color: #2c3e6b; background: #f0f2f8; text-align: left; white-space: nowrap; min-width: 130px; }
+td .ordinal { font-size: 0.75rem; color: #888; display: block; }
+td.empty-cell { background: #fff3f3; }
+td.filled-cell { background: #f0fff4; }
+.cell-select { width: 100%; font-size: 0.8rem; border: 1px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; padding: 2px 4px; }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+.summary-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.summary-item { background: #f0f2f8; border-radius: 6px; padding: 5px 12px; font-size: 0.82rem; }
+.summary-item strong { color: #2c3e6b; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: #888; }
+.empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
+@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+
+.alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 0.88rem; }
+.alert-warning { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+.alert-success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+.alert-danger  { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+.alert-info    { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+
+/* Breeze sync */
+.sync-step { border: 1px solid #dde; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.sync-step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.step-badge { background: #2c3e6b; color: white; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; }
+.step-title { font-weight: 700; font-size: 1rem; color: #2c3e6b; }
+
+.people-map-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.people-map-table th { background: #f0f2f8; padding: 7px 10px; text-align: left; border: 1px solid #dde; font-weight: 600; color: #2c3e6b; }
+.people-map-table td { padding: 6px 10px; border: 1px solid #dde; vertical-align: middle; }
+.people-map-table tr:nth-child(even) { background: #f9f9fc; }
+
+.event-map-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.event-map-table th { background: #f0f2f8; padding: 7px 10px; text-align: left; border: 1px solid #dde; font-weight: 600; color: #2c3e6b; }
+.event-map-table td { padding: 6px 10px; border: 1px solid #dde; vertical-align: middle; }
+.event-map-table tr:nth-child(even) { background: #f9f9fc; }
+.event-map-table select { width: 100%; font-size: 0.82rem; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+
+.log-box { background: #1a1a2e; color: #e0e0e0; border-radius: 8px; padding: 14px; font-family: monospace; font-size: 0.82rem; max-height: 300px; overflow-y: auto; margin-top: 12px; }
+.log-ok  { color: #4ade80; }
+.log-err { color: #f87171; }
+.log-info { color: #93c5fd; }
+
+.status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+.dot-ok  { background: #27ae60; }
+.dot-err { background: #e74c3c; }
+.dot-pending { background: #aaa; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Worship Schedule Builder</h1>
+  <p>Manage volunteers and generate Sunday service schedules</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" id="tab-btn-people">People &amp; Availability</button>
+  <button class="tab-btn" id="tab-btn-schedule">Schedule</button>
+  <button class="tab-btn" id="tab-btn-settings">&#9881; Settings</button>
+  <button class="tab-btn" id="tab-btn-breeze">&#9729; Breeze Sync</button>
+</div>
+
+<!-- ══ PEOPLE TAB ══════════════════════════════════════════════════════════ -->
+<div id="tab-people" class="tab-content active">
+  <div class="card">
+    <h2>Add / Edit Person</h2>
+    <input type="hidden" id="edit-id">
+    <label for="person-name">Name</label>
+    <input type="text" id="person-name" placeholder="Full name">
+
+    <div class="form-row">
+      <div>
+        <label>Preferred Sundays of Month</label>
+        <div class="checkbox-group" id="pref-sundays">
+          <label><input type="checkbox" value="1"> 1st</label>
+          <label><input type="checkbox" value="2"> 2nd</label>
+          <label><input type="checkbox" value="3"> 3rd</label>
+          <label><input type="checkbox" value="4"> 4th</label>
+          <label><input type="checkbox" value="5"> 5th</label>
+        </div>
+        <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">Leave all unchecked = any Sunday</small>
+      </div>
+      <div>
+        <label>Service Preference</label>
+        <div class="radio-group" id="pref-service">
+          <label><input type="radio" name="svc" value="both" checked> Both Services</label>
+          <label><input type="radio" name="svc" value="8am"> 8:00 AM only</label>
+          <label><input type="radio" name="svc" value="10:45am"> 10:45 AM only</label>
+        </div>
+      </div>
+    </div>
+
+    <label style="margin-top:14px;">Roles This Person Can Fill</label>
+    <div class="checkbox-group" id="pref-roles">
+      <label><input type="checkbox" value="Elder"> Elder</label>
+      <label><input type="checkbox" value="Acolyte"> Acolyte</label>
+      <label><input type="checkbox" value="PowerPoint"> PowerPoint</label>
+      <label><input type="checkbox" value="Lector"> Lector</label>
+      <label><input type="checkbox" value="Liturgist"> Liturgist</label>
+      <label><input type="checkbox" value="Preacher"> Preacher</label>
+      <label><input type="checkbox" value="Childrens Message"> Children's Message</label>
+      <label><input type="checkbox" value="Lectionary Class"> Lectionary Class</label>
+      <label><input type="checkbox" value="Preschool Chapel"> Preschool Chapel</label>
+    </div>
+
+    <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="btn-save-person">Save Person</button>
+      <button class="btn btn-outline" id="btn-clear-form">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>All People (<span id="people-count">0</span>)</h2>
+    <div id="people-list" class="people-grid"></div>
+  </div>
+</div>
+
+<!-- ══ SCHEDULE TAB ════════════════════════════════════════════════════════ -->
+<div id="tab-schedule" class="tab-content">
+  <div class="card">
+    <h2>Generate Schedule</h2>
+    <div class="schedule-controls">
+      <div class="field">
+        <label>Start Date</label>
+        <input type="date" id="start-date">
+      </div>
+      <div class="field">
+        <label>End Date</label>
+        <input type="date" id="end-date">
+      </div>
+      <button class="btn btn-primary" id="btn-generate">Generate Schedule</button>
+    </div>
+    <div id="schedule-alert"></div>
+  </div>
+
+  <div class="card" id="schedule-output" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0; border:none; padding:0;">Schedule</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-success btn-sm" id="btn-export-csv">Export CSV</button>
+        <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
+        <button class="btn btn-danger btn-sm" id="btn-clear-schedule">Clear Schedule</button>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3d5a8a;"></div> Per-service (8am / 10:45am)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4a5a8a;"></div> Shared (both services)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fff3f3;border:1px solid #f5c6cb;"></div> Unfilled</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f0fff4;border:1px solid #c3e6cb;"></div> Filled</div>
+    </div>
+    <div class="table-wrapper">
+      <table id="schedule-table">
+        <thead id="schedule-thead"></thead>
+        <tbody id="schedule-tbody"></tbody>
+      </table>
+    </div>
+    <div id="assignment-summary" class="summary-bar"></div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS TAB ════════════════════════════════════════════════════════ -->
+<div id="tab-settings" class="tab-content">
+  <div class="card">
+    <h2>Breeze CHMS Connection</h2>
+    <p style="font-size:0.88rem;color:#555;margin-bottom:14px;">
+      Enter your Breeze subdomain and API key to enable syncing volunteers to Breeze.
+      Your credentials are stored only in this browser's localStorage.
+    </p>
+
+    <label for="breeze-subdomain">Breeze Subdomain</label>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="color:#666;font-size:0.9rem;white-space:nowrap;">https://</span>
+      <input type="text" id="breeze-subdomain" placeholder="mychurch" style="max-width:240px;">
+      <span style="color:#666;font-size:0.9rem;white-space:nowrap;">.breezechms.com</span>
+    </div>
+
+    <label for="breeze-apikey">API Key</label>
+    <input type="password" id="breeze-apikey" placeholder="Paste your Breeze API key here" style="max-width:400px;">
+    <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+      Find this in Breeze: Settings &rarr; Advanced &rarr; API
+    </small>
+
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+      <button class="btn btn-outline" id="btn-test-breeze">Test Connection</button>
+      <span id="settings-status" style="font-size:0.88rem;"></span>
+    </div>
+    <div id="settings-alert" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- ══ BREEZE SYNC TAB ═════════════════════════════════════════════════════ -->
+<div id="tab-breeze" class="tab-content">
+  <div id="breeze-no-settings" class="alert alert-warning" style="display:none;">
+    &#9888; Please configure your Breeze credentials in the <strong>Settings</strong> tab first.
+  </div>
+  <div id="breeze-no-schedule" class="alert alert-warning" style="display:none;">
+    &#9888; No schedule generated yet. Go to the <strong>Schedule</strong> tab and generate a schedule first.
+  </div>
+
+  <!-- Step 1: Map people -->
+  <div class="card sync-step" id="sync-step1">
+    <div class="sync-step-header">
+      <div class="step-badge">1</div>
+      <div class="step-title">Link People to Breeze Profiles</div>
+    </div>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:12px;">
+      Search Breeze to find each person's Breeze ID. Click Search next to each name, then select the correct person from the results.
+    </p>
+    <table class="people-map-table" id="people-map-table">
+      <thead><tr><th>Name (in this app)</th><th>Breeze Person</th><th>Status</th><th></th></tr></thead>
+      <tbody id="people-map-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Step 2: Map events -->
+  <div class="card sync-step" id="sync-step2">
+    <div class="sync-step-header">
+      <div class="step-badge">2</div>
+      <div class="step-title">Match Sundays to Breeze Event Instances</div>
+    </div>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:12px;">
+      Fetch your Breeze events for the schedule period, then match each Sunday to the correct 8am and 10:45am event instances.
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <input type="text" id="event-filter" placeholder="Filter by event name (e.g. Worship)" style="max-width:260px;">
+      <button class="btn btn-outline" id="btn-fetch-events">Fetch Events from Breeze</button>
+      <span id="fetch-events-status" style="font-size:0.85rem;color:#555;"></span>
+    </div>
+    <div id="event-map-container">
+      <p style="font-size:0.85rem;color:#888;">Fetch events above to begin mapping.</p>
+    </div>
+  </div>
+
+  <!-- Step 3: Push -->
+  <div class="card sync-step" id="sync-step3">
+    <div class="sync-step-header">
+      <div class="step-badge">3</div>
+      <div class="step-title">Sync Schedule to Breeze</div>
+    </div>
+    <p style="font-size:0.85rem;color:#555;margin-bottom:12px;">
+      For each mapped Sunday, this will <strong>remove all existing volunteers</strong> from the Breeze event instances
+      and then add everyone from your schedule. Sundays without a Breeze event mapped will be skipped.
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-success" id="btn-sync-breeze">Sync to Breeze</button>
+      <span id="sync-overall-status" style="font-size:0.88rem;"></span>
+    </div>
+    <div id="sync-log" class="log-box" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════
+function makeId() {
+  return 'id_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now();
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function ordSuffix(n) {
+  if (n === 1) return 'st'; if (n === 2) return 'nd'; if (n === 3) return 'rd'; return 'th';
+}
+function fmtDate(d) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function showAlert(elId, msg, type) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = msg ? '<div class="alert alert-' + type + '">' + msg + '</div>' : '';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════════════════
+var PER_ROLES    = ['Elder', 'Acolyte', 'PowerPoint', 'Lector'];
+var SHARED_ROLES = ['Liturgist', 'Preacher', 'Childrens Message', 'Lectionary Class', 'Preschool Chapel'];
+var SHARED_LABELS = { 'Childrens Message': "Children's Message" };
+function roleLabel(r) { return SHARED_LABELS[r] || r; }
+var ALL_TABS = ['people','schedule','settings','breeze'];
+
+// ══════════════════════════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════════════════════════
+function getPeople()  { try { return JSON.parse(localStorage.getItem('ws_people')  || '[]'); } catch(e) { return []; } }
+function savePeople(a){ localStorage.setItem('ws_people', JSON.stringify(a)); }
+
+function getBreezeSettings() { try { return JSON.parse(localStorage.getItem('ws_breeze_settings') || '{}'); } catch(e) { return {}; } }
+function saveBreezeSettings(o){ localStorage.setItem('ws_breeze_settings', JSON.stringify(o)); }
+
+function getEventMap() { try { return JSON.parse(localStorage.getItem('ws_breeze_event_map') || '{}'); } catch(e) { return {}; } }
+function saveEventMap(o){ localStorage.setItem('ws_breeze_event_map', JSON.stringify(o)); }
+
+// Schedule persistence
+function saveSchedule() {
+  if (!currentSchedule.length) return;
+  var rows = currentSchedule.map(function(row) {
+    return { dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments };
+  });
+  localStorage.setItem('ws_schedule', JSON.stringify({
+    startDate: document.getElementById('start-date').value,
+    endDate:   document.getElementById('end-date').value,
+    rows: rows
+  }));
+}
+function loadSchedule() {
+  try {
+    var raw = localStorage.getItem('ws_schedule');
+    if (!raw) return false;
+    var data = JSON.parse(raw);
+    if (!data.rows || !data.rows.length) return false;
+    currentSchedule = data.rows.map(function(row) {
+      return { date: new Date(row.dateISO), ordinal: row.ordinal, assignments: row.assignments };
+    });
+    if (data.startDate) document.getElementById('start-date').value = data.startDate;
+    if (data.endDate)   document.getElementById('end-date').value   = data.endDate;
+    return true;
+  } catch(e) { return false; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SCHEDULE STATE
+// ══════════════════════════════════════════════════════════════════
+var currentSchedule = [];
+
+// ══════════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════════
+function showTab(name) {
+  ALL_TABS.forEach(function(t) {
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
+  });
+  if (name === 'people')   renderPeopleList();
+  if (name === 'settings') loadSettingsForm();
+  if (name === 'breeze')   initBreezeTab();
+}
+ALL_TABS.forEach(function(t) {
+  document.getElementById('tab-btn-' + t).addEventListener('click', function() { showTab(t); });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// CHECKBOX LABEL HIGHLIGHTING
+// ══════════════════════════════════════════════════════════════════
+function syncLabels(groupId) {
+  var g = document.getElementById(groupId);
+  if (!g) return;
+  g.querySelectorAll('label').forEach(function(lbl) {
+    var cb = lbl.querySelector('input[type="checkbox"]');
+    if (cb) lbl.classList.toggle('checked', cb.checked);
+  });
+}
+document.getElementById('pref-sundays').addEventListener('change', function() { syncLabels('pref-sundays'); });
+document.getElementById('pref-roles').addEventListener('change',   function() { syncLabels('pref-roles'); });
+
+// ══════════════════════════════════════════════════════════════════
+// PERSON FORM
+// ══════════════════════════════════════════════════════════════════
+function clearForm() {
+  document.getElementById('edit-id').value = '';
+  document.getElementById('person-name').value = '';
+  document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
+  document.getElementById('pref-service').querySelector('input[value="both"]').checked = true;
+  document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
+  syncLabels('pref-sundays');
+  syncLabels('pref-roles');
+}
+
+function savePerson() {
+  var name = document.getElementById('person-name').value.trim();
+  if (!name) { alert('Please enter a name.'); return; }
+
+  var preferredSundays = [];
+  document.getElementById('pref-sundays').querySelectorAll('input:checked').forEach(function(cb){
+    preferredSundays.push(parseInt(cb.value, 10));
+  });
+  var svcEl = document.getElementById('pref-service').querySelector('input[name="svc"]:checked');
+  var servicePreference = svcEl ? svcEl.value : 'both';
+  var roles = [];
+  document.getElementById('pref-roles').querySelectorAll('input:checked').forEach(function(cb){
+    roles.push(cb.value);
+  });
+  if (roles.length === 0) { alert('Please select at least one role.'); return; }
+
+  var people = getPeople();
+  var editId = document.getElementById('edit-id').value;
+  if (editId) {
+    for (var i = 0; i < people.length; i++) {
+      if (people[i].id === editId) {
+        people[i] = { id: editId, name: name, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: people[i].breezePersonId || null };
+        break;
+      }
+    }
+  } else {
+    people.push({ id: makeId(), name: name, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: null });
+  }
+  savePeople(people);
+  clearForm();
+  renderPeopleList();
+}
+
+document.getElementById('btn-save-person').addEventListener('click', savePerson);
+document.getElementById('btn-clear-form').addEventListener('click', clearForm);
+
+// ══════════════════════════════════════════════════════════════════
+// PEOPLE LIST
+// ══════════════════════════════════════════════════════════════════
+function renderPeopleList() {
+  var people = getPeople();
+  document.getElementById('people-count').textContent = people.length;
+  var container = document.getElementById('people-list');
+  if (people.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">&#128101;</div><p>No people added yet. Use the form above to add volunteers.</p></div>';
+    return;
+  }
+  var html = '';
+  people.forEach(function(p) {
+    var sundays = p.preferredSundays.length ? p.preferredSundays.map(function(n){ return n+ordSuffix(n); }).join(', ') : 'Any Sunday';
+    var svcMap = { 'both':'Both Services','8am':'8:00 AM only','10:45am':'10:45 AM only' };
+    var roleTags = p.roles.map(function(r){ return '<span class="tag tag-role">'+esc(roleLabel(r))+'</span>'; }).join('');
+    var breezeTag = p.breezePersonId ? '<span class="tag tag-breeze">&#9729; Breeze linked</span>' : '';
+    html += '<div class="person-card">'
+      +'<div class="person-card-header">'
+      +'<span class="person-name">'+esc(p.name)+'</span>'
+      +'<div style="display:flex;gap:6px;">'
+      +'<button class="btn btn-outline btn-sm" data-action="edit" data-id="'+p.id+'">Edit</button>'
+      +'<button class="btn btn-danger btn-sm" data-action="delete" data-id="'+p.id+'">Remove</button>'
+      +'</div></div>'
+      +'<div class="person-meta">'
+      +'<span class="tag tag-sunday">'+esc(sundays)+'</span>'
+      +'<span class="tag tag-service">'+esc(svcMap[p.servicePreference]||p.servicePreference)+'</span>'
+      +roleTags+breezeTag
+      +'</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+document.getElementById('people-list').addEventListener('click', function(e) {
+  var btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  var id = btn.getAttribute('data-id');
+  if (btn.getAttribute('data-action') === 'edit')   editPerson(id);
+  if (btn.getAttribute('data-action') === 'delete') deletePerson(id);
+});
+
+function editPerson(id) {
+  var people = getPeople(), person = null;
+  for (var i = 0; i < people.length; i++) { if (people[i].id === id) { person = people[i]; break; } }
+  if (!person) return;
+  document.getElementById('edit-id').value = person.id;
+  document.getElementById('person-name').value = person.name;
+  document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){
+    cb.checked = person.preferredSundays.indexOf(parseInt(cb.value,10)) > -1;
+  });
+  var r = document.getElementById('pref-service').querySelector('input[value="'+person.servicePreference+'"]');
+  if (r) r.checked = true;
+  document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){
+    cb.checked = person.roles.indexOf(cb.value) > -1;
+  });
+  syncLabels('pref-sundays'); syncLabels('pref-roles');
+  window.scrollTo(0,0); document.getElementById('person-name').focus();
+}
+
+function deletePerson(id) {
+  if (!confirm('Remove this person?')) return;
+  savePeople(getPeople().filter(function(p){ return p.id !== id; }));
+  renderPeopleList();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SCHEDULING
+// ══════════════════════════════════════════════════════════════════
+function getSundays(start, end) {
+  var sundays = [], d = new Date(start+'T12:00:00');
+  while (d.getDay() !== 0) d.setDate(d.getDate()+1);
+  var endD = new Date(end+'T12:00:00');
+  while (d <= endD) { sundays.push(new Date(d)); d.setDate(d.getDate()+7); }
+  return sundays;
+}
+function getOrdinal(date) { return Math.ceil(date.getDate()/7); }
+function eligible(person, ordinal, svc) {
+  if (person.preferredSundays.length > 0 && person.preferredSundays.indexOf(ordinal) === -1) return false;
+  if (svc !== 'shared' && person.servicePreference !== 'both' && person.servicePreference !== svc) return false;
+  return true;
+}
+function pickBest(pool, counts) {
+  if (!pool.length) return null;
+  pool.sort(function(a,b){ return (counts[a.id]||0)-(counts[b.id]||0); });
+  return pool[0];
+}
+
+function generateSchedule() {
+  var start = document.getElementById('start-date').value;
+  var end   = document.getElementById('end-date').value;
+  showAlert('schedule-alert','','');
+  if (!start||!end) { showAlert('schedule-alert','Please select both a start and end date.','warning'); return; }
+  if (start>end)    { showAlert('schedule-alert','Start date must be before end date.','warning'); return; }
+  var people = getPeople();
+  if (!people.length) { showAlert('schedule-alert','No people added yet. Go to People &amp; Availability first.','warning'); return; }
+  var sundays = getSundays(start, end);
+  if (!sundays.length) { showAlert('schedule-alert','No Sundays found in that date range.','warning'); return; }
+
+  var counts = {};
+  people.forEach(function(p){ counts[p.id]=0; });
+
+  currentSchedule = sundays.map(function(date) {
+    var ordinal = getOrdinal(date), assignments = {};
+    SHARED_ROLES.forEach(function(role) {
+      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared'); });
+      var picked = pickBest(pool,counts);
+      assignments[role] = { shared: picked?picked.id:null };
+      if (picked) counts[picked.id]++;
+    });
+    PER_ROLES.forEach(function(role) {
+      assignments[role] = {};
+      var usedIds = {};
+      ['8am','10:45am'].forEach(function(svc) {
+        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc) && !usedIds[p.id]; });
+        var picked = pickBest(pool,counts);
+        assignments[role][svc] = picked?picked.id:null;
+        if (picked){ counts[picked.id]++; usedIds[picked.id]=true; }
+      });
+    });
+    return { date:date, ordinal:ordinal, assignments:assignments };
+  });
+
+  renderTable(people, counts);
+  document.getElementById('schedule-output').style.display = 'block';
+  saveSchedule();
+}
+
+document.getElementById('btn-generate').addEventListener('click', generateSchedule);
+
+document.getElementById('btn-clear-schedule').addEventListener('click', function() {
+  if (!confirm('Clear the saved schedule?')) return;
+  currentSchedule = [];
+  localStorage.removeItem('ws_schedule');
+  document.getElementById('schedule-output').style.display = 'none';
+});
+
+// ══════════════════════════════════════════════════════════════════
+// TABLE RENDERING
+// ══════════════════════════════════════════════════════════════════
+function renderTable(people, counts) {
+  var h1 = '<tr><th class="date-col" rowspan="2">Date</th>'
+    +'<th class="svc-header" colspan="'+PER_ROLES.length+'">8:00 AM</th>'
+    +'<th class="svc-header" colspan="'+PER_ROLES.length+'">10:45 AM</th>'
+    +'<th class="svc-header shared-col" colspan="'+SHARED_ROLES.length+'">Both Services</th></tr>';
+  var h2 = '<tr>';
+  PER_ROLES.forEach(function(r){ h2+='<th>'+esc(r)+'</th>'; });
+  PER_ROLES.forEach(function(r){ h2+='<th>'+esc(r)+'</th>'; });
+  SHARED_ROLES.forEach(function(r){ h2+='<th class="shared-col">'+esc(roleLabel(r))+'</th>'; });
+  h2 += '</tr>';
+  document.getElementById('schedule-thead').innerHTML = h1+h2;
+
+  var pMap = {};
+  people.forEach(function(p){ pMap[p.id]=p; });
+
+  var bodyHtml = '';
+  currentSchedule.forEach(function(row, rowIdx) {
+    var cells = '<td class="date-cell">'+esc(fmtDate(row.date))+'<span class="ordinal">'+esc(row.ordinal+ordSuffix(row.ordinal)+' Sunday')+'</span></td>';
+    PER_ROLES.forEach(function(role){ cells += buildCell(row.assignments[role]['8am'],    pMap,rowIdx,role,'8am'); });
+    PER_ROLES.forEach(function(role){ cells += buildCell(row.assignments[role]['10:45am'],pMap,rowIdx,role,'10:45am'); });
+    SHARED_ROLES.forEach(function(role){ cells += buildCell(row.assignments[role].shared, pMap,rowIdx,role,'shared'); });
+    bodyHtml += '<tr>'+cells+'</tr>';
+  });
+  document.getElementById('schedule-tbody').innerHTML = bodyHtml;
+
+  if (counts) {
+    var sumHtml = '<strong style="font-size:0.82rem;color:#2c3e6b;align-self:center;margin-right:4px;">Assignments per person:</strong>';
+    people.slice().sort(function(a,b){ return (counts[b.id]||0)-(counts[a.id]||0); }).forEach(function(p){
+      sumHtml += '<div class="summary-item"><strong>'+esc(p.name)+'</strong>: '+(counts[p.id]||0)+'</div>';
+    });
+    document.getElementById('assignment-summary').innerHTML = sumHtml;
+  }
+}
+
+function buildCell(pid, pMap, rowIdx, role, svc) {
+  var filled = pid && pMap[pid];
+  var people = getPeople(), ordinal = currentSchedule[rowIdx].ordinal;
+  var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc); });
+  var opts = '<option value="">-- unassigned --</option>';
+  pool.forEach(function(p){
+    opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+  });
+  if (pid && pMap[pid] && !pool.some(function(p){ return p.id===pid; })) {
+    opts += '<option value="'+esc(pid)+'" selected>&#9888; '+esc(pMap[pid].name)+'</option>';
+  }
+  return '<td class="'+(filled?'filled-cell':'empty-cell')+'">'
+    +'<select class="cell-select" data-row="'+rowIdx+'" data-role="'+esc(role)+'" data-svc="'+esc(svc)+'">'+opts+'</select></td>';
+}
+
+document.getElementById('schedule-table').addEventListener('change', function(e) {
+  var sel = e.target;
+  if (!sel.classList.contains('cell-select')) return;
+  var rowIdx = parseInt(sel.getAttribute('data-row'),10);
+  var role = sel.getAttribute('data-role');
+  var svc  = sel.getAttribute('data-svc');
+  var pid  = sel.value;
+  if (svc==='shared') currentSchedule[rowIdx].assignments[role].shared = pid||null;
+  else                currentSchedule[rowIdx].assignments[role][svc]   = pid||null;
+  sel.parentElement.className = pid?'filled-cell':'empty-cell';
+  saveSchedule();
+});
+
+// ══════════════════════════════════════════════════════════════════
+// EXPORT CSV
+// ══════════════════════════════════════════════════════════════════
+document.getElementById('btn-export-csv').addEventListener('click', function() {
+  var pMap = {};
+  getPeople().forEach(function(p){ pMap[p.id]=p; });
+  var headers = ['Date','Sunday'];
+  PER_ROLES.forEach(function(r){ headers.push('8am - '+r); });
+  PER_ROLES.forEach(function(r){ headers.push('10:45am - '+r); });
+  SHARED_ROLES.forEach(function(r){ headers.push('Both - '+roleLabel(r)); });
+  var lines = [headers.map(function(h){ return '"'+h.replace(/"/g,'""')+'"'; }).join(',')];
+  currentSchedule.forEach(function(row) {
+    var cells = [fmtDate(row.date), row.ordinal+ordSuffix(row.ordinal)+' Sunday'];
+    PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['8am'];    cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
+    PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['10:45am'];cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
+    SHARED_ROLES.forEach(function(role){ var pid=row.assignments[role].shared; cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
+    lines.push(cells.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(','));
+  });
+  var blob = new Blob([lines.join('\n')],{type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href=url; a.download='worship-schedule.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+});
+
+document.getElementById('btn-print').addEventListener('click', function(){ window.print(); });
+
+// ══════════════════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════════════════
+function loadSettingsForm() {
+  var s = getBreezeSettings();
+  if (s.subdomain) document.getElementById('breeze-subdomain').value = s.subdomain;
+  if (s.apiKey)    document.getElementById('breeze-apikey').value    = s.apiKey;
+}
+
+document.getElementById('btn-save-settings').addEventListener('click', function() {
+  var subdomain = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
+  var apiKey    = document.getElementById('breeze-apikey').value.trim();
+  if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey });
+  showAlert('settings-alert','Settings saved!','success');
+  document.getElementById('settings-status').textContent = '';
+});
+
+document.getElementById('btn-test-breeze').addEventListener('click', function() {
+  var s = getBreezeSettings();
+  if (!s.subdomain||!s.apiKey) { showAlert('settings-alert','Save your settings first.','warning'); return; }
+  var statusEl = document.getElementById('settings-status');
+  statusEl.textContent = 'Testing…';
+  breezeGet('/api/people', { limit:1, details:0 })
+    .then(function(data) {
+      statusEl.innerHTML = '<span class="status-dot dot-ok"></span> Connected to Breeze!';
+      showAlert('settings-alert','','');
+    })
+    .catch(function(err) {
+      statusEl.innerHTML = '<span class="status-dot dot-err"></span> Connection failed: '+esc(String(err));
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// BREEZE API HELPER
+// ══════════════════════════════════════════════════════════════════
+function breezeGet(path, params) {
+  var s = getBreezeSettings();
+  if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
+  var base = 'https://'+s.subdomain+'.breezechms.com';
+  params = params || {};
+  params['api_key'] = s.apiKey;
+  var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
+  return fetch(base+path+'?'+qs, { headers:{ 'Content-Type':'application/json' } })
+    .then(function(r) {
+      if (!r.ok) throw 'HTTP '+r.status;
+      return r.json();
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BREEZE SYNC TAB
+// ══════════════════════════════════════════════════════════════════
+function initBreezeTab() {
+  var s = getBreezeSettings();
+  document.getElementById('breeze-no-settings').style.display = (!s.subdomain||!s.apiKey) ? 'block' : 'none';
+  document.getElementById('breeze-no-schedule').style.display = (!currentSchedule.length) ? 'block' : 'none';
+  renderPeopleMapTable();
+  renderEventMapTable();
+}
+
+// ── Step 1: People mapping ────────────────────────────────────────
+function renderPeopleMapTable() {
+  var people = getPeople();
+  var tbody = document.getElementById('people-map-tbody');
+  if (!people.length) { tbody.innerHTML = '<tr><td colspan="4" style="color:#888;text-align:center;">No people added yet.</td></tr>'; return; }
+  var html = '';
+  people.forEach(function(p) {
+    var linked = p.breezePersonId
+      ? '<span class="status-dot dot-ok"></span> ID: '+esc(p.breezePersonId)
+      : '<span class="status-dot dot-pending"></span> Not linked';
+    var searchVal = esc(p.name);
+    html += '<tr>'
+      +'<td>'+esc(p.name)+'</td>'
+      +'<td>'
+        +'<div style="display:flex;gap:6px;align-items:center;">'
+        +'<input type="text" value="'+searchVal+'" id="bsearch-'+esc(p.id)+'" style="max-width:180px;" placeholder="Name to search">'
+        +'<button class="btn btn-outline btn-sm" data-pid="'+esc(p.id)+'" onclick="searchBreezePerson(\''+esc(p.id)+'\')">Search</button>'
+        +'</div>'
+        +'<div id="bsearch-results-'+esc(p.id)+'" style="margin-top:4px;"></div>'
+      +'</td>'
+      +'<td id="bstatus-'+esc(p.id)+'">'+linked+'</td>'
+      +'<td>'+(p.breezePersonId?'<button class="btn btn-danger btn-sm" onclick="unlinkBreezePerson(\''+esc(p.id)+'\')">Unlink</button>':'')+'</td>'
+      +'</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function searchBreezePerson(personId) {
+  var inputEl = document.getElementById('bsearch-'+personId);
+  var query = inputEl ? inputEl.value.trim() : '';
+  if (!query) { alert('Enter a name to search.'); return; }
+  var resultsEl = document.getElementById('bsearch-results-'+personId);
+  resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">Searching…</span>';
+
+  breezeGet('/api/people', { details:0, limit:25, name:query })
+    .then(function(data) {
+      if (!data || !data.length) {
+        resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">No results found.</span>';
+        return;
+      }
+      var html = '<select id="bselect-'+esc(personId)+'" class="form-select" style="max-width:240px;margin-top:4px;font-size:0.82rem;">';
+      html += '<option value="">-- Select person --</option>';
+      data.forEach(function(bp) {
+        html += '<option value="'+esc(bp.id)+'">'+esc((bp.first_name||'')+' '+(bp.last_name||'')).trim()+' (ID: '+esc(bp.id)+')</option>';
+      });
+      html += '</select>';
+      html += '<button class="btn btn-primary btn-sm" style="margin-top:4px;" onclick="linkBreezePerson(\''+esc(personId)+'\')">Link Selected</button>';
+      resultsEl.innerHTML = html;
+    })
+    .catch(function(err) {
+      resultsEl.innerHTML = '<span style="color:#e74c3c;font-size:0.82rem;">Error: '+esc(String(err))+'</span>';
+    });
+}
+
+function linkBreezePerson(personId) {
+  var sel = document.getElementById('bselect-'+personId);
+  if (!sel||!sel.value) { alert('Please select a person from the list.'); return; }
+  var breezeId = sel.value;
+  var people = getPeople();
+  people.forEach(function(p){ if (p.id===personId) p.breezePersonId = breezeId; });
+  savePeople(people);
+  renderPeopleMapTable();
+}
+
+function unlinkBreezePerson(personId) {
+  var people = getPeople();
+  people.forEach(function(p){ if (p.id===personId) p.breezePersonId = null; });
+  savePeople(people);
+  renderPeopleMapTable();
+}
+
+// ── Step 2: Event mapping ─────────────────────────────────────────
+var fetchedBreezeEvents = [];
+
+document.getElementById('btn-fetch-events').addEventListener('click', function() {
+  if (!currentSchedule.length) { alert('Generate a schedule first.'); return; }
+  var startStr = document.getElementById('start-date').value;
+  var endStr   = document.getElementById('end-date').value;
+  if (!startStr||!endStr) { alert('Schedule date range is missing.'); return; }
+  var statusEl = document.getElementById('fetch-events-status');
+  statusEl.textContent = 'Fetching…';
+
+  breezeGet('/api/events', { start:startStr, end:endStr })
+    .then(function(data) {
+      if (!data) data = [];
+      var filter = document.getElementById('event-filter').value.trim().toLowerCase();
+      fetchedBreezeEvents = Array.isArray(data) ? data : (data.events||[]);
+      if (filter) {
+        fetchedBreezeEvents = fetchedBreezeEvents.filter(function(ev){
+          return (ev.name||'').toLowerCase().indexOf(filter) > -1;
+        });
+      }
+      statusEl.textContent = fetchedBreezeEvents.length + ' events found.';
+      renderEventMapTable();
+    })
+    .catch(function(err) {
+      statusEl.textContent = 'Error: '+err;
+    });
+});
+
+function renderEventMapTable() {
+  var container = document.getElementById('event-map-container');
+  if (!currentSchedule.length) {
+    container.innerHTML = '<p style="font-size:0.85rem;color:#888;">Generate a schedule first.</p>';
+    return;
+  }
+  var eventMap = getEventMap();
+
+  // Build event option list
+  var eventOpts = '<option value="">-- not mapped --</option>';
+  fetchedBreezeEvents.forEach(function(ev) {
+    var label = (ev.name||'Unknown') + ' — ' + (ev.start_datetime ? ev.start_datetime.slice(0,10) : '?');
+    eventOpts += '<option value="'+esc(ev.id||ev.event_id)+'">'+esc(label)+'</option>';
+  });
+
+  var html = '<table class="event-map-table">'
+    +'<thead><tr><th>Sunday Date</th><th>8:00 AM Instance</th><th>10:45 AM Instance</th></tr></thead><tbody>';
+
+  currentSchedule.forEach(function(row) {
+    var iso = row.date.toISOString().slice(0,10);
+    var map8   = (eventMap[iso]&&eventMap[iso]['8am'])   || '';
+    var map10  = (eventMap[iso]&&eventMap[iso]['10:45am'])|| '';
+
+    function makeSelect(svc, currentVal) {
+      var sel = '<select data-date="'+esc(iso)+'" data-svc="'+esc(svc)+'" class="event-map-select">';
+      sel += '<option value="">-- not mapped --</option>';
+      fetchedBreezeEvents.forEach(function(ev) {
+        var evId = String(ev.id||ev.event_id||'');
+        var label = (ev.name||'Unknown')+' — '+(ev.start_datetime?ev.start_datetime.slice(0,10):'?');
+        sel += '<option value="'+esc(evId)+'"'+(evId===currentVal?' selected':'')+'>'+esc(label)+'</option>';
+      });
+      if (currentVal && !fetchedBreezeEvents.some(function(ev){ return String(ev.id||ev.event_id)===currentVal; })) {
+        sel += '<option value="'+esc(currentVal)+'" selected>ID: '+esc(currentVal)+'</option>';
+      }
+      sel += '</select>';
+      return sel;
+    }
+
+    html += '<tr>'
+      +'<td>'+esc(fmtDate(row.date))+' <span style="color:#888;font-size:0.78rem;">'+(row.ordinal+ordSuffix(row.ordinal)+' Sunday')+'</span></td>'
+      +'<td>'+makeSelect('8am',   map8)+'</td>'
+      +'<td>'+makeSelect('10:45am',map10)+'</td>'
+      +'</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// Save event map on dropdown change
+document.getElementById('event-map-container').addEventListener('change', function(e) {
+  if (!e.target.classList.contains('event-map-select')) return;
+  var iso = e.target.getAttribute('data-date');
+  var svc = e.target.getAttribute('data-svc');
+  var val = e.target.value;
+  var eventMap = getEventMap();
+  if (!eventMap[iso]) eventMap[iso] = {};
+  eventMap[iso][svc] = val;
+  saveEventMap(eventMap);
+});
+
+// ── Step 3: Push to Breeze ────────────────────────────────────────
+document.getElementById('btn-sync-breeze').addEventListener('click', syncToBreeze);
+
+function logLine(msg, cls) {
+  var box = document.getElementById('sync-log');
+  box.style.display = 'block';
+  box.innerHTML += '<div class="'+(cls||'')+'">'+msg+'</div>';
+  box.scrollTop = box.scrollHeight;
+}
+
+function syncToBreeze() {
+  var people = getPeople();
+  var pMap = {};
+  people.forEach(function(p){ pMap[p.id]=p; });
+  var eventMap = getEventMap();
+
+  var logBox = document.getElementById('sync-log');
+  logBox.innerHTML = '';
+  logBox.style.display = 'block';
+  document.getElementById('sync-overall-status').textContent = 'Running…';
+
+  var totalOk = 0, totalErr = 0, totalSkip = 0;
+
+  // Build list of tasks: { dateISO, svc, instanceId, personIds }
+  var tasks = [];
+  currentSchedule.forEach(function(row) {
+    var iso = row.date.toISOString().slice(0,10);
+
+    ['8am','10:45am'].forEach(function(svc) {
+      var instanceId = eventMap[iso] && eventMap[iso][svc];
+      if (!instanceId) { totalSkip++; return; }
+
+      // Collect assigned person IDs for this service
+      var assignedBreezeIds = [];
+      PER_ROLES.forEach(function(role) {
+        var pid = row.assignments[role][svc];
+        if (pid && pMap[pid] && pMap[pid].breezePersonId) assignedBreezeIds.push(pMap[pid].breezePersonId);
+      });
+      // Shared roles go to both services
+      SHARED_ROLES.forEach(function(role) {
+        var pid = row.assignments[role].shared;
+        if (pid && pMap[pid] && pMap[pid].breezePersonId) assignedBreezeIds.push(pMap[pid].breezePersonId);
+      });
+      // De-duplicate
+      var seen = {}; assignedBreezeIds = assignedBreezeIds.filter(function(id){ if(seen[id])return false; seen[id]=true; return true; });
+
+      tasks.push({ iso:iso, svc:svc, instanceId:instanceId, breezeIds:assignedBreezeIds });
+    });
+  });
+
+  if (!tasks.length) {
+    logLine('No event instances mapped. Map events in Step 2 first.', 'log-err');
+    document.getElementById('sync-overall-status').textContent = '';
+    return;
+  }
+
+  // Execute tasks sequentially using promise chaining
+  var chain = Promise.resolve();
+  tasks.forEach(function(task) {
+    chain = chain.then(function() {
+      logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+' (instance '+esc(task.instanceId)+')</span>');
+
+      // 1. Get existing volunteers
+      return breezeGet('/api/volunteers/list', { instance_id: task.instanceId })
+        .then(function(existing) {
+          var existingList = Array.isArray(existing) ? existing : [];
+          // 2. Remove each existing volunteer
+          var removeChain = Promise.resolve();
+          existingList.forEach(function(vol) {
+            var vpid = vol.person_id;
+            removeChain = removeChain.then(function() {
+              return breezeGet('/api/volunteers/remove', { instance_id:task.instanceId, person_id:vpid })
+                .then(function(){ logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; })
+                .catch(function(e){ logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)),'log-err'); totalErr++; });
+            });
+          });
+          return removeChain;
+        })
+        .then(function() {
+          // 3. Add new volunteers
+          var addChain = Promise.resolve();
+          if (!task.breezeIds.length) {
+            logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
+          }
+          task.breezeIds.forEach(function(bpid) {
+            addChain = addChain.then(function() {
+              return breezeGet('/api/volunteers/add', { instance_id:task.instanceId, person_id:bpid })
+                .then(function(){ logLine('  + Added volunteer ID '+esc(bpid),'log-ok'); totalOk++; })
+                .catch(function(e){ logLine('  &times; Failed to add '+esc(bpid)+': '+esc(String(e)),'log-err'); totalErr++; });
+            });
+          });
+          return addChain;
+        })
+        .catch(function(err) {
+          logLine('  Error fetching existing volunteers: '+esc(String(err)),'log-err');
+          totalErr++;
+        });
+    });
+  });
+
+  chain.then(function() {
+    logLine('<br><strong>Done. '+totalOk+' OK, '+totalErr+' errors, '+totalSkip+' skipped (no instance mapped).</strong>', totalErr>0?'log-err':'log-ok');
+    document.getElementById('sync-overall-status').textContent = totalErr>0 ? totalErr+' errors — see log' : 'Complete!';
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+renderPeopleList();
+
+// Set default date range to current month
+(function() {
+  var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  var first = new Date(y,m,1), last = new Date(y,m+1,0);
+  document.getElementById('start-date').value = first.toISOString().slice(0,10);
+  document.getElementById('end-date').value   = last.toISOString().slice(0,10);
+})();
+
+// Restore saved schedule if any
+if (loadSchedule()) {
+  var people = getPeople();
+  var counts = {};
+  people.forEach(function(p){ counts[p.id]=0; });
+  renderTable(people, null);
+  document.getElementById('schedule-output').style.display = 'block';
+}
+</script>
+</body>
+</html>
