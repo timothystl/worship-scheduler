@@ -267,6 +267,15 @@ td.filled-cell { background: #f0fff4; }
       Find this in Breeze: Settings &rarr; Advanced &rarr; API
     </small>
 
+    <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
+      <label for="breeze-worker-url">Cloudflare Worker Proxy URL</label>
+      <input type="text" id="breeze-worker-url" placeholder="https://your-worker.workers.dev" style="max-width:420px;">
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+        Required for browser access. Paste the Worker URL after deploying <strong>breeze-proxy-worker.js</strong> to Cloudflare.
+        See instructions on the <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a>.
+      </small>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
       <button class="btn btn-outline" id="btn-test-breeze">Test Connection</button>
@@ -723,15 +732,18 @@ document.getElementById('btn-print').addEventListener('click', function(){ windo
 // ══════════════════════════════════════════════════════════════════
 function loadSettingsForm() {
   var s = getBreezeSettings();
-  if (s.subdomain) document.getElementById('breeze-subdomain').value = s.subdomain;
-  if (s.apiKey)    document.getElementById('breeze-apikey').value    = s.apiKey;
+  if (s.subdomain)  document.getElementById('breeze-subdomain').value  = s.subdomain;
+  if (s.apiKey)     document.getElementById('breeze-apikey').value     = s.apiKey;
+  if (s.workerUrl)  document.getElementById('breeze-worker-url').value = s.workerUrl;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', function() {
-  var subdomain = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
-  var apiKey    = document.getElementById('breeze-apikey').value.trim();
+  var subdomain  = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
+  var apiKey     = document.getElementById('breeze-apikey').value.trim();
+  var workerUrl  = document.getElementById('breeze-worker-url').value.trim().replace(/\/$/, '');
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey });
+  if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
@@ -757,11 +769,21 @@ document.getElementById('btn-test-breeze').addEventListener('click', function() 
 function breezeGet(path, params) {
   var s = getBreezeSettings();
   if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
-  var base = 'https://'+s.subdomain+'.breezechms.com';
+  if (!s.workerUrl) return Promise.reject('No Cloudflare Worker URL configured. Add it in Settings.');
+
+  // Route through the Cloudflare Worker proxy (avoids browser CORS restriction).
+  // The Worker forwards the request to Breeze server-to-server and returns the result.
+  // Credentials are passed as custom headers so they never appear in URLs.
   params = params || {};
   var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
-  var url = base+path+(qs ? '?'+qs : '');
-  return fetch(url, { headers: { 'Api-Key': s.apiKey } })
+  var url = s.workerUrl + path + (qs ? '?'+qs : '');
+  return fetch(url, {
+    method: 'GET',
+    headers: {
+      'X-Breeze-Subdomain': s.subdomain,
+      'X-Breeze-Api-Key':   s.apiKey,
+    },
+  })
     .then(function(r) {
       if (!r.ok) throw 'HTTP '+r.status;
       return r.json();
