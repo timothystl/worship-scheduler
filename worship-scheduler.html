@@ -759,9 +759,9 @@ function breezeGet(path, params) {
   if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
   var base = 'https://'+s.subdomain+'.breezechms.com';
   params = params || {};
-  params['api_key'] = s.apiKey;
   var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
-  return fetch(base+path+'?'+qs, { headers:{ 'Content-Type':'application/json' } })
+  var url = base+path+(qs ? '?'+qs : '');
+  return fetch(url, { headers: { 'Api-Key': s.apiKey } })
     .then(function(r) {
       if (!r.ok) throw 'HTTP '+r.status;
       return r.json();
