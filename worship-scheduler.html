@@ -830,20 +830,31 @@ function renderPeopleMapTable() {
 
 function searchBreezePerson(personId) {
   var inputEl = document.getElementById('bsearch-'+personId);
-  var query = inputEl ? inputEl.value.trim() : '';
+  var query = inputEl ? inputEl.value.trim().toLowerCase() : '';
   if (!query) { alert('Enter a name to search.'); return; }
   var resultsEl = document.getElementById('bsearch-results-'+personId);
   resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">Searching…</span>';
 
-  breezeGet('/api/people', { details:0, limit:25, name:query })
+  breezeGet('/api/people', { details:0, limit:500 })
     .then(function(data) {
       if (!data || !data.length) {
         resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">No results found.</span>';
         return;
       }
+      // Filter client-side — Breeze API does not support a name search parameter
+      var filtered = data.filter(function(bp) {
+        var full = ((bp.first_name||'') + ' ' + (bp.last_name||'')).toLowerCase();
+        var last = (bp.last_name||'').toLowerCase();
+        var first = (bp.first_name||'').toLowerCase();
+        return full.indexOf(query) !== -1 || last.indexOf(query) !== -1 || first.indexOf(query) !== -1;
+      });
+      if (!filtered.length) {
+        resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">No results found.</span>';
+        return;
+      }
       var html = '<select id="bselect-'+esc(personId)+'" class="form-select" style="max-width:240px;margin-top:4px;font-size:0.82rem;">';
       html += '<option value="">-- Select person --</option>';
-      data.forEach(function(bp) {
+      filtered.forEach(function(bp) {
         html += '<option value="'+esc(bp.id)+'">'+esc((bp.first_name||'')+' '+(bp.last_name||'')).trim()+' (ID: '+esc(bp.id)+')</option>';
       });
       html += '</select>';
