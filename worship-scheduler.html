@@ -285,6 +285,42 @@ td.filled-cell { background: #f0fff4; }
       </small>
     </div>
 
+    <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
+      <label style="font-weight:600;">Breeze Role ID Map</label>
+      <p style="font-size:0.82rem;color:#555;margin:4px 0 10px;">
+        Enter the Breeze role ID for each role in each service. To find role IDs:
+        go to your Breeze event page, press <strong>Cmd+U</strong> (View Source),
+        then search for <code>data-role_id</code>. Each result looks like
+        <code>data-role_id="401344"</code> followed by the role name.
+      </p>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div>
+          <label style="font-size:0.85rem;font-weight:600;">8am Service</label>
+          <textarea id="breeze-rolemap-8am" rows="9" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:260px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
+Acolyte =
+PowerPoint =
+Lector =
+Liturgist =
+Preacher =
+Childrens Message =
+Lectionary Class =
+Preschool Chapel = "></textarea>
+        </div>
+        <div>
+          <label style="font-size:0.85rem;font-weight:600;">10:45am Service</label>
+          <textarea id="breeze-rolemap-1045" rows="9" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:260px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
+Acolyte =
+PowerPoint =
+Lector =
+Liturgist =
+Preacher =
+Childrens Message =
+Lectionary Class =
+Preschool Chapel = "></textarea>
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
       <button class="btn btn-outline" id="btn-test-breeze">Test Connection</button>
@@ -739,22 +775,49 @@ document.getElementById('btn-print').addEventListener('click', function(){ windo
 // ══════════════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════════════
+// Convert a roleMap object {roleName: roleId} to textarea text "Elder = 401344\nAcolyte = 401345\n..."
+// If the stored map is missing a role, show it with a blank value so the user knows to fill it in.
+function roleMapToText(map) {
+  var ALL_ROLES = PER_ROLES.concat(SHARED_ROLES);
+  return ALL_ROLES.map(function(role) {
+    var key = role.toLowerCase().replace(/['']/g, '');
+    return role + ' = ' + (map[key] || '');
+  }).join('\n');
+}
+
+// Parse textarea text back into a roleMap object {normalizedRoleName: roleId}
+function textToRoleMap(text) {
+  var map = {};
+  (text || '').split('\n').forEach(function(line) {
+    var eq = line.indexOf('=');
+    if (eq === -1) return;
+    var name = line.slice(0, eq).trim().toLowerCase().replace(/['']/g, '');
+    var id   = line.slice(eq + 1).trim().replace(/\D/g, '');
+    if (name && id) map[name] = id;
+  });
+  return map;
+}
+
 function loadSettingsForm() {
   var s = getBreezeSettings();
   if (s.subdomain)  document.getElementById('breeze-subdomain').value  = s.subdomain;
   if (s.apiKey)     document.getElementById('breeze-apikey').value     = s.apiKey;
   if (s.workerUrl)  document.getElementById('breeze-worker-url').value = s.workerUrl;
   if (s.tagId)      document.getElementById('breeze-tag-id').value     = s.tagId;
+  document.getElementById('breeze-rolemap-8am').value  = roleMapToText(s.roleMap8am  || {});
+  document.getElementById('breeze-rolemap-1045').value = roleMapToText(s.roleMap1045 || {});
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', function() {
-  var subdomain  = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
-  var apiKey     = document.getElementById('breeze-apikey').value.trim();
-  var workerUrl  = document.getElementById('breeze-worker-url').value.trim().replace(/\/$/, '');
-  var tagId      = document.getElementById('breeze-tag-id').value.trim().replace(/\D/g,'');
+  var subdomain   = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
+  var apiKey      = document.getElementById('breeze-apikey').value.trim();
+  var workerUrl   = document.getElementById('breeze-worker-url').value.trim().replace(/\/$/, '');
+  var tagId       = document.getElementById('breeze-tag-id').value.trim().replace(/\D/g,'');
+  var roleMap8am  = textToRoleMap(document.getElementById('breeze-rolemap-8am').value);
+  var roleMap1045 = textToRoleMap(document.getElementById('breeze-rolemap-1045').value);
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId });
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045 });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
@@ -782,9 +845,6 @@ function breezeGet(path, params) {
   if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
   if (!s.workerUrl) return Promise.reject('No Cloudflare Worker URL configured. Add it in Settings.');
 
-  // Route through the Cloudflare Worker proxy (avoids browser CORS restriction).
-  // The Worker forwards the request to Breeze server-to-server and returns the result.
-  // Credentials are passed as custom headers so they never appear in URLs.
   params = params || {};
   var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(params[k]); }).join('&');
   var url = s.workerUrl + path + (qs ? '?'+qs : '');
@@ -799,6 +859,51 @@ function breezeGet(path, params) {
       if (!r.ok) throw 'HTTP '+r.status;
       return r.json();
     });
+}
+
+// POST helper — used for /ajax/ endpoints that Breeze requires POST for
+function breezePost(path, fields) {
+  var s = getBreezeSettings();
+  if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
+  if (!s.workerUrl) return Promise.reject('No Cloudflare Worker URL configured. Add it in Settings.');
+
+  // Build form-encoded body (same format as a browser form submit)
+  var body = Object.keys(fields).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(fields[k]);
+  }).join('&');
+
+  var url = s.workerUrl + path;
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Breeze-Subdomain': s.subdomain,
+      'X-Breeze-Api-Key':   s.apiKey,
+      'Content-Type':       'application/x-www-form-urlencoded',
+    },
+    body: body,
+  })
+    .then(function(r) {
+      if (!r.ok) throw 'HTTP '+r.status;
+      return r.json();
+    });
+}
+
+// Fetches a Breeze page as raw HTML through the proxy (used to scrape real UI role IDs)
+function breezeGetHtml(path) {
+  var s = getBreezeSettings();
+  if (!s.subdomain||!s.apiKey) return Promise.reject('No Breeze credentials configured.');
+  if (!s.workerUrl) return Promise.reject('No Cloudflare Worker URL configured.');
+  var url = s.workerUrl + path;
+  return fetch(url, {
+    method: 'GET',
+    headers: {
+      'X-Breeze-Subdomain': s.subdomain,
+      'X-Breeze-Api-Key':   s.apiKey,
+    },
+  }).then(function(r) {
+    if (!r.ok) throw 'HTTP '+r.status;
+    return r.text();
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1061,144 +1166,154 @@ function syncToBreeze() {
     return;
   }
 
-  // Execute tasks sequentially using promise chaining
-  var chain = Promise.resolve();
-  tasks.forEach(function(task) {
-    chain = chain.then(function() {
-      logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+'</span>');
+  // ── Phase A: Load role ID maps from Settings ──
+  // Real Breeze UI role IDs are stored by the user in Settings.
+  // To find them: open your Breeze event page, press Cmd+U (View Source),
+  // search for data-role_id — each match like data-role_id="401344" is a role ID.
+  var bSettings = getBreezeSettings();
+  var serviceMaps = {
+    '8am':     bSettings.roleMap8am  || {},
+    '10:45am': bSettings.roleMap1045 || {}
+  };
+  var servicePrep = Promise.resolve();  // synchronous — no async needed
 
-      // 1. Get existing volunteers
-      return breezeGet('/api/volunteers/list', { instance_id: task.instanceId })
-        .then(function(existing) {
-          var existingList = Array.isArray(existing) ? existing : [];
-          // 2. Remove each existing volunteer
-          var removeChain = Promise.resolve();
-          existingList.forEach(function(vol) {
-            var vpid = vol.person_id;
-            removeChain = removeChain.then(function() {
-              return breezeGet('/api/volunteers/remove', { instance_id:task.instanceId, person_id:vpid })
-                .then(function(res){
-                  if (res === true) { logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; }
-                  else { logLine('  ? Remove returned: '+esc(JSON.stringify(res)), 'log-info'); totalErr++; }
-                })
-                .catch(function(e){ logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)),'log-err'); totalErr++; });
-            });
+  // Validate and warn about missing role IDs
+  ['8am', '10:45am'].forEach(function(svc) {
+    var roleMap = serviceMaps[svc];
+    var count = Object.keys(roleMap).length;
+    if (count === 0) {
+      logLine('&#9888; No role IDs configured for <strong>'+esc(svc)+'</strong> — go to Settings and fill in the Role ID Map', 'log-err');
+    } else {
+      var missing = [];
+      tasks.forEach(function(t) {
+        if (t.svc !== svc) return;
+        t.assignments.forEach(function(a) {
+          a.roles.forEach(function(role) {
+            var key = role.toLowerCase().replace(/['']/g, '');
+            if (!roleMap[key] && missing.indexOf(role) === -1) missing.push(role);
           });
-          return removeChain;
-        })
-        .then(function() {
-          // 3. Fetch (or create) Breeze role IDs for this instance, then add volunteers with roles
-          return breezeGet('/api/volunteers/list_roles', { instance_id: task.instanceId })
-            .then(function(roles) {
-              // Build role name → Breeze role ID map (case-insensitive)
-              var roleMap = {};
-              if (Array.isArray(roles)) {
-                roles.forEach(function(r) { roleMap[(r.name||'').toLowerCase()] = r.id; });
-              }
-
-              if (!task.assignments.length) {
-                logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
-                return;
-              }
-
-              // Determine which roles we need for this event's assignments
-              var neededRoles = [];
-              task.assignments.forEach(function(a) {
-                a.roles.forEach(function(role) {
-                  var key = role.toLowerCase();
-                  if (!roleMap[key] && neededRoles.indexOf(role) === -1) {
-                    neededRoles.push(role);
-                  }
-                });
-              });
-
-              // Create any missing roles on this instance, then proceed
-              var createChain = Promise.resolve();
-              neededRoles.forEach(function(roleName) {
-                createChain = createChain.then(function() {
-                  return breezeGet('/api/volunteers/add_role', {
-                    instance_id: task.instanceId,
-                    name: roleName,
-                    quantity: 1
-                  }).then(function(newRole) {
-                    // add_role returns the new role object (or an id directly)
-                    var newId = (newRole && newRole.id) ? newRole.id : newRole;
-                    if (newId) {
-                      roleMap[roleName.toLowerCase()] = newId;
-                      logLine('  &#10010; Created role "'+esc(roleName)+'" (ID: '+esc(newId)+')', 'log-info');
-                    } else {
-                      logLine('  ? add_role response: '+esc(JSON.stringify(newRole)), 'log-info');
-                    }
-                  }).catch(function(e) {
-                    logLine('  Warning: Could not create role "'+esc(roleName)+'": '+esc(String(e)), 'log-info');
-                  });
-                });
-              });
-
-              return createChain.then(function() {
-                logLine('  Roles: '+esc(JSON.stringify(roleMap)), 'log-info');
-
-                var addChain = Promise.resolve();
-                task.assignments.forEach(function(a) {
-                  // a = { breezePersonId, roles: ['Elder', 'Acolyte', ...] }
-                  addChain = addChain.then(function() {
-                    return breezeGet('/api/volunteers/add', { instance_id:task.instanceId, person_id:a.breezePersonId })
-                      .then(function(res) {
-                        if (res === true) {
-                          totalOk++;
-                          // Collect ALL Breeze role IDs for this person in one array
-                          var breezeRoleIds = [];
-                          var missingRoles = [];
-                          a.roles.forEach(function(role) {
-                            var rid = roleMap[role.toLowerCase()];
-                            if (rid) breezeRoleIds.push(parseInt(rid, 10));
-                            else missingRoles.push(role);
-                          });
-                          if (missingRoles.length) {
-                            logLine('  Warning: no role ID for: '+esc(missingRoles.join(', ')), 'log-info');
-                          }
-                          if (breezeRoleIds.length) {
-                            // Single update with ALL role IDs — Breeze replaces entire role list per call
-                            return breezeGet('/api/volunteers/update', {
-                              instance_id:   task.instanceId,
-                              person_id:     a.breezePersonId,
-                              role_ids_json: JSON.stringify(breezeRoleIds)
-                            }).then(function() {
-                              logLine('  + Added &amp; assigned ['+esc(a.roles.join(', '))+'] &rarr; ID '+esc(a.breezePersonId), 'log-ok');
-                              totalOk++;
-                            }).catch(function(e) {
-                              logLine('  + Added ID '+esc(a.breezePersonId)+' but role assign failed: '+esc(String(e)), 'log-err');
-                              totalErr++;
-                            });
-                          } else {
-                            logLine('  + Added ID '+esc(a.breezePersonId)+' (no role IDs found)', 'log-info');
-                          }
-                        } else {
-                          logLine('  ? Add returned: '+esc(JSON.stringify(res))+' for ID '+esc(a.breezePersonId), 'log-info');
-                          totalErr++;
-                        }
-                      })
-                      .catch(function(e){ logLine('  &times; Failed to add ID '+esc(a.breezePersonId)+': '+esc(String(e)),'log-err'); totalErr++; });
-                  });
-                });
-                return addChain;
-              });
-            })
-            .catch(function(e) {
-              logLine('  Error fetching/creating Breeze roles: '+esc(String(e)), 'log-err');
-              totalErr++;
-            });
-        })
-        .catch(function(err) {
-          logLine('  Error fetching existing volunteers: '+esc(String(err)),'log-err');
-          totalErr++;
         });
-    });
+      });
+      logLine('Roles for <strong>'+esc(svc)+'</strong> ('+count+'): '+esc(JSON.stringify(roleMap))+'<br>', 'log-info');
+      if (missing.length) logLine('&#9888; Missing IDs for: <strong>'+esc(missing.join(', '))+'</strong> — add in Settings', 'log-err');
+    }
   });
 
-  chain.then(function() {
-    logLine('<br><strong>Done. '+totalOk+' OK, '+totalErr+' errors, '+totalSkip+' skipped (no instance mapped).</strong>', totalErr>0?'log-err':'log-ok');
-    document.getElementById('sync-overall-status').textContent = totalErr>0 ? totalErr+' errors — see log' : 'Complete!';
+  // ── Phase B: Execute tasks sequentially, reusing the per-service roleMaps ──
+  servicePrep.then(function() {
+    var chain = Promise.resolve();
+    tasks.forEach(function(task) {
+      chain = chain.then(function() {
+        logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+'</span>');
+        var roleMap = serviceMaps[task.svc] || {};
+
+        // 1. Get existing volunteers
+        return breezeGet('/api/volunteers/list', { instance_id: task.instanceId })
+          .then(function(existing) {
+            var existingList = Array.isArray(existing) ? existing : [];
+            // 2. Remove each existing volunteer
+            var removeChain = Promise.resolve();
+            existingList.forEach(function(vol) {
+              var vpid = vol.person_id;
+              removeChain = removeChain.then(function() {
+                return breezeGet('/api/volunteers/remove', { instance_id:task.instanceId, person_id:vpid })
+                  .then(function(res){
+                    if (res === true) { logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; }
+                    else { logLine('  ? Remove returned: '+esc(JSON.stringify(res)), 'log-info'); totalErr++; }
+                  })
+                  .catch(function(e){ logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)),'log-err'); totalErr++; });
+              });
+            });
+            return removeChain;
+          })
+          .then(function() {
+            // 3. Assign volunteers by role using /ajax/add_volunteers (same endpoint Breeze UI uses).
+            // This takes: instance_id, role_id (one role at a time), people_ids[] (array of person IDs).
+            // We make one POST call per role, passing all people assigned to that role.
+            if (!task.assignments.length) {
+              logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
+              return;
+            }
+
+            // Invert the assignments: build a map of roleId → [personIds]
+            // task.assignments = [{ breezePersonId, roles:['Elder','Acolyte',...] }, ...]
+            var roleToPersonIds = {};  // { '401344': ['43826480', ...], ... }
+            var warned = {};
+            task.assignments.forEach(function(a) {
+              a.roles.forEach(function(role) {
+                // Normalize same way the HTML scraper does: lowercase + strip apostrophes
+                var roleKey = role.toLowerCase().replace(/['']/g, '');
+                var rid = roleMap[roleKey];
+                if (!rid) {
+                  if (!warned[role]) {
+                    logLine('  Warning: no role ID for "'+esc(role)+'" — person ID '+esc(a.breezePersonId)+' skipped for this role', 'log-info');
+                    warned[role] = true;
+                  }
+                  return;
+                }
+                if (!roleToPersonIds[rid]) roleToPersonIds[rid] = [];
+                roleToPersonIds[rid].push(a.breezePersonId);
+              });
+            });
+
+            // One POST per role — matches exactly what Breeze UI does
+            var addChain = Promise.resolve();
+            Object.keys(roleToPersonIds).forEach(function(roleId) {
+              var personIds = roleToPersonIds[roleId];
+              // Find the role name for logging
+              var roleName = roleId;
+              Object.keys(roleMap).forEach(function(name) {
+                if (String(roleMap[name]) === String(roleId)) roleName = name;
+              });
+
+              addChain = addChain.then(function() {
+                // Build fields: instance_id, role_id, people_ids[] for each person
+                // The /ajax/add_volunteers endpoint expects people_ids as repeated fields
+                // We encode them as people_ids%5B%5D=id1&people_ids%5B%5D=id2
+                var s = getBreezeSettings();
+                var bodyParts = [
+                  'instance_id=' + encodeURIComponent(task.instanceId),
+                  'role_id='     + encodeURIComponent(roleId)
+                ];
+                personIds.forEach(function(pid) {
+                  bodyParts.push('people_ids%5B%5D=' + encodeURIComponent(pid));
+                });
+                var body = bodyParts.join('&');
+                var url = s.workerUrl + '/ajax/add_volunteers';
+
+                return fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'X-Breeze-Subdomain': s.subdomain,
+                    'X-Breeze-Api-Key':   s.apiKey,
+                    'Content-Type':       'application/x-www-form-urlencoded',
+                  },
+                  body: body,
+                })
+                  .then(function(r) { return r.json(); })
+                  .then(function(res) {
+                    logLine('  + Assigned to "'+esc(roleName)+'" (role ID '+esc(roleId)+'): '+esc(personIds.join(', '))+' — result: '+esc(JSON.stringify(res)), 'log-ok');
+                    totalOk++;
+                  })
+                  .catch(function(e) {
+                    logLine('  &times; Failed to assign role "'+esc(roleName)+'": '+esc(String(e)), 'log-err');
+                    totalErr++;
+                  });
+              });
+            });
+            return addChain;
+          })
+          .catch(function(err) {
+            logLine('  Error: '+esc(String(err)),'log-err');
+            totalErr++;
+          });
+      });
+    });
+
+    chain.then(function() {
+      logLine('<br><strong>Done. '+totalOk+' OK, '+totalErr+' errors, '+totalSkip+' skipped (no instance mapped).</strong>', totalErr>0?'log-err':'log-ok');
+      document.getElementById('sync-overall-status').textContent = totalErr>0 ? totalErr+' errors — see log' : 'Complete!';
+    });
   });
 }
 
