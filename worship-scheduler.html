@@ -1041,12 +1041,17 @@ function syncToBreeze() {
         if (pid && pMap[pid] && pMap[pid].breezePersonId)
           assignedPairs.push({ breezePersonId: pMap[pid].breezePersonId, role: role });
       });
-      // De-duplicate by breezePersonId (keep first role if same person appears twice)
-      var seen = {}; assignedPairs = assignedPairs.filter(function(a){
-        if (seen[a.breezePersonId]) return false; seen[a.breezePersonId]=true; return true;
+      // Group all roles per person (one person can hold multiple roles)
+      var grouped = {};
+      assignedPairs.forEach(function(a) {
+        if (!grouped[a.breezePersonId]) grouped[a.breezePersonId] = [];
+        grouped[a.breezePersonId].push(a.role);
+      });
+      var groupedAssignments = Object.keys(grouped).map(function(bpid) {
+        return { breezePersonId: bpid, roles: grouped[bpid] };
       });
 
-      tasks.push({ iso:iso, svc:svc, instanceId:instanceId, assignments:assignedPairs });
+      tasks.push({ iso:iso, svc:svc, instanceId:instanceId, assignments:groupedAssignments });
     });
   });
 
@@ -1099,10 +1104,12 @@ function syncToBreeze() {
               // Determine which roles we need for this event's assignments
               var neededRoles = [];
               task.assignments.forEach(function(a) {
-                var key = a.role.toLowerCase();
-                if (!roleMap[key] && neededRoles.indexOf(a.role) === -1) {
-                  neededRoles.push(a.role);
-                }
+                a.roles.forEach(function(role) {
+                  var key = role.toLowerCase();
+                  if (!roleMap[key] && neededRoles.indexOf(role) === -1) {
+                    neededRoles.push(role);
+                  }
+                });
               });
 
               // Create any missing roles on this instance, then proceed
@@ -1133,27 +1140,38 @@ function syncToBreeze() {
 
                 var addChain = Promise.resolve();
                 task.assignments.forEach(function(a) {
+                  // a = { breezePersonId, roles: ['Elder', 'Acolyte', ...] }
                   addChain = addChain.then(function() {
                     return breezeGet('/api/volunteers/add', { instance_id:task.instanceId, person_id:a.breezePersonId })
                       .then(function(res) {
                         if (res === true) {
                           totalOk++;
-                          // Assign their role
-                          var breezeRoleId = roleMap[a.role.toLowerCase()];
-                          if (breezeRoleId) {
+                          // Collect ALL Breeze role IDs for this person in one array
+                          var breezeRoleIds = [];
+                          var missingRoles = [];
+                          a.roles.forEach(function(role) {
+                            var rid = roleMap[role.toLowerCase()];
+                            if (rid) breezeRoleIds.push(parseInt(rid, 10));
+                            else missingRoles.push(role);
+                          });
+                          if (missingRoles.length) {
+                            logLine('  Warning: no role ID for: '+esc(missingRoles.join(', ')), 'log-info');
+                          }
+                          if (breezeRoleIds.length) {
+                            // Single update with ALL role IDs — Breeze replaces entire role list per call
                             return breezeGet('/api/volunteers/update', {
                               instance_id:   task.instanceId,
                               person_id:     a.breezePersonId,
-                              role_ids_json: JSON.stringify([parseInt(breezeRoleId, 10)])
+                              role_ids_json: JSON.stringify(breezeRoleIds)
                             }).then(function() {
-                              logLine('  + Added &amp; assigned "'+esc(a.role)+'" → ID '+esc(a.breezePersonId), 'log-ok');
+                              logLine('  + Added &amp; assigned ['+esc(a.roles.join(', '))+'] &rarr; ID '+esc(a.breezePersonId), 'log-ok');
                               totalOk++;
                             }).catch(function(e) {
                               logLine('  + Added ID '+esc(a.breezePersonId)+' but role assign failed: '+esc(String(e)), 'log-err');
                               totalErr++;
                             });
                           } else {
-                            logLine('  + Added ID '+esc(a.breezePersonId)+' (no role ID found for "'+esc(a.role)+'")', 'log-info');
+                            logLine('  + Added ID '+esc(a.breezePersonId)+' (no role IDs found)', 'log-info');
                           }
                         } else {
                           logLine('  ? Add returned: '+esc(JSON.stringify(res))+' for ID '+esc(a.breezePersonId), 'log-info');
