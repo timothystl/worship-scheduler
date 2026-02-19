@@ -1213,11 +1213,13 @@ function syncToBreeze() {
     tasks.forEach(function(task) {
       chain = chain.then(function() {
         logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+'</span>');
+        logLine('  &#8614; instance_id: <code>'+esc(task.instanceId)+'</code>', 'log-info');
         var roleMap = serviceMaps[task.svc] || {};
 
         // 1. Get existing volunteers
         return breezeGet('/api/volunteers/list', { instance_id: task.instanceId })
           .then(function(existing) {
+            logLine('  volunteers/list raw: '+esc(JSON.stringify(existing).slice(0,300)), 'log-info');
             var existingList = Array.isArray(existing) ? existing : [];
             // 2. Remove each existing volunteer
             var removeChain = Promise.resolve();
@@ -1265,11 +1267,10 @@ function syncToBreeze() {
 
               assignChain = assignChain.then(function() {
                 // Step A: add person to event
+                logLine('  &#8614; adding person_id: <code>'+esc(bpid)+'</code>', 'log-info');
                 return breezeGet('/api/volunteers/add', { instance_id: task.instanceId, person_id: bpid })
                   .then(function(addRes) {
-                    if (addRes !== true) {
-                      logLine('  ? Add returned: '+esc(JSON.stringify(addRes))+' for person '+esc(bpid), 'log-info');
-                    }
+                    logLine('  add raw response: '+esc(JSON.stringify(addRes)), 'log-info');
                     // Step B: update their roles (even if roleIds is empty — clears roles)
                     if (!roleIds.length) {
                       logLine('  + Added person '+esc(bpid)+' (no roles matched)', 'log-ok');
