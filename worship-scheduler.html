@@ -276,6 +276,15 @@ td.filled-cell { background: #f0fff4; }
       </small>
     </div>
 
+    <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
+      <label for="breeze-tag-id">People Search Tag ID <span style="font-weight:normal;color:#888;">(optional)</span></label>
+      <input type="text" id="breeze-tag-id" placeholder="e.g. 4884325" style="max-width:240px;">
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+        Limits people search to a specific Breeze tag (e.g. "Members"). Find the tag ID in the URL when viewing the tag in Breeze:
+        <code>people/filter#/tag_contains=y_XXXXXXX</code>
+      </small>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
       <button class="btn btn-outline" id="btn-test-breeze">Test Connection</button>
@@ -735,15 +744,17 @@ function loadSettingsForm() {
   if (s.subdomain)  document.getElementById('breeze-subdomain').value  = s.subdomain;
   if (s.apiKey)     document.getElementById('breeze-apikey').value     = s.apiKey;
   if (s.workerUrl)  document.getElementById('breeze-worker-url').value = s.workerUrl;
+  if (s.tagId)      document.getElementById('breeze-tag-id').value     = s.tagId;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', function() {
   var subdomain  = document.getElementById('breeze-subdomain').value.trim().replace(/\//g,'');
   var apiKey     = document.getElementById('breeze-apikey').value.trim();
   var workerUrl  = document.getElementById('breeze-worker-url').value.trim().replace(/\/$/, '');
+  var tagId      = document.getElementById('breeze-tag-id').value.trim().replace(/\D/g,'');
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl });
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
@@ -836,7 +847,10 @@ function searchBreezePerson(personId) {
   var resultsEl = document.getElementById('bsearch-results-'+personId);
   resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">Searching…</span>';
 
-  breezeGet('/api/people', { details:0, limit:500 })
+  var breezeS = getBreezeSettings();
+  var searchParams = { details:0, limit:500 };
+  if (breezeS.tagId) searchParams.filter_json = JSON.stringify({ tag_contains: 'y_' + breezeS.tagId });
+  breezeGet('/api/people', searchParams)
     .then(function(data) {
       if (!data || !data.length) {
         resultsEl.innerHTML = '<span style="color:#888;font-size:0.82rem;">No results found.</span>';
@@ -1014,21 +1028,25 @@ function syncToBreeze() {
       var instanceId = eventMap[iso] && eventMap[iso][svc];
       if (!instanceId) { totalSkip++; return; }
 
-      // Collect assigned person IDs for this service
-      var assignedBreezeIds = [];
+      // Collect assigned people with their role names
+      var assignedPairs = [];
       PER_ROLES.forEach(function(role) {
         var pid = row.assignments[role][svc];
-        if (pid && pMap[pid] && pMap[pid].breezePersonId) assignedBreezeIds.push(pMap[pid].breezePersonId);
+        if (pid && pMap[pid] && pMap[pid].breezePersonId)
+          assignedPairs.push({ breezePersonId: pMap[pid].breezePersonId, role: role });
       });
       // Shared roles go to both services
       SHARED_ROLES.forEach(function(role) {
         var pid = row.assignments[role].shared;
-        if (pid && pMap[pid] && pMap[pid].breezePersonId) assignedBreezeIds.push(pMap[pid].breezePersonId);
+        if (pid && pMap[pid] && pMap[pid].breezePersonId)
+          assignedPairs.push({ breezePersonId: pMap[pid].breezePersonId, role: role });
       });
-      // De-duplicate
-      var seen = {}; assignedBreezeIds = assignedBreezeIds.filter(function(id){ if(seen[id])return false; seen[id]=true; return true; });
+      // De-duplicate by breezePersonId (keep first role if same person appears twice)
+      var seen = {}; assignedPairs = assignedPairs.filter(function(a){
+        if (seen[a.breezePersonId]) return false; seen[a.breezePersonId]=true; return true;
+      });
 
-      tasks.push({ iso:iso, svc:svc, instanceId:instanceId, breezeIds:assignedBreezeIds });
+      tasks.push({ iso:iso, svc:svc, instanceId:instanceId, assignments:assignedPairs });
     });
   });
 
@@ -1042,7 +1060,7 @@ function syncToBreeze() {
   var chain = Promise.resolve();
   tasks.forEach(function(task) {
     chain = chain.then(function() {
-      logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+' (instance '+esc(task.instanceId)+')</span>');
+      logLine('<br><span class="log-info">&#9658; '+esc(task.iso)+' '+esc(task.svc)+'</span>');
 
       // 1. Get existing volunteers
       return breezeGet('/api/volunteers/list', { instance_id: task.instanceId })
@@ -1054,26 +1072,104 @@ function syncToBreeze() {
             var vpid = vol.person_id;
             removeChain = removeChain.then(function() {
               return breezeGet('/api/volunteers/remove', { instance_id:task.instanceId, person_id:vpid })
-                .then(function(){ logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; })
+                .then(function(res){
+                  if (res === true) { logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; }
+                  else { logLine('  ? Remove returned: '+esc(JSON.stringify(res)), 'log-info'); totalErr++; }
+                })
                 .catch(function(e){ logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)),'log-err'); totalErr++; });
             });
           });
           return removeChain;
         })
         .then(function() {
-          // 3. Add new volunteers
-          var addChain = Promise.resolve();
-          if (!task.breezeIds.length) {
-            logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
-          }
-          task.breezeIds.forEach(function(bpid) {
-            addChain = addChain.then(function() {
-              return breezeGet('/api/volunteers/add', { instance_id:task.instanceId, person_id:bpid })
-                .then(function(){ logLine('  + Added volunteer ID '+esc(bpid),'log-ok'); totalOk++; })
-                .catch(function(e){ logLine('  &times; Failed to add '+esc(bpid)+': '+esc(String(e)),'log-err'); totalErr++; });
+          // 3. Fetch (or create) Breeze role IDs for this instance, then add volunteers with roles
+          return breezeGet('/api/volunteers/list_roles', { instance_id: task.instanceId })
+            .then(function(roles) {
+              // Build role name → Breeze role ID map (case-insensitive)
+              var roleMap = {};
+              if (Array.isArray(roles)) {
+                roles.forEach(function(r) { roleMap[(r.name||'').toLowerCase()] = r.id; });
+              }
+
+              if (!task.assignments.length) {
+                logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
+                return;
+              }
+
+              // Determine which roles we need for this event's assignments
+              var neededRoles = [];
+              task.assignments.forEach(function(a) {
+                var key = a.role.toLowerCase();
+                if (!roleMap[key] && neededRoles.indexOf(a.role) === -1) {
+                  neededRoles.push(a.role);
+                }
+              });
+
+              // Create any missing roles on this instance, then proceed
+              var createChain = Promise.resolve();
+              neededRoles.forEach(function(roleName) {
+                createChain = createChain.then(function() {
+                  return breezeGet('/api/volunteers/add_role', {
+                    instance_id: task.instanceId,
+                    name: roleName,
+                    quantity: 1
+                  }).then(function(newRole) {
+                    // add_role returns the new role object (or an id directly)
+                    var newId = (newRole && newRole.id) ? newRole.id : newRole;
+                    if (newId) {
+                      roleMap[roleName.toLowerCase()] = newId;
+                      logLine('  &#10010; Created role "'+esc(roleName)+'" (ID: '+esc(newId)+')', 'log-info');
+                    } else {
+                      logLine('  ? add_role response: '+esc(JSON.stringify(newRole)), 'log-info');
+                    }
+                  }).catch(function(e) {
+                    logLine('  Warning: Could not create role "'+esc(roleName)+'": '+esc(String(e)), 'log-info');
+                  });
+                });
+              });
+
+              return createChain.then(function() {
+                logLine('  Roles: '+esc(JSON.stringify(roleMap)), 'log-info');
+
+                var addChain = Promise.resolve();
+                task.assignments.forEach(function(a) {
+                  addChain = addChain.then(function() {
+                    return breezeGet('/api/volunteers/add', { instance_id:task.instanceId, person_id:a.breezePersonId })
+                      .then(function(res) {
+                        if (res === true) {
+                          totalOk++;
+                          // Assign their role
+                          var breezeRoleId = roleMap[a.role.toLowerCase()];
+                          if (breezeRoleId) {
+                            return breezeGet('/api/volunteers/update', {
+                              instance_id:   task.instanceId,
+                              person_id:     a.breezePersonId,
+                              role_ids_json: JSON.stringify([parseInt(breezeRoleId, 10)])
+                            }).then(function() {
+                              logLine('  + Added &amp; assigned "'+esc(a.role)+'" → ID '+esc(a.breezePersonId), 'log-ok');
+                              totalOk++;
+                            }).catch(function(e) {
+                              logLine('  + Added ID '+esc(a.breezePersonId)+' but role assign failed: '+esc(String(e)), 'log-err');
+                              totalErr++;
+                            });
+                          } else {
+                            logLine('  + Added ID '+esc(a.breezePersonId)+' (no role ID found for "'+esc(a.role)+'")', 'log-info');
+                          }
+                        } else {
+                          logLine('  ? Add returned: '+esc(JSON.stringify(res))+' for ID '+esc(a.breezePersonId), 'log-info');
+                          totalErr++;
+                        }
+                      })
+                      .catch(function(e){ logLine('  &times; Failed to add ID '+esc(a.breezePersonId)+': '+esc(String(e)),'log-err'); totalErr++; });
+                  });
+                });
+                return addChain;
+              });
+            })
+            .catch(function(e) {
+              logLine('  Error fetching/creating Breeze roles: '+esc(String(e)), 'log-err');
+              totalErr++;
             });
-          });
-          return addChain;
         })
         .catch(function(err) {
           logLine('  Error fetching existing volunteers: '+esc(String(err)),'log-err');
