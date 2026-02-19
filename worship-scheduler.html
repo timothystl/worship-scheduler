@@ -1166,40 +1166,48 @@ function syncToBreeze() {
     return;
   }
 
-  // ── Phase A: Load role ID maps from Settings ──
-  // Real Breeze UI role IDs are stored by the user in Settings.
-  // To find them: open your Breeze event page, press Cmd+U (View Source),
-  // search for data-role_id — each match like data-role_id="401344" is a role ID.
-  var bSettings = getBreezeSettings();
-  var serviceMaps = {
-    '8am':     bSettings.roleMap8am  || {},
-    '10:45am': bSettings.roleMap1045 || {}
-  };
-  var servicePrep = Promise.resolve();  // synchronous — no async needed
-
-  // Validate and warn about missing role IDs
-  ['8am', '10:45am'].forEach(function(svc) {
-    var roleMap = serviceMaps[svc];
-    var count = Object.keys(roleMap).length;
-    if (count === 0) {
-      logLine('&#9888; No role IDs configured for <strong>'+esc(svc)+'</strong> — go to Settings and fill in the Role ID Map', 'log-err');
-    } else {
-      var missing = [];
-      tasks.forEach(function(t) {
-        if (t.svc !== svc) return;
-        t.assignments.forEach(function(a) {
-          a.roles.forEach(function(role) {
-            var key = role.toLowerCase().replace(/['']/g, '');
-            if (!roleMap[key] && missing.indexOf(role) === -1) missing.push(role);
-          });
-        });
-      });
-      logLine('Roles for <strong>'+esc(svc)+'</strong> ('+count+'): '+esc(JSON.stringify(roleMap))+'<br>', 'log-info');
-      if (missing.length) logLine('&#9888; Missing IDs for: <strong>'+esc(missing.join(', '))+'</strong> — add in Settings', 'log-err');
-    }
+  // ── Phase A: Fetch role name→ID maps from Breeze API for each unique instance ──
+  // Uses GET /api/volunteers/list_roles which returns API role IDs (works with API key auth).
+  // We fetch roles for one representative instance per service, then reuse that map.
+  var serviceMaps = {};  // { '8am': { 'elder': '120417', ... }, '10:45am': { ... } }
+  var instancePerSvc = {};  // first instanceId seen for each service
+  tasks.forEach(function(t) {
+    if (!instancePerSvc[t.svc]) instancePerSvc[t.svc] = t.instanceId;
   });
 
-  // ── Phase B: Execute tasks sequentially, reusing the per-service roleMaps ──
+  var servicePrep = Promise.resolve();
+  Object.keys(instancePerSvc).forEach(function(svc) {
+    servicePrep = servicePrep.then(function() {
+      var iid = instancePerSvc[svc];
+      return breezeGet('/api/volunteers/list_roles', { instance_id: iid })
+        .then(function(roles) {
+          var map = {};
+          if (Array.isArray(roles)) {
+            roles.forEach(function(r) {
+              // Normalize: lowercase, strip apostrophes, trim
+              var key = (r.name || '').toLowerCase().replace(/['']/g, '').trim();
+              if (key) map[key] = String(r.id);
+            });
+          }
+          serviceMaps[svc] = map;
+          var count = Object.keys(map).length;
+          if (count === 0) {
+            logLine('&#9888; No roles found in Breeze for <strong>'+esc(svc)+'</strong> (instance '+esc(iid)+')', 'log-err');
+          } else {
+            logLine('Roles for <strong>'+esc(svc)+'</strong> ('+count+'): '+esc(JSON.stringify(map)), 'log-info');
+          }
+        })
+        .catch(function(e) {
+          serviceMaps[svc] = {};
+          logLine('&#9888; Could not fetch roles for <strong>'+esc(svc)+'</strong>: '+esc(String(e)), 'log-err');
+        });
+    });
+  });
+
+  // ── Phase B: Execute tasks sequentially ──
+  // For each task: remove existing volunteers, then add each person and update their roles.
+  // Flow per person: POST /api/volunteers/add → GET /api/volunteers/update?role_ids_json=[...]
+  // Both endpoints use API key auth (no session cookie needed).
   servicePrep.then(function() {
     var chain = Promise.resolve();
     tasks.forEach(function(task) {
@@ -1216,95 +1224,87 @@ function syncToBreeze() {
             existingList.forEach(function(vol) {
               var vpid = vol.person_id;
               removeChain = removeChain.then(function() {
-                return breezeGet('/api/volunteers/remove', { instance_id:task.instanceId, person_id:vpid })
-                  .then(function(res){
+                return breezeGet('/api/volunteers/remove', { instance_id: task.instanceId, person_id: vpid })
+                  .then(function(res) {
                     if (res === true) { logLine('  &minus; Removed volunteer ID '+esc(vpid)); totalOk++; }
                     else { logLine('  ? Remove returned: '+esc(JSON.stringify(res)), 'log-info'); totalErr++; }
                   })
-                  .catch(function(e){ logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)),'log-err'); totalErr++; });
+                  .catch(function(e) { logLine('  &times; Failed to remove '+esc(vpid)+': '+esc(String(e)), 'log-err'); totalErr++; });
               });
             });
             return removeChain;
           })
           .then(function() {
-            // 3. Assign volunteers by role using /ajax/add_volunteers (same endpoint Breeze UI uses).
-            // This takes: instance_id, role_id (one role at a time), people_ids[] (array of person IDs).
-            // We make one POST call per role, passing all people assigned to that role.
+            // 3. Add each person and assign their roles via the public API.
+            // Step A per person: GET /api/volunteers/add?instance_id=...&person_id=...
+            // Step B per person: GET /api/volunteers/update?instance_id=...&person_id=...&role_ids_json=[id1,id2,...]
             if (!task.assignments.length) {
               logLine('  (no assigned people with Breeze IDs for this slot)', 'log-info');
               return;
             }
 
-            // Invert the assignments: build a map of roleId → [personIds]
-            // task.assignments = [{ breezePersonId, roles:['Elder','Acolyte',...] }, ...]
-            var roleToPersonIds = {};  // { '401344': ['43826480', ...], ... }
-            var warned = {};
+            var assignChain = Promise.resolve();
             task.assignments.forEach(function(a) {
+              var bpid = a.breezePersonId;
+
+              // Resolve role names to API role IDs
+              var roleIds = [];
+              var warned = {};
               a.roles.forEach(function(role) {
-                // Normalize same way the HTML scraper does: lowercase + strip apostrophes
-                var roleKey = role.toLowerCase().replace(/['']/g, '');
-                var rid = roleMap[roleKey];
+                var key = role.toLowerCase().replace(/['']/g, '').trim();
+                var rid = roleMap[key];
                 if (!rid) {
                   if (!warned[role]) {
-                    logLine('  Warning: no role ID for "'+esc(role)+'" — person ID '+esc(a.breezePersonId)+' skipped for this role', 'log-info');
+                    logLine('  Warning: no role ID for "'+esc(role)+'" — skipped for person '+esc(bpid), 'log-info');
                     warned[role] = true;
                   }
-                  return;
+                } else {
+                  roleIds.push(rid);
                 }
-                if (!roleToPersonIds[rid]) roleToPersonIds[rid] = [];
-                roleToPersonIds[rid].push(a.breezePersonId);
-              });
-            });
-
-            // One POST per role — matches exactly what Breeze UI does
-            var addChain = Promise.resolve();
-            Object.keys(roleToPersonIds).forEach(function(roleId) {
-              var personIds = roleToPersonIds[roleId];
-              // Find the role name for logging
-              var roleName = roleId;
-              Object.keys(roleMap).forEach(function(name) {
-                if (String(roleMap[name]) === String(roleId)) roleName = name;
               });
 
-              addChain = addChain.then(function() {
-                // Build fields: instance_id, role_id, people_ids[] for each person
-                // The /ajax/add_volunteers endpoint expects people_ids as repeated fields
-                // We encode them as people_ids%5B%5D=id1&people_ids%5B%5D=id2
-                var s = getBreezeSettings();
-                var bodyParts = [
-                  'instance_id=' + encodeURIComponent(task.instanceId),
-                  'role_id='     + encodeURIComponent(roleId)
-                ];
-                personIds.forEach(function(pid) {
-                  bodyParts.push('people_ids%5B%5D=' + encodeURIComponent(pid));
-                });
-                var body = bodyParts.join('&');
-                var url = s.workerUrl + '/ajax/add_volunteers';
-
-                return fetch(url, {
-                  method: 'POST',
-                  headers: {
-                    'X-Breeze-Subdomain': s.subdomain,
-                    'X-Breeze-Api-Key':   s.apiKey,
-                    'Content-Type':       'application/x-www-form-urlencoded',
-                  },
-                  body: body,
-                })
-                  .then(function(r) { return r.json(); })
-                  .then(function(res) {
-                    logLine('  + Assigned to "'+esc(roleName)+'" (role ID '+esc(roleId)+'): '+esc(personIds.join(', '))+' — result: '+esc(JSON.stringify(res)), 'log-ok');
-                    totalOk++;
+              assignChain = assignChain.then(function() {
+                // Step A: add person to event
+                return breezeGet('/api/volunteers/add', { instance_id: task.instanceId, person_id: bpid })
+                  .then(function(addRes) {
+                    if (addRes !== true) {
+                      logLine('  ? Add returned: '+esc(JSON.stringify(addRes))+' for person '+esc(bpid), 'log-info');
+                    }
+                    // Step B: update their roles (even if roleIds is empty — clears roles)
+                    if (!roleIds.length) {
+                      logLine('  + Added person '+esc(bpid)+' (no roles matched)', 'log-ok');
+                      totalOk++;
+                      return;
+                    }
+                    return breezeGet('/api/volunteers/update', {
+                      instance_id:   task.instanceId,
+                      person_id:     bpid,
+                      role_ids_json: JSON.stringify(roleIds.map(Number))
+                    })
+                      .then(function(updRes) {
+                        var roleNames = roleIds.map(function(rid) {
+                          var name = rid;
+                          Object.keys(roleMap).forEach(function(n) { if (roleMap[n] === rid) name = n; });
+                          return name;
+                        });
+                        logLine('  + Added person '+esc(bpid)+' → roles: '+esc(roleNames.join(', '))+' — result: '+esc(JSON.stringify(updRes)), 'log-ok');
+                        totalOk++;
+                      })
+                      .catch(function(e) {
+                        logLine('  &times; Failed to update roles for '+esc(bpid)+': '+esc(String(e)), 'log-err');
+                        totalErr++;
+                      });
                   })
                   .catch(function(e) {
-                    logLine('  &times; Failed to assign role "'+esc(roleName)+'": '+esc(String(e)), 'log-err');
+                    logLine('  &times; Failed to add person '+esc(bpid)+': '+esc(String(e)), 'log-err');
                     totalErr++;
                   });
               });
             });
-            return addChain;
+            return assignChain;
           })
           .catch(function(err) {
-            logLine('  Error: '+esc(String(err)),'log-err');
+            logLine('  Error: '+esc(String(err)), 'log-err');
             totalErr++;
           });
       });
