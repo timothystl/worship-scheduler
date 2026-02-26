@@ -342,9 +342,14 @@ Preschool Chapel = "></textarea>
         Create an API key in your Resend dashboard → API Keys.
       </small>
       <label for="email-from" style="margin-top:12px;">From Address</label>
-      <input type="email" id="email-from" placeholder="dinger@timothystl.org" style="max-width:320px;">
+      <input type="email" id="email-from" placeholder="dinger@reminder.timothystl.org" style="max-width:320px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
         Must be on a domain verified in Resend. Emails will appear to come from this address.
+      </small>
+      <label for="email-reply-to" style="margin-top:12px;">Reply-To Address</label>
+      <input type="email" id="email-reply-to" placeholder="dinger@timothystl.org" style="max-width:320px;">
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+        Where volunteer replies are sent. Use your real inbox (e.g. dinger@timothystl.org).
       </small>
     </div>
 
@@ -865,14 +870,14 @@ function sendReminderEmails() {
     var lines = [
       'Hello ' + person.name + ',',
       '',
-      'Here are your upcoming worship service assignments at St. Timothy Lutheran Church:',
+      'Here are your upcoming worship service assignments at Timothy Lutheran Church:',
       ''
     ];
     assignments.forEach(function(a) {
       var svcLabel = a.svc === 'both services' ? 'Both Services' : a.svc;
       lines.push('  \u2022 ' + a.date + ' \u2014 ' + svcLabel + ': ' + roleLabel(a.role));
     });
-    lines.push('', 'Thank you for serving!', '', 'St. Timothy Lutheran Church');
+    lines.push('', 'Thank you for serving!', '', 'Timothy Lutheran Church');
 
     chain = chain.then(function() {
       return fetch(s.workerUrl + '/email/send', {
@@ -884,8 +889,9 @@ function sendReminderEmails() {
         },
         body: JSON.stringify({
           to:      person.email,
-          subject: 'Your Upcoming Worship Service Assignments \u2014 St. Timothy',
+          subject: 'Your Upcoming Worship Service Assignments \u2014 Timothy Lutheran',
           text:    lines.join('\n'),
+          reply_to: s.replyTo || '',
         }),
       })
         .then(function(r) {
@@ -957,8 +963,9 @@ function loadSettingsForm() {
   if (s.tagId)      document.getElementById('breeze-tag-id').value     = s.tagId;
   document.getElementById('breeze-rolemap-8am').value  = roleMapToText(s.roleMap8am  || {});
   document.getElementById('breeze-rolemap-1045').value = roleMapToText(s.roleMap1045 || {});
-  if (s.resendKey)  document.getElementById('email-resend-key').value = s.resendKey;
-  if (s.emailFrom)  document.getElementById('email-from').value       = s.emailFrom;
+  if (s.resendKey)  document.getElementById('email-resend-key').value  = s.resendKey;
+  if (s.emailFrom)  document.getElementById('email-from').value        = s.emailFrom;
+  if (s.replyTo)    document.getElementById('email-reply-to').value    = s.replyTo;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', function() {
@@ -970,9 +977,10 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   var roleMap1045 = textToRoleMap(document.getElementById('breeze-rolemap-1045').value);
   var resendKey   = document.getElementById('email-resend-key').value.trim();
   var emailFrom   = document.getElementById('email-from').value.trim();
+  var replyTo     = document.getElementById('email-reply-to').value.trim();
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045, resendKey:resendKey, emailFrom:emailFrom });
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045, resendKey:resendKey, emailFrom:emailFrom, replyTo:replyTo });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
