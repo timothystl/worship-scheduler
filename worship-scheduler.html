@@ -151,7 +151,18 @@ td.filled-cell { background: #f0fff4; }
 <div id="tab-people" class="tab-content active">
   <div class="card">
     <h2>Add / Edit Person</h2>
+
+    <div id="breeze-import-section" style="background:#f0f4ff;border:1px solid #c8d4f0;border-radius:6px;padding:12px 14px;margin-bottom:16px;">
+      <label style="font-weight:600;margin-bottom:6px;display:block;">&#128269; Search Breeze to Import</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="breeze-import-query" placeholder="Type a name…" style="max-width:220px;">
+        <button class="btn btn-outline btn-sm" id="btn-breeze-import-search">Search</button>
+      </div>
+      <div id="breeze-import-results" style="margin-top:8px;font-size:0.82rem;"></div>
+    </div>
+
     <input type="hidden" id="edit-id">
+    <input type="hidden" id="breeze-import-id">
     <label for="person-name">Name</label>
     <input type="text" id="person-name" placeholder="Full name">
 
@@ -533,12 +544,16 @@ document.getElementById('pref-roles').addEventListener('change',   function() { 
 // ══════════════════════════════════════════════════════════════════
 function clearForm() {
   document.getElementById('edit-id').value = '';
+  document.getElementById('breeze-import-id').value = '';
   document.getElementById('person-name').value = '';
+  document.getElementById('person-email').value = '';
   document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('pref-service').querySelector('input[value="both"]').checked = true;
   document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
   syncLabels('pref-sundays');
   syncLabels('pref-roles');
+  document.getElementById('breeze-import-query').value = '';
+  document.getElementById('breeze-import-results').innerHTML = '';
 }
 
 function savePerson() {
@@ -558,17 +573,18 @@ function savePerson() {
   });
   if (roles.length === 0) { alert('Please select at least one role.'); return; }
 
+  var importedBreezeId = document.getElementById('breeze-import-id').value || null;
   var people = getPeople();
   var editId = document.getElementById('edit-id').value;
   if (editId) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].id === editId) {
-        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: people[i].breezePersonId || null };
+        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId || people[i].breezePersonId || null };
         break;
       }
     }
   } else {
-    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: null });
+    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId });
   }
   savePeople(people);
   clearForm();
@@ -1107,6 +1123,102 @@ function renderPeopleMapTable() {
   tbody.innerHTML = html;
 }
 
+// ── Breeze import helpers (People tab) ──────────────────────────────────────
+function tagsToRoles(tags) {
+  var matched = [];
+  var all = PER_ROLES.concat(SHARED_ROLES);
+  (tags || []).forEach(function(tag) {
+    var t = (tag.name || '').toLowerCase();
+    all.forEach(function(role) {
+      var r = role.toLowerCase();
+      if (t.indexOf(r) !== -1 || r.indexOf(t) !== -1) {
+        if (matched.indexOf(role) === -1) matched.push(role);
+      }
+    });
+  });
+  return matched;
+}
+
+function importBreezePersonToForm(breezeId) {
+  var resultsEl = document.getElementById('breeze-import-results');
+  resultsEl.innerHTML = '<span style="color:#888;">Loading\u2026</span>';
+  breezeGet('/api/people/' + breezeId, { details: 1 })
+    .then(function(p) {
+      // Name
+      document.getElementById('person-name').value = ((p.first_name||'')+' '+(p.last_name||'')).trim();
+
+      // Email — Breeze nests email in different places depending on version
+      var email = '';
+      if (p.details) {
+        if (p.details.email_primary && p.details.email_primary.address) {
+          email = p.details.email_primary.address;
+        } else if (Array.isArray(p.details.email) && p.details.email.length) {
+          email = p.details.email[0].address || p.details.email[0] || '';
+        } else if (typeof p.details.email === 'string') {
+          email = p.details.email;
+        }
+      }
+      document.getElementById('person-email').value = email;
+
+      // Roles from tags
+      var roles = tagsToRoles(p.tags || []);
+      document.getElementById('pref-roles').querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+        cb.checked = roles.indexOf(cb.value) !== -1;
+      });
+      syncLabels('pref-roles');
+
+      // Store Breeze ID so savePerson() links it automatically
+      document.getElementById('breeze-import-id').value = breezeId;
+
+      var roleNote = roles.length ? ' Roles pre-checked: ' + roles.join(', ') + '.' : ' No matching role tags found \u2014 check roles manually.';
+      resultsEl.innerHTML = '<span style="color:#27ae60;">\u2713 Filled in from Breeze.' + esc(roleNote) + ' Set Sunday preferences &amp; service preference, then Save.</span>';
+    })
+    .catch(function(e) {
+      resultsEl.innerHTML = '<span style="color:#e74c3c;">Error: ' + esc(String(e)) + '</span>';
+    });
+}
+
+document.getElementById('btn-breeze-import-search').addEventListener('click', function() {
+  var query = document.getElementById('breeze-import-query').value.trim();
+  if (!query) { alert('Enter a name to search.'); return; }
+  var resultsEl = document.getElementById('breeze-import-results');
+  resultsEl.innerHTML = '<span style="color:#888;">Searching\u2026</span>';
+
+  var s = getBreezeSettings();
+  var params = { details: 0, limit: 500 };
+  if (s.tagId) params.filter_json = JSON.stringify({ tag_contains: 'y_' + s.tagId });
+
+  breezeGet('/api/people', params)
+    .then(function(data) {
+      var parts = query.toLowerCase().split(/\s+/).filter(Boolean);
+      var filtered = (data || []).filter(function(bp) {
+        var first = (bp.first_name||'').toLowerCase();
+        var last  = (bp.last_name||'').toLowerCase();
+        return parts.every(function(p) { return first.indexOf(p) !== -1 || last.indexOf(p) !== -1; });
+      });
+      if (!filtered.length) {
+        resultsEl.innerHTML = '<span style="color:#888;">No results found.</span>';
+        return;
+      }
+      var html = '<select id="breeze-import-select" style="max-width:240px;margin-right:6px;font-size:0.82rem;">'
+        + '<option value="">-- Select person --</option>';
+      filtered.forEach(function(bp) {
+        html += '<option value="'+esc(bp.id)+'">'+esc(((bp.first_name||'')+' '+(bp.last_name||'')).trim())+'</option>';
+      });
+      html += '</select><button class="btn btn-primary btn-sm" id="btn-breeze-import-fill">Import</button>';
+      resultsEl.innerHTML = html;
+      document.getElementById('btn-breeze-import-fill').addEventListener('click', function() {
+        var sel = document.getElementById('breeze-import-select');
+        if (!sel || !sel.value) { alert('Select a person first.'); return; }
+        importBreezePersonToForm(sel.value);
+      });
+    })
+    .catch(function(e) {
+      resultsEl.innerHTML = '<span style="color:#e74c3c;">Error: ' + esc(String(e)) + '</span>';
+    });
+});
+
+// ── Breeze Sync tab search/link (existing) ───────────────────────────────────
 function searchBreezePerson(personId) {
   var inputEl = document.getElementById('bsearch-'+personId);
   var rawQuery = inputEl ? inputEl.value.trim() : '';
