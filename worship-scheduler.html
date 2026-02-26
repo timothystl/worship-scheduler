@@ -155,6 +155,9 @@ td.filled-cell { background: #f0fff4; }
     <label for="person-name">Name</label>
     <input type="text" id="person-name" placeholder="Full name">
 
+    <label for="person-email" style="margin-top:12px;">Email Address <span style="font-weight:normal;color:#888;">(for reminder emails)</span></label>
+    <input type="email" id="person-email" placeholder="volunteer@example.com" style="max-width:320px;">
+
     <div class="form-row">
       <div>
         <label>Preferred Sundays of Month</label>
@@ -226,6 +229,8 @@ td.filled-cell { background: #f0fff4; }
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-success btn-sm" id="btn-export-csv">Export CSV</button>
         <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
+        <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:#e8f4fd;border-color:#3498db;color:#2980b9;">&#9993; Send Reminder Emails</button>
+        <span id="email-send-status" style="font-size:0.82rem;color:#555;"></span>
         <button class="btn btn-danger btn-sm" id="btn-clear-schedule">Clear Schedule</button>
       </div>
     </div>
@@ -319,6 +324,28 @@ Lectionary Class =
 Preschool Chapel = "></textarea>
         </div>
       </div>
+    </div>
+
+    <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
+      <label style="font-weight:600;">Volunteer Reminder Emails</label>
+      <p style="font-size:0.82rem;color:#555;margin:4px 0 10px;">
+        Send personalized reminder emails to volunteers directly from this app via
+        <a href="https://resend.com" target="_blank" style="color:#2c3e6b;">Resend</a>
+        (free up to 3,000 emails/month).
+        Sign up at resend.com, add and verify your domain (e.g. <code>timothystl.org</code>),
+        then paste your API key below. Once configured, add email addresses to each person
+        in the People tab, then click "Send Reminder Emails" on the Schedule tab.
+      </p>
+      <label for="email-resend-key">Resend API Key</label>
+      <input type="password" id="email-resend-key" placeholder="re_xxxxxxxxxxxxxxxx" style="max-width:360px;">
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+        Create an API key in your Resend dashboard → API Keys.
+      </small>
+      <label for="email-from" style="margin-top:12px;">From Address</label>
+      <input type="email" id="email-from" placeholder="dinger@timothystl.org" style="max-width:320px;">
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
+        Must be on a domain verified in Resend. Emails will appear to come from this address.
+      </small>
     </div>
 
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -512,6 +539,7 @@ function clearForm() {
 function savePerson() {
   var name = document.getElementById('person-name').value.trim();
   if (!name) { alert('Please enter a name.'); return; }
+  var email = document.getElementById('person-email').value.trim();
 
   var preferredSundays = [];
   document.getElementById('pref-sundays').querySelectorAll('input:checked').forEach(function(cb){
@@ -530,12 +558,12 @@ function savePerson() {
   if (editId) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].id === editId) {
-        people[i] = { id: editId, name: name, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: people[i].breezePersonId || null };
+        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: people[i].breezePersonId || null };
         break;
       }
     }
   } else {
-    people.push({ id: makeId(), name: name, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: null });
+    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: null });
   }
   savePeople(people);
   clearForm();
@@ -562,9 +590,10 @@ function renderPeopleList() {
     var svcMap = { 'both':'Both Services','8am':'8:00 AM only','10:45am':'10:45 AM only' };
     var roleTags = p.roles.map(function(r){ return '<span class="tag tag-role">'+esc(roleLabel(r))+'</span>'; }).join('');
     var breezeTag = p.breezePersonId ? '<span class="tag tag-breeze">&#9729; Breeze linked</span>' : '';
+    var emailTag = p.email ? '<span style="font-size:0.78rem;color:#555;margin-left:4px;">&#9993; '+esc(p.email)+'</span>' : '';
     html += '<div class="person-card">'
       +'<div class="person-card-header">'
-      +'<span class="person-name">'+esc(p.name)+'</span>'
+      +'<span class="person-name">'+esc(p.name)+'</span>'+emailTag
       +'<div style="display:flex;gap:6px;">'
       +'<button class="btn btn-outline btn-sm" data-action="edit" data-id="'+p.id+'">Edit</button>'
       +'<button class="btn btn-danger btn-sm" data-action="delete" data-id="'+p.id+'">Remove</button>'
@@ -592,6 +621,7 @@ function editPerson(id) {
   if (!person) return;
   document.getElementById('edit-id').value = person.id;
   document.getElementById('person-name').value = person.name;
+  document.getElementById('person-email').value = person.email || '';
   document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){
     cb.checked = person.preferredSundays.indexOf(parseInt(cb.value,10)) > -1;
   });
@@ -773,6 +803,127 @@ document.getElementById('btn-export-csv').addEventListener('click', function() {
 document.getElementById('btn-print').addEventListener('click', function(){ window.print(); });
 
 // ══════════════════════════════════════════════════════════════════
+// REMINDER EMAILS
+// ══════════════════════════════════════════════════════════════════
+function sendReminderEmails() {
+  var s = getBreezeSettings();
+  if (!s.resendKey || !s.emailFrom) {
+    alert('Please configure your Resend API key and From address in the Settings tab first.');
+    return;
+  }
+  if (!currentSchedule.length) {
+    alert('Generate a schedule first.');
+    return;
+  }
+
+  var people = getPeople();
+  var pMap = {};
+  people.forEach(function(p){ pMap[p.id] = p; });
+
+  // Build person → assignments map from entire schedule
+  var personAssignments = {};  // { personId: [{ date, svc, role }, ...] }
+  currentSchedule.forEach(function(row) {
+    var dateStr = fmtDate(row.date);
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        var pid = row.assignments[role][svc];
+        if (!pid) return;
+        if (!personAssignments[pid]) personAssignments[pid] = [];
+        personAssignments[pid].push({ date: dateStr, svc: svc, role: role });
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      var pid = row.assignments[role].shared;
+      if (!pid) return;
+      if (!personAssignments[pid]) personAssignments[pid] = [];
+      personAssignments[pid].push({ date: dateStr, svc: 'both services', role: role });
+    });
+  });
+
+  var statusEl = document.getElementById('email-send-status');
+  var pids = Object.keys(personAssignments);
+  if (!pids.length) { statusEl.textContent = 'No assignments to send.'; return; }
+
+  var total = 0, sent = 0, skipped = 0, errors = 0;
+  pids.forEach(function(pid) {
+    if (pMap[pid] && pMap[pid].email) total++;
+    else skipped++;
+  });
+  if (!total) {
+    statusEl.textContent = 'No people with email addresses — add emails in the People tab.';
+    return;
+  }
+  statusEl.textContent = 'Sending 0 of ' + total + '…';
+
+  var chain = Promise.resolve();
+  pids.forEach(function(pid) {
+    var person = pMap[pid];
+    if (!person || !person.email) return;
+    var assignments = personAssignments[pid];
+
+    // Build plain-text email body
+    var lines = [
+      'Hello ' + person.name + ',',
+      '',
+      'Here are your upcoming worship service assignments at St. Timothy Lutheran Church:',
+      ''
+    ];
+    assignments.forEach(function(a) {
+      var svcLabel = a.svc === 'both services' ? 'Both Services' : a.svc;
+      lines.push('  \u2022 ' + a.date + ' \u2014 ' + svcLabel + ': ' + roleLabel(a.role));
+    });
+    lines.push('', 'Thank you for serving!', '', 'St. Timothy Lutheran Church');
+
+    chain = chain.then(function() {
+      return fetch(s.workerUrl + '/email/send', {
+        method: 'POST',
+        headers: {
+          'X-Resend-Key':  s.resendKey,
+          'X-Email-From':  s.emailFrom,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          to:      person.email,
+          subject: 'Your Upcoming Worship Service Assignments \u2014 St. Timothy',
+          text:    lines.join('\n'),
+        }),
+      })
+        .then(function(r) {
+          var ok = r.ok, status = r.status;
+          return r.json().then(function(body) { return { ok: ok, status: status, body: body }; });
+        })
+        .then(function(res) {
+          if (res.ok) {
+            sent++;
+            statusEl.textContent = 'Sent ' + sent + ' of ' + total + '\u2026';
+          } else {
+            errors++;
+            var msg = (res.body && (res.body.message || res.body.error || res.body.name))
+              ? (res.body.message || res.body.error || res.body.name)
+              : JSON.stringify(res.body);
+            statusEl.textContent = '\u00d7 ' + esc(person.name) + ' (error ' + res.status + '): ' + esc(msg);
+          }
+        })
+        .catch(function(e) {
+          errors++;
+          statusEl.textContent = '\u00d7 Network error sending to ' + esc(person.name) + ': ' + esc(String(e));
+        });
+    });
+  });
+
+  chain.then(function() {
+    if (errors > 0) {
+      statusEl.textContent += ' (' + sent + ' sent, ' + errors + ' failed)';
+    } else {
+      statusEl.textContent = '\u2713 Done \u2014 ' + sent + ' email' + (sent !== 1 ? 's' : '') + ' sent'
+        + (skipped ? ', ' + skipped + ' skipped (no email address)' : '') + '.';
+    }
+  });
+}
+
+document.getElementById('btn-send-emails').addEventListener('click', sendReminderEmails);
+
+// ══════════════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════════════
 // Convert a roleMap object {roleName: roleId} to textarea text "Elder = 401344\nAcolyte = 401345\n..."
@@ -806,6 +957,8 @@ function loadSettingsForm() {
   if (s.tagId)      document.getElementById('breeze-tag-id').value     = s.tagId;
   document.getElementById('breeze-rolemap-8am').value  = roleMapToText(s.roleMap8am  || {});
   document.getElementById('breeze-rolemap-1045').value = roleMapToText(s.roleMap1045 || {});
+  if (s.resendKey)  document.getElementById('email-resend-key').value = s.resendKey;
+  if (s.emailFrom)  document.getElementById('email-from').value       = s.emailFrom;
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', function() {
@@ -815,9 +968,11 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   var tagId       = document.getElementById('breeze-tag-id').value.trim().replace(/\D/g,'');
   var roleMap8am  = textToRoleMap(document.getElementById('breeze-rolemap-8am').value);
   var roleMap1045 = textToRoleMap(document.getElementById('breeze-rolemap-1045').value);
+  var resendKey   = document.getElementById('email-resend-key').value.trim();
+  var emailFrom   = document.getElementById('email-from').value.trim();
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045 });
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, tagId:tagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045, resendKey:resendKey, emailFrom:emailFrom });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
