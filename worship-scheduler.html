@@ -159,9 +159,42 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
   table { font-size: 0.75rem; }
   td, th { padding: 4px 6px; }
   .cell-select { display: none !important; }
+  .conf-pill { display: none !important; }
   .print-name { display: inline !important; font-size: 0.78rem; }
+  .label-input { border: none !important; font-size: 0.7rem; color: #333 !important; padding: 0; }
   td.empty-cell { background: #fff !important; }
+  #tab-stats { display: none !important; }
 }
+
+/* ── Confirmation tracking ─────────────────── */
+.conf-pill { font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:10px; cursor:pointer; border:none; margin-top:3px; display:block; width:100%; text-align:center; user-select:none; text-transform:uppercase; letter-spacing:0.04em; transition:opacity 0.1s; }
+.conf-pill:hover { opacity:0.8; }
+.conf-pending   { background:#fff3cd; color:#856404; }
+.conf-confirmed { background:#d1e7dd; color:#0a3622; }
+.conf-declined  { background:#f8d7da; color:#58151c; }
+
+/* ── Sunday label ──────────────────────────── */
+.label-input { font-size:0.7rem; color:#f0b429; background:transparent; border:none; border-bottom:1px dashed #c8ab6a; outline:none; width:100%; margin-top:3px; padding:1px 2px; font-weight:600; caret-color:#2c3e6b; }
+.label-input::placeholder { color:#bbb; font-weight:normal; }
+
+/* ── History list ──────────────────────────── */
+.history-list { display:flex; flex-direction:column; gap:8px; }
+.history-item { border:1px solid #dde; border-radius:6px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; background:#fafbfc; }
+.history-item .hi-label { font-weight:700; color:#2c3e6b; font-size:0.9rem; }
+.history-item .hi-meta  { font-size:0.78rem; color:#888; }
+.history-item .hi-btns  { display:flex; gap:6px; }
+
+/* ── Stats tab ─────────────────────────────── */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; }
+.stat-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.stat-name { font-size:0.83rem; min-width:130px; font-weight:600; color:#2c3e6b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stat-bar-wrap { flex:1; background:#eef0f5; border-radius:4px; height:12px; overflow:hidden; }
+.stat-bar { height:12px; background:#2c3e6b; border-radius:4px; transition:width 0.3s; }
+.stat-count { font-size:0.78rem; color:#555; min-width:28px; text-align:right; }
+.stat-last { font-size:0.7rem; color:#999; margin-top:-4px; margin-bottom:4px; padding-left:138px; }
+.stat-roles { font-size:0.72rem; color:#666; padding-left:138px; margin-top:-2px; margin-bottom:8px; }
+@media(max-width:700px){ .stats-grid { grid-template-columns:1fr; } }
+
 </style>
 </head>
 <body>
@@ -180,6 +213,7 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
   <button class="tab-btn" id="tab-btn-schedule">Schedule</button>
   <button class="tab-btn" id="tab-btn-settings">&#9881; Settings</button>
   <button class="tab-btn" id="tab-btn-breeze">&#9729; Breeze Sync</button>
+  <button class="tab-btn" id="tab-btn-stats">&#128202; Stats</button>
 </div>
 
 <!-- ══ PEOPLE TAB ══════════════════════════════════════════════════════════ -->
@@ -272,6 +306,7 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
         <input type="date" id="end-date">
       </div>
       <button class="btn btn-primary" id="btn-generate">Generate Schedule</button>
+      <button class="btn btn-outline" id="btn-autofill" title="Auto-fill empty slots using volunteer history">&#9889; Auto-Fill Empty Slots</button>
     </div>
     <div id="schedule-alert"></div>
   </div>
@@ -281,6 +316,7 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
       <h2 style="margin:0; border:none; padding:0;">Schedule</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-success btn-sm" id="btn-export-csv">Export CSV</button>
+        <button class="btn btn-outline btn-sm" id="btn-export-ical">&#128197; iCal</button>
         <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
         <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:#e8f4fd;border-color:#3498db;color:#2980b9;">&#9993; Send Reminder Emails</button>
         <span id="email-send-status" style="font-size:0.82rem;color:#555;"></span>
@@ -488,7 +524,7 @@ var PER_ROLES    = ['Elder', 'Acolyte', 'PowerPoint', 'Lector', 'Liturgist'];
 var SHARED_ROLES = ['Preacher', 'Childrens Message', 'Lectionary Class'];
 var SHARED_LABELS = { 'Childrens Message': "Children's Message" };
 function roleLabel(r) { return SHARED_LABELS[r] || r; }
-var ALL_TABS = ['people','schedule','settings','breeze'];
+var ALL_TABS = ['people','schedule','settings','breeze','stats'];
 
 // ══════════════════════════════════════════════════════════════════
 // STORAGE
@@ -500,14 +536,24 @@ function getBreezeSettings() { try { return JSON.parse(localStorage.getItem('ws_
 function saveBreezeSettings(o){ localStorage.setItem('ws_breeze_settings', JSON.stringify(o)); }
 
 function getEventMap() { try { return JSON.parse(localStorage.getItem('ws_breeze_event_map') || '{}'); } catch(e) { return {}; } }
+function getHistory()        { try { return JSON.parse(localStorage.getItem('ws_history')      || '[]'); } catch(e) { return []; } }
+function saveHistory(h)      { localStorage.setItem('ws_history', JSON.stringify(h)); }
+function getLastServed()     { try { return JSON.parse(localStorage.getItem('ws_last_served')  || '{}'); } catch(e) { return {}; } }
+function saveLastServed(o)   { localStorage.setItem('ws_last_served', JSON.stringify(o)); }
+function getSundayLabels()   { try { return JSON.parse(localStorage.getItem('ws_sun_labels')   || '{}'); } catch(e) { return {}; } }
+function saveSundayLabels(o) { localStorage.setItem('ws_sun_labels', JSON.stringify(o)); }
+function getConfirmations()  { try { return JSON.parse(localStorage.getItem('ws_confirmations')|| '{}'); } catch(e) { return {}; } }
+function saveConfirmations(o){ localStorage.setItem('ws_confirmations', JSON.stringify(o)); }
+
 function saveEventMap(o){ localStorage.setItem('ws_breeze_event_map', JSON.stringify(o)); }
 
 // Schedule persistence
 function saveSchedule() {
   if (!currentSchedule.length) return;
   var rows = currentSchedule.map(function(row) {
-    return { dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments };
+    return { dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments, label: row.label || '' };
   });
+  updateLastServedFromRows(rows);
   localStorage.setItem('ws_schedule', JSON.stringify({
     startDate: document.getElementById('start-date').value,
     endDate:   document.getElementById('end-date').value,
@@ -521,7 +567,7 @@ function loadSchedule() {
     var data = JSON.parse(raw);
     if (!data.rows || !data.rows.length) return false;
     currentSchedule = data.rows.map(function(row) {
-      return { date: new Date(row.dateISO), ordinal: row.ordinal, assignments: row.assignments };
+      return { date: new Date(row.dateISO), ordinal: row.ordinal, assignments: row.assignments, label: row.label || '' };
     });
     if (data.startDate) document.getElementById('start-date').value = data.startDate;
     if (data.endDate)   document.getElementById('end-date').value   = data.endDate;
@@ -546,6 +592,7 @@ function showTab(name) {
   if (name === 'people')   renderPeopleList();
   if (name === 'settings') loadSettingsForm();
   if (name === 'breeze')   initBreezeTab();
+  if (name === 'stats')    renderStatsTab();
 }
 ALL_TABS.forEach(function(t) {
   document.getElementById('tab-btn-' + t).addEventListener('click', function() { showTab(t); });
@@ -756,6 +803,8 @@ function generateSchedule() {
   var start = document.getElementById('start-date').value;
   var end   = document.getElementById('end-date').value;
   showAlert('schedule-alert','','');
+  // Auto-archive existing schedule before overwriting
+  if (currentSchedule.length) archiveCurrentSchedule();
   if (!start||!end) { showAlert('schedule-alert','Please select both a start and end date.','warning'); return; }
   if (start>end)    { showAlert('schedule-alert','Start date must be before end date.','warning'); return; }
   var people = getPeople();
@@ -795,6 +844,10 @@ function generateSchedule() {
 
 document.getElementById('btn-generate').addEventListener('click', generateSchedule);
 
+document.getElementById('btn-autofill').addEventListener('click', autoFillSchedule);
+
+document.getElementById('btn-export-ical').addEventListener('click', exportIcal);
+
 document.getElementById('btn-clear-schedule').addEventListener('click', function() {
   if (!confirm('Clear the saved schedule?')) return;
   currentSchedule = [];
@@ -825,7 +878,9 @@ function renderTable(people, counts) {
   currentSchedule.forEach(function(row, rowIdx) {
     // Row 1: 8am — date cell and shared cells span both rows
     var r1 = '<tr class="row-8am">';
-    r1 += '<td class="date-cell" rowspan="2">'+esc(fmtDate(row.date))+'<span class="ordinal">'+esc(row.ordinal+ordSuffix(row.ordinal)+' Sunday')+'</span></td>';
+    var dateISO_rc = row.date.toISOString().slice(0,10);
+    var existingLabel = (getSundayLabels()[dateISO_rc] || row.label || '');
+    r1 += '<td class="date-cell" rowspan="2">'+esc(fmtDate(row.date))+'<span class="ordinal">'+esc(row.ordinal+ordSuffix(row.ordinal)+' Sunday')+'</span><input class="label-input" placeholder="Add label…" value="'+esc(existingLabel)+'" data-date="'+esc(dateISO_rc)+'" title="Add a special label (e.g. Christmas Eve)"></td>';
     r1 += '<td class="svc-label svc-8am">8am</td>';
     PER_ROLES.forEach(function(role){ r1 += buildCell(row.assignments[role]['8am'], pMap, rowIdx, role, '8am'); });
     SHARED_ROLES.forEach(function(role){ r1 += buildCell(row.assignments[role].shared, pMap, rowIdx, role, 'shared', 2); });
@@ -866,8 +921,13 @@ function buildCell(pid, pMap, rowIdx, role, svc, rowspan) {
   }
   var rsAttr = rowspan > 1 ? ' rowspan="'+rowspan+'"' : '';
   var extraClass = rowspan > 1 ? ' shared-cell' : '';
+  var confKey = dateISO + '|' + role + '|' + svc;
+  var confStatus = pid ? (getConfirmations()[confKey] || 'pending') : '';
+  var confLabels = { pending: '? Pending', confirmed: '✓ Confirmed', declined: '✕ Declined' };
+  var confPill = pid ? '<button class="conf-pill conf-'+confStatus+'" data-conf-key="'+esc(confKey)+'">'+confLabels[confStatus]+'</button>' : '';
   return '<td class="'+(filled?'filled-cell':'empty-cell')+extraClass+'"'+rsAttr+'>'
-    +'<select class="cell-select" data-row="'+rowIdx+'" data-role="'+esc(role)+'" data-svc="'+esc(svc)+'">'+opts+'</select></td>';
+    +'<select class="cell-select" data-row="'+rowIdx+'" data-role="'+esc(role)+'" data-svc="'+esc(svc)+'">'+opts+'</select>'
+    +confPill+'</td>';
 }
 
 document.getElementById('schedule-table').addEventListener('change', function(e) {
@@ -886,6 +946,47 @@ document.getElementById('schedule-table').addEventListener('change', function(e)
 // ══════════════════════════════════════════════════════════════════
 // EXPORT CSV
 // ══════════════════════════════════════════════════════════════════
+// Confirmation pill click: cycle pending → confirmed → declined
+document.getElementById('schedule-table').addEventListener('click', function(e) {
+  var pill = e.target.closest('.conf-pill');
+  if (!pill) return;
+  var key = pill.getAttribute('data-conf-key');
+  if (!key) return;
+  var confs = getConfirmations();
+  var cycle = { pending: 'confirmed', confirmed: 'declined', declined: 'pending' };
+  var current = confs[key] || 'pending';
+  confs[key] = cycle[current];
+  saveConfirmations(confs);
+  var labels = { pending: '? Pending', confirmed: '✓ Confirmed', declined: '× Declined' };
+  pill.textContent = labels[confs[key]];
+  pill.className = 'conf-pill conf-' + confs[key];
+});
+
+// Sunday label input: save on change
+document.getElementById('schedule-table').addEventListener('change', function(e) {
+  if (!e.target.classList.contains('label-input')) return;
+  var date = e.target.getAttribute('data-date');
+  if (!date) return;
+  var labels = getSundayLabels();
+  labels[date] = e.target.value.trim();
+  saveSundayLabels(labels);
+  // Also update the in-memory row label
+  currentSchedule.forEach(function(row) {
+    if (row.date.toISOString().slice(0,10) === date) row.label = e.target.value.trim();
+  });
+});
+document.getElementById('schedule-table').addEventListener('input', function(e) {
+  if (!e.target.classList.contains('label-input')) return;
+  var date = e.target.getAttribute('data-date');
+  if (!date) return;
+  var labels = getSundayLabels();
+  labels[date] = e.target.value;
+  saveSundayLabels(labels);
+  currentSchedule.forEach(function(row) {
+    if (row.date.toISOString().slice(0,10) === date) row.label = e.target.value;
+  });
+});
+
 document.getElementById('btn-export-csv').addEventListener('click', function() {
   var pMap = {};
   getPeople().forEach(function(p){ pMap[p.id]=p; });
@@ -970,7 +1071,26 @@ function buildHtmlEmail(person, assignments, replyTo) {
     + 'Timothy Lutheran Church'
     + (replyLink ? ' &mdash; Questions? Contact us at ' + replyLink : '')
     + '</p>'
-    + '</div></div></body></html>';
+    + '</div></div>
+<!-- ══ STATS TAB ════════════════════════════════════════════════════════════ -->
+<div id="tab-stats" class="tab-content">
+  <div class="card">
+    <h2>&#128202; Volunteer Statistics</h2>
+    <p style="font-size:0.85rem;color:#888;margin-bottom:16px;">Counts from the current schedule plus all archived schedules.</p>
+    <div id="stats-content">
+      <p style="color:#aaa;font-size:0.85rem;">Generate or load a schedule to see statistics.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h2>&#128203; Schedule History</h2>
+    <p style="font-size:0.85rem;color:#888;margin-bottom:12px;">Past schedules are auto-archived when you generate a new one. Click Restore to reload a past schedule.</p>
+    <div id="history-list-container">
+      <p style="color:#aaa;font-size:0.85rem;">No archived schedules yet.</p>
+    </div>
+  </div>
+</div>
+
+</body></html>';
 }
 
 function sendReminderEmails() {
@@ -1689,6 +1809,7 @@ renderPeopleList();
 })();
 
 // Restore saved schedule if any
+// Seed last-served from current schedule on load
 if (loadSchedule()) {
   var people = getPeople();
   var counts = {};
@@ -1696,6 +1817,291 @@ if (loadSchedule()) {
   renderTable(people, null);
   document.getElementById('schedule-output').style.display = 'block';
 }
+
+// ══════════════════════════════════════════════════════════════════
+// SCHEDULE HISTORY & LAST-SERVED
+// ══════════════════════════════════════════════════════════════════
+function archiveCurrentSchedule() {
+  if (!currentSchedule.length) return;
+  var history = getHistory();
+  var startDate = document.getElementById('start-date').value;
+  var endDate   = document.getElementById('end-date').value;
+  var rows = currentSchedule.map(function(row) {
+    return { dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments, label: row.label || '' };
+  });
+  history.unshift({ id: makeId(), savedAt: new Date().toISOString(), startDate: startDate, endDate: endDate, rows: rows });
+  if (history.length > 24) history = history.slice(0, 24);
+  saveHistory(history);
+  updateLastServedFromRows(rows);
+}
+
+function updateLastServedFromRows(rows) {
+  var ls = getLastServed();
+  rows.forEach(function(row) {
+    var dateISO = typeof row.dateISO === 'string' ? row.dateISO.slice(0,10) : new Date(row.dateISO).toISOString().slice(0,10);
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        var pid = row.assignments[role] && row.assignments[role][svc];
+        if (!pid) return;
+        if (!ls[pid]) ls[pid] = {};
+        if (!ls[pid][role] || dateISO > ls[pid][role]) ls[pid][role] = dateISO;
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      var pid = row.assignments[role] && row.assignments[role].shared;
+      if (!pid) return;
+      if (!ls[pid]) ls[pid] = {};
+      if (!ls[pid][role] || dateISO > ls[pid][role]) ls[pid][role] = dateISO;
+    });
+  });
+  saveLastServed(ls);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AUTO-FILL SCHEDULE
+// ══════════════════════════════════════════════════════════════════
+function pickBestWithHistory(pool, counts, lastServed, role) {
+  if (!pool.length) return null;
+  pool.sort(function(a, b) {
+    var aLast = (lastServed[a.id] && lastServed[a.id][role]) || '0000-00-00';
+    var bLast = (lastServed[b.id] && lastServed[b.id][role]) || '0000-00-00';
+    if (aLast < bLast) return -1;
+    if (aLast > bLast) return 1;
+    return (counts[a.id]||0) - (counts[b.id]||0);
+  });
+  return pool[0];
+}
+
+function autoFillSchedule() {
+  if (!currentSchedule.length) { showAlert('schedule-alert','Generate a schedule first, then use Auto-Fill to populate empty slots.','warning'); return; }
+  var people = getPeople();
+  if (!people.length) { showAlert('schedule-alert','No people added yet.','warning'); return; }
+  var lastServed = getLastServed();
+  var counts = {};
+  people.forEach(function(p){ counts[p.id] = 0; });
+  // Seed counts from existing assignments
+  currentSchedule.forEach(function(row) {
+    SHARED_ROLES.forEach(function(role) {
+      var pid = row.assignments[role].shared;
+      if (pid) counts[pid] = (counts[pid]||0) + 1;
+    });
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        var pid = row.assignments[role][svc];
+        if (pid) counts[pid] = (counts[pid]||0) + 1;
+      });
+    });
+  });
+  var filled = 0;
+  currentSchedule.forEach(function(row) {
+    var ordinal = row.ordinal;
+    var dateISO = row.date.toISOString().slice(0,10);
+    SHARED_ROLES.forEach(function(role) {
+      if (row.assignments[role].shared) return;
+      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO); });
+      var picked = pickBestWithHistory(pool, counts, lastServed, role);
+      if (picked) { row.assignments[role].shared = picked.id; counts[picked.id]++; filled++; }
+    });
+    PER_ROLES.forEach(function(role) {
+      var usedIds = {};
+      ['8am','10:45am'].forEach(function(svc) {
+        if (row.assignments[role][svc]) { usedIds[row.assignments[role][svc]] = true; return; }
+        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO) && !usedIds[p.id]; });
+        var picked = pickBestWithHistory(pool, counts, lastServed, role);
+        if (picked) { row.assignments[role][svc] = picked.id; counts[picked.id]++; usedIds[picked.id]=true; filled++; }
+      });
+    });
+  });
+  renderTable(getPeople(), counts);
+  saveSchedule();
+  showAlert('schedule-alert', filled + ' slot' + (filled!==1?'s':'') + ' auto-filled using volunteer history.' + (filled===0?' (All slots already filled or no eligible volunteers found)':''), filled>0?'success':'warning');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ICAL EXPORT
+// ══════════════════════════════════════════════════════════════════
+function exportIcal() {
+  if (!currentSchedule.length) { alert('Generate a schedule first.'); return; }
+  var pMap = {};
+  getPeople().forEach(function(p){ pMap[p.id]=p; });
+  var lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Timothy Lutheran Church//Worship Scheduler//EN','CALSCALE:GREGORIAN'];
+  var serviceUTC = { '8am': '140000Z', '10:45am': '154500Z', 'shared': '140000Z' };
+  var serviceDur = { '8am': '010000', '10:45am': '010000', 'shared': '020000' };
+  function isoToYMD(d) {
+    var iso = d.toISOString().slice(0,10).replace(/-/g,'');
+    return iso;
+  }
+  function stamp() { return new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z'; }
+  var sunLabels = getSundayLabels();
+  currentSchedule.forEach(function(row) {
+    var ymd = isoToYMD(row.date);
+    var dateISO = row.date.toISOString().slice(0,10);
+    var dayLabel = sunLabels[dateISO] || row.label || '';
+    var collect = [];
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        var pid = row.assignments[role][svc];
+        if (pid && pMap[pid]) collect.push({ pid:pid, role:role, svc:svc });
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      var pid = row.assignments[role].shared;
+      if (pid && pMap[pid]) collect.push({ pid:pid, role:role, svc:'shared' });
+    });
+    collect.forEach(function(item) {
+      var p = pMap[item.pid];
+      var svcLabel = item.svc==='8am' ? '8:00 AM' : (item.svc==='10:45am' ? '10:45 AM' : 'Both Services');
+      var summary = 'Worship: ' + roleLabel(item.role) + ' (' + svcLabel + ')' + (dayLabel ? ' — '+dayLabel : '');
+      lines.push('BEGIN:VEVENT');
+      lines.push('UID:' + item.pid + '-' + item.role.replace(/\s/g,'-') + '-' + item.svc + '-' + ymd + '@tlc-scheduler');
+      lines.push('DTSTAMP:' + stamp());
+      lines.push('DTSTART:' + ymd + 'T' + serviceUTC[item.svc]);
+      lines.push('DURATION:PT' + serviceDur[item.svc]);
+      lines.push('SUMMARY:' + summary);
+      lines.push('DESCRIPTION:Volunteer: ' + p.name + '\nRole: ' + roleLabel(item.role) + '\nService: ' + svcLabel);
+      lines.push('LOCATION:Timothy Lutheran Church');
+      if (p.email) lines.push('ATTENDEE;CN="' + p.name + '":mailto:' + p.email);
+      lines.push('END:VEVENT');
+    });
+  });
+  lines.push('END:VCALENDAR');
+  var blob = new Blob([lines.join('\r\n')], {type:'text/calendar'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href=url; a.download='worship-schedule.ics';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STATS / DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+function renderStatsTab() {
+  renderHistoryList();
+  // Build cumulative counts from current schedule + all history
+  var allRows = [];
+  getHistory().forEach(function(h) { allRows = allRows.concat(h.rows); });
+  currentSchedule.forEach(function(row) {
+    allRows.push({ dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments });
+  });
+  if (!allRows.length) {
+    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No schedule data yet.</p>';
+    return;
+  }
+  var people = getPeople();
+  if (!people.length) {
+    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No people added yet.</p>';
+    return;
+  }
+  var totals = {};   // { personId: count }
+  var byRole  = {};   // { personId: { role: count } }
+  var lastDate = {};  // { personId: { role: latestISO } }
+  people.forEach(function(p){ totals[p.id]=0; byRole[p.id]={}; lastDate[p.id]={}; });
+  allRows.forEach(function(row) {
+    var dateISO = (typeof row.dateISO === 'string' ? row.dateISO : new Date(row.dateISO).toISOString()).slice(0,10);
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        var pid = row.assignments[role] && row.assignments[role][svc];
+        if (!pid || !totals.hasOwnProperty(pid)) return;
+        totals[pid]++;
+        byRole[pid][role] = (byRole[pid][role]||0)+1;
+        if (!lastDate[pid][role] || dateISO > lastDate[pid][role]) lastDate[pid][role] = dateISO;
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      var pid = row.assignments[role] && row.assignments[role].shared;
+      if (!pid || !totals.hasOwnProperty(pid)) return;
+      totals[pid]++;
+      byRole[pid][role] = (byRole[pid][role]||0)+1;
+      if (!lastDate[pid][role] || dateISO > lastDate[pid][role]) lastDate[pid][role] = dateISO;
+    });
+  });
+  var sorted = people.slice().sort(function(a,b){ return (totals[b.id]||0)-(totals[a.id]||0); });
+  var maxCount = sorted.length ? (totals[sorted[0].id]||1) : 1;
+  var html = '<div class="stats-grid">';
+  // Split into two columns by chunking
+  var col1 = sorted.slice(0, Math.ceil(sorted.length/2));
+  var col2 = sorted.slice(Math.ceil(sorted.length/2));
+  [col1, col2].forEach(function(col) {
+    html += '<div>';
+    col.forEach(function(p) {
+      var count = totals[p.id]||0;
+      var pct = Math.round((count/maxCount)*100);
+      html += '<div class="stat-row"><span class="stat-name">'+esc(p.name)+'</span>'
+        +'<div class="stat-bar-wrap"><div class="stat-bar" style="width:'+pct+'%"></div></div>'
+        +'<span class="stat-count">'+count+'</span></div>';
+      // Show role breakdown
+      var roleParts = [];
+      Object.keys(byRole[p.id]).sort().forEach(function(r) { roleParts.push(roleLabel(r)+': '+byRole[p.id][r]); });
+      if (roleParts.length) html += '<div class="stat-roles">'+esc(roleParts.join(' &bull; '))+'</div>';
+      // Last served
+      var lastParts = [];
+      Object.keys(lastDate[p.id]).sort().forEach(function(r) { lastParts.push(roleLabel(r)+' '+lastDate[p.id][r]); });
+      if (lastParts.length) html += '<div class="stat-last">Last served: '+esc(lastParts.join(', '))+'</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<p style="font-size:0.75rem;color:#bbb;margin-top:16px;">Counts include current schedule + '+getHistory().length+' archived schedule(s).</p>';
+  document.getElementById('stats-content').innerHTML = html;
+}
+
+function renderHistoryList() {
+  var history = getHistory();
+  var container = document.getElementById('history-list-container');
+  if (!history.length) {
+    container.innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No archived schedules yet. Archives are created automatically when you generate a new schedule.</p>';
+    return;
+  }
+  var html = '<div class="history-list">';
+  history.forEach(function(item) {
+    var savedStr = new Date(item.savedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+    var rangeStr = (item.startDate||'?') + ' – ' + (item.endDate||'?');
+    var weeks = item.rows ? item.rows.length : '?';
+    html += '<div class="history-item">'
+      +'<div>'
+      +'<div class="hi-label">'+esc(rangeStr)+'</div>'
+      +'<div class="hi-meta">Archived '+esc(savedStr)+' · '+weeks+' Sunday(s)</div>'
+      +'</div>'
+      +'<div class="hi-btns">'
+      +'<button class="btn btn-outline btn-sm" onclick="restoreHistoryItem(''+esc(item.id)+'')">Restore</button>'
+      +'<button class="btn btn-danger btn-sm" onclick="deleteHistoryItem(''+esc(item.id)+'')">Delete</button>'
+      +'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function restoreHistoryItem(id) {
+  if (!confirm('Restore this archived schedule? The current schedule will be archived first.')) return;
+  var history = getHistory();
+  var item = null;
+  for (var i=0; i<history.length; i++) { if (history[i].id===id) { item=history[i]; break; } }
+  if (!item) return;
+  // Archive current first
+  if (currentSchedule.length) archiveCurrentSchedule();
+  // Restore
+  currentSchedule = item.rows.map(function(row) {
+    return { date: new Date(row.dateISO), ordinal: row.ordinal, assignments: row.assignments, label: row.label || '' };
+  });
+  if (item.startDate) document.getElementById('start-date').value = item.startDate;
+  if (item.endDate)   document.getElementById('end-date').value   = item.endDate;
+  var people = getPeople();
+  var counts = {};
+  people.forEach(function(p){ counts[p.id]=0; });
+  renderTable(people, counts);
+  document.getElementById('schedule-output').style.display = 'block';
+  saveSchedule();
+  showTab('schedule');
+  showAlert('schedule-alert','Schedule restored from archive.','success');
+}
+
+function deleteHistoryItem(id) {
+  if (!confirm('Delete this archived schedule? This cannot be undone.')) return;
+  var history = getHistory().filter(function(h){ return h.id!==id; });
+  saveHistory(history);
+  renderHistoryList();
+}
+
 </script>
 </body>
 </html>
