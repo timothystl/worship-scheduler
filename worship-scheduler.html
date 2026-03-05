@@ -2043,15 +2043,25 @@ function renderHistoryList() {
       +'<div class="hi-label">'+esc(rangeStr)+'</div>'
       +'<div class="hi-meta">Archived '+esc(savedStr)+' · '+weeks+' Sunday(s)</div>'
       +'</div>'
-      +'<div class="hi-btns">'
-      +'<button class="btn btn-outline btn-sm" onclick="restoreHistoryItem(''+esc(item.id)+'')">Restore</button>'
-      +'<button class="btn btn-danger btn-sm" onclick="deleteHistoryItem(''+esc(item.id)+'')">Delete</button>'
+            +'<div class="hi-btns">'
+      +'<button class="btn btn-outline btn-sm" data-action="restore" data-id="'+esc(item.id)+'">Restore</button>'
+      +'<button class="btn btn-danger btn-sm" data-action="delete" data-id="'+esc(item.id)+'">Delete</button>'
       +'</div>'
       +'</div>';
   });
   html += '</div>';
   container.innerHTML = html;
 }
+
+// Event delegation for history buttons (avoids inline onclick quote issues)
+document.getElementById('history-list-container').addEventListener('click', function(e) {
+  var btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  var action = btn.getAttribute('data-action');
+  var id = btn.getAttribute('data-id');
+  if (action === 'restore') restoreHistoryItem(id);
+  if (action === 'delete')  deleteHistoryItem(id);
+});
 
 function restoreHistoryItem(id) {
   if (!confirm('Restore this archived schedule? The current schedule will be archived first.')) return;
