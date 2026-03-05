@@ -63,6 +63,9 @@ select.form-select { width: 100%; padding: 7px 10px; border: 1px solid #d0d4e0; 
 .tag-service { background: #fef3cd; color: #856404; }
 .tag-role { background: #d4edda; color: #155724; }
 .tag-breeze { background: #cce5ff; color: #004085; }
+.blackout-chip { display:inline-flex; align-items:center; gap:4px; background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; border-radius:4px; padding:2px 8px; font-size:0.78rem; }
+.blackout-chip button { background:none; border:none; cursor:pointer; color:#721c24; font-size:0.9rem; line-height:1; padding:0 0 0 2px; }
+#blackout-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; min-height:24px; }
 
 /* Schedule */
 .schedule-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 16px; }
@@ -139,6 +142,23 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 .dot-ok  { background: #27ae60; }
 .dot-err { background: #e74c3c; }
 .dot-pending { background: #aaa; }
+
+/* ── Print styles ──────────────────────────────────────── */
+@page { size: landscape; margin: 0.5in; }
+@media print {
+  header, .tabs, .schedule-controls, .legend, .summary-bar,
+  #schedule-alert, #tab-people, #tab-settings, #tab-breeze,
+  .btn, #assignment-summary { display: none !important; }
+  body { background: white; }
+  .tab-content { display: block !important; padding: 0; }
+  #tab-schedule { display: block !important; }
+  .card { box-shadow: none; padding: 8px 0; }
+  table { font-size: 0.75rem; }
+  td, th { padding: 4px 6px; }
+  .cell-select { display: none !important; }
+  .print-name { display: inline !important; font-size: 0.78rem; }
+  td.empty-cell { background: #fff !important; }
+}
 </style>
 </head>
 <body>
@@ -210,6 +230,13 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
       <label><input type="checkbox" value="Childrens Message"> Children's Message</label>
       <label><input type="checkbox" value="Lectionary Class"> Lectionary Class</label>
     </div>
+
+    <label style="margin-top:16px;">Unavailable / Blackout Dates</label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+      <input type="date" id="blackout-date-input" style="max-width:200px;">
+      <button class="btn btn-outline btn-sm" id="btn-add-blackout">+ Add Date</button>
+    </div>
+    <div id="blackout-chips"></div>
 
     <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
       <button class="btn btn-primary" id="btn-save-person">Save Person</button>
@@ -498,6 +525,7 @@ function loadSchedule() {
 // SCHEDULE STATE
 // ══════════════════════════════════════════════════════════════════
 var currentSchedule = [];
+var currentBlackouts = []; // ISO date strings for the person currently in the form
 
 // ══════════════════════════════════════════════════════════════════
 // TABS
@@ -530,6 +558,38 @@ document.getElementById('pref-sundays').addEventListener('change', function() { 
 document.getElementById('pref-roles').addEventListener('change',   function() { syncLabels('pref-roles'); });
 
 // ══════════════════════════════════════════════════════════════════
+// BLACKOUT DATES
+// ══════════════════════════════════════════════════════════════════
+function renderBlackoutChips() {
+  var container = document.getElementById('blackout-chips');
+  if (!container) return;
+  if (!currentBlackouts.length) {
+    container.innerHTML = '<span style="color:#aaa;font-size:0.8rem;">None added</span>';
+    return;
+  }
+  container.innerHTML = currentBlackouts.map(function(d, i) {
+    return '<span class="blackout-chip">' + esc(d)
+      + '<button type="button" data-idx="' + i + '" aria-label="Remove">&times;</button>'
+      + '</span>';
+  }).join('');
+}
+
+document.getElementById('blackout-chips').addEventListener('click', function(e) {
+  var btn = e.target.closest('button[data-idx]');
+  if (!btn) return;
+  currentBlackouts.splice(parseInt(btn.getAttribute('data-idx'), 10), 1);
+  renderBlackoutChips();
+});
+
+document.getElementById('btn-add-blackout').addEventListener('click', function() {
+  var val = document.getElementById('blackout-date-input').value;
+  if (!val) return;
+  if (currentBlackouts.indexOf(val) === -1) { currentBlackouts.push(val); currentBlackouts.sort(); }
+  document.getElementById('blackout-date-input').value = '';
+  renderBlackoutChips();
+});
+
+// ══════════════════════════════════════════════════════════════════
 // PERSON FORM
 // ══════════════════════════════════════════════════════════════════
 function clearForm() {
@@ -544,6 +604,8 @@ function clearForm() {
   syncLabels('pref-roles');
   document.getElementById('breeze-import-query').value = '';
   document.getElementById('breeze-import-results').innerHTML = '';
+  currentBlackouts = [];
+  renderBlackoutChips();
 }
 
 function savePerson() {
@@ -569,12 +631,12 @@ function savePerson() {
   if (editId) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].id === editId) {
-        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId || people[i].breezePersonId || null };
+        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId || people[i].breezePersonId || null, blackoutDates: currentBlackouts.slice() };
         break;
       }
     }
   } else {
-    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId });
+    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId, blackoutDates: currentBlackouts.slice() });
   }
   savePeople(people);
   clearForm();
@@ -642,6 +704,8 @@ function editPerson(id) {
     cb.checked = person.roles.indexOf(cb.value) > -1;
   });
   syncLabels('pref-sundays'); syncLabels('pref-roles');
+  currentBlackouts = (person.blackoutDates || []).slice();
+  renderBlackoutChips();
   window.scrollTo(0,0); document.getElementById('person-name').focus();
 }
 
@@ -662,9 +726,10 @@ function getSundays(start, end) {
   return sundays;
 }
 function getOrdinal(date) { return Math.ceil(date.getDate()/7); }
-function eligible(person, ordinal, svc) {
+function eligible(person, ordinal, svc, dateISO) {
   if (person.preferredSundays.length > 0 && person.preferredSundays.indexOf(ordinal) === -1) return false;
   if (svc !== 'shared' && person.servicePreference !== 'both' && person.servicePreference !== svc) return false;
+  if (dateISO && person.blackoutDates && person.blackoutDates.indexOf(dateISO) !== -1) return false;
   return true;
 }
 function pickBest(pool, counts) {
@@ -689,8 +754,9 @@ function generateSchedule() {
 
   currentSchedule = sundays.map(function(date) {
     var ordinal = getOrdinal(date), assignments = {};
+    var dateISO = date.toISOString().slice(0, 10);
     SHARED_ROLES.forEach(function(role) {
-      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared'); });
+      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO); });
       var picked = pickBest(pool,counts);
       assignments[role] = { shared: picked?picked.id:null };
       if (picked) counts[picked.id]++;
@@ -699,7 +765,7 @@ function generateSchedule() {
       assignments[role] = {};
       var usedIds = {};
       ['8am','10:45am'].forEach(function(svc) {
-        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc) && !usedIds[p.id]; });
+        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO) && !usedIds[p.id]; });
         var picked = pickBest(pool,counts);
         assignments[role][svc] = picked?picked.id:null;
         if (picked){ counts[picked.id]++; usedIds[picked.id]=true; }
@@ -772,8 +838,11 @@ function renderTable(people, counts) {
 
 function buildCell(pid, pMap, rowIdx, role, svc, rowspan) {
   var filled = pid && pMap[pid];
-  var people = getPeople(), ordinal = currentSchedule[rowIdx].ordinal;
-  var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc); });
+  var people = getPeople();
+  var row = currentSchedule[rowIdx];
+  var ordinal = row.ordinal;
+  var dateISO = row.date.toISOString().slice(0, 10);
+  var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO); });
   var opts = '<option value="">-- unassigned --</option>';
   pool.forEach(function(p){
     opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
@@ -825,6 +894,25 @@ document.getElementById('btn-export-csv').addEventListener('click', function() {
 });
 
 document.getElementById('btn-print').addEventListener('click', function(){ window.print(); });
+
+// Swap dropdowns for plain text before printing, restore after
+window.addEventListener('beforeprint', function() {
+  document.querySelectorAll('.cell-select').forEach(function(sel) {
+    var name = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+    if (name === '-- unassigned --') name = '';
+    var span = document.createElement('span');
+    span.className = 'print-name';
+    span.style.display = 'none'; // @media print overrides to inline
+    span.textContent = name;
+    span.setAttribute('data-print-placeholder', 'true');
+    sel.parentNode.insertBefore(span, sel.nextSibling);
+  });
+});
+window.addEventListener('afterprint', function() {
+  document.querySelectorAll('[data-print-placeholder]').forEach(function(el) {
+    el.parentNode.removeChild(el);
+  });
+});
 
 // ══════════════════════════════════════════════════════════════════
 // REMINDER EMAILS
