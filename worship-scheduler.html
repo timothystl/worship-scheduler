@@ -8,12 +8,12 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #222; }
 
-header { background: #2c3e6b; color: white; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
-header .header-logo { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.25); }
-header .header-logo-placeholder { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.25); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
-header .header-text h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
-header .header-text .church-name { font-size: 0.75rem; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
-header .header-text p { font-size: 0.82rem; opacity: 0.65; margin-top: 2px; }
+header { background: #ffffff; color: #2c3e6b; padding: 14px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #2c3e6b; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+header .header-logo { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid #d0d7ec; }
+header .header-logo-placeholder { width: 52px; height: 52px; border-radius: 50%; background: #eef0f8; border: 2px solid #d0d7ec; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+header .header-text h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; color: #2c3e6b; }
+header .header-text .church-name { font-size: 0.75rem; color: #6b7a9f; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; font-weight: 600; }
+header .header-text p { font-size: 0.82rem; color: #8892b0; margin-top: 2px; }
 
 .tabs { display: flex; background: #1e2d52; flex-wrap: wrap; }
 .tab-btn { padding: 12px 24px; background: none; border: none; color: rgba(255,255,255,0.65); font-size: 0.9rem; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; white-space: nowrap; }
@@ -171,7 +171,8 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 .conf-pill:hover { opacity:0.8; }
 .conf-pending   { background:#fff3cd; color:#856404; }
 .conf-confirmed { background:#d1e7dd; color:#0a3622; }
-.conf-declined  { background:#f8d7da; color:#58151c; }
+.conf-declined      { background:#f8d7da; color:#58151c; }
+.conf-needs_changes { background:#fde8cc; color:#7a3800; }
 
 /* ── Sunday label ──────────────────────────── */
 .label-input { font-size:0.7rem; color:#f0b429; background:transparent; border:none; border-bottom:1px dashed #c8ab6a; outline:none; width:100%; margin-top:3px; padding:1px 2px; font-weight:600; caret-color:#2c3e6b; }
@@ -319,6 +320,7 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
         <button class="btn btn-outline btn-sm" id="btn-export-ical">&#128197; iCal</button>
         <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
         <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:#e8f4fd;border-color:#3498db;color:#2980b9;">&#9993; Send Reminder Emails</button>
+        <button class="btn btn-outline btn-sm" id="btn-sync-confirmations" style="background:#f0fff4;border-color:#27ae60;color:#1a7a42;">&#8635; Sync Confirmations</button>
         <span id="email-send-status" style="font-size:0.82rem;color:#555;"></span>
         <button class="btn btn-danger btn-sm" id="btn-clear-schedule">Clear Schedule</button>
       </div>
@@ -544,6 +546,8 @@ function getSundayLabels()   { try { return JSON.parse(localStorage.getItem('ws_
 function saveSundayLabels(o) { localStorage.setItem('ws_sun_labels', JSON.stringify(o)); }
 function getConfirmations()  { try { return JSON.parse(localStorage.getItem('ws_confirmations')|| '{}'); } catch(e) { return {}; } }
 function saveConfirmations(o){ localStorage.setItem('ws_confirmations', JSON.stringify(o)); }
+function getRsvpTokens()     { try { return JSON.parse(localStorage.getItem('ws_rsvp_tokens')  || '{}'); } catch(e) { return {}; } }
+function saveRsvpTokens(o)   { localStorage.setItem('ws_rsvp_tokens',   JSON.stringify(o)); }
 
 function saveEventMap(o){ localStorage.setItem('ws_breeze_event_map', JSON.stringify(o)); }
 
@@ -771,8 +775,33 @@ function editPerson(id) {
 }
 
 function deletePerson(id) {
-  if (!confirm('Remove this person?')) return;
+  if (!confirm('Remove this person? They will also be removed from the current schedule.')) return;
   savePeople(getPeople().filter(function(p){ return p.id !== id; }));
+  // Remove from current schedule assignments
+  var scheduleChanged = false;
+  currentSchedule.forEach(function(row) {
+    PER_ROLES.forEach(function(role) {
+      ['8am','10:45am'].forEach(function(svc) {
+        if (row.assignments[role][svc] === id) {
+          row.assignments[role][svc] = null;
+          scheduleChanged = true;
+        }
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      if (row.assignments[role].shared === id) {
+        row.assignments[role].shared = null;
+        scheduleChanged = true;
+      }
+    });
+  });
+  if (scheduleChanged && currentSchedule.length) {
+    var remaining = getPeople();
+    var counts = {};
+    remaining.forEach(function(p){ counts[p.id] = 0; });
+    renderTable(remaining, counts);
+    saveSchedule();
+  }
   renderPeopleList();
 }
 
@@ -923,8 +952,8 @@ function buildCell(pid, pMap, rowIdx, role, svc, rowspan) {
   var extraClass = rowspan > 1 ? ' shared-cell' : '';
   var confKey = dateISO + '|' + role + '|' + svc;
   var confStatus = pid ? (getConfirmations()[confKey] || 'pending') : '';
-  var confLabels = { pending: '? Pending', confirmed: '✓ Confirmed', declined: '✕ Declined' };
-  var confPill = pid ? '<button class="conf-pill conf-'+confStatus+'" data-conf-key="'+esc(confKey)+'">'+confLabels[confStatus]+'</button>' : '';
+  var confLabels = { pending: '? Pending', confirmed: '\u2713 Confirmed', declined: '\u00d7 Declined', needs_changes: '\u26a0 Needs Change' };
+  var confPill = pid ? '<button class="conf-pill conf-'+confStatus+'" data-conf-key="'+esc(confKey)+'">'+(confLabels[confStatus]||confLabels.pending)+'</button>' : '';
   return '<td class="'+(filled?'filled-cell':'empty-cell')+extraClass+'"'+rsAttr+'>'
     +'<select class="cell-select" data-row="'+rowIdx+'" data-role="'+esc(role)+'" data-svc="'+esc(svc)+'">'+opts+'</select>'
     +confPill+'</td>';
@@ -957,8 +986,8 @@ document.getElementById('schedule-table').addEventListener('click', function(e) 
   var current = confs[key] || 'pending';
   confs[key] = cycle[current];
   saveConfirmations(confs);
-  var labels = { pending: '? Pending', confirmed: '✓ Confirmed', declined: '× Declined' };
-  pill.textContent = labels[confs[key]];
+  var labels = { pending: '? Pending', confirmed: '\u2713 Confirmed', declined: '\u00d7 Declined', needs_changes: '\u26a0 Needs Change' };
+  pill.textContent = labels[confs[key]] || '? Pending';
   pill.className = 'conf-pill conf-' + confs[key];
 });
 
@@ -1032,7 +1061,7 @@ window.addEventListener('afterprint', function() {
 // ══════════════════════════════════════════════════════════════════
 // REMINDER EMAILS
 // ══════════════════════════════════════════════════════════════════
-function buildHtmlEmail(person, assignments, replyTo) {
+function buildHtmlEmail(person, assignments, replyTo, rsvpToken, workerUrl) {
   var rows = assignments.map(function(a) {
     var svcLabel = a.svc === 'both services' ? 'Both Services' : a.svc;
     return '<tr>'
@@ -1044,6 +1073,24 @@ function buildHtmlEmail(person, assignments, replyTo) {
   var replyLink = replyTo
     ? '<a href="mailto:' + esc(replyTo) + '" style="color:#2c3e6b;">' + esc(replyTo) + '</a>'
     : '';
+
+  // RSVP buttons — only shown when a token and worker URL are provided
+  var rsvpSection = '';
+  if (rsvpToken && workerUrl) {
+    var confirmUrl     = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&status=confirmed';
+    var needsChangeUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&status=needs_changes';
+    rsvpSection = ''
+      + '<div style="background:#eef4ff;border:1px solid #c0d0f0;border-radius:8px;padding:20px 24px;margin-bottom:20px;text-align:center;">'
+      + '<p style="margin:0 0 6px;font-size:0.88rem;color:#444;font-weight:600;">Can you serve on these dates?</p>'
+      + '<p style="margin:0 0 16px;font-size:0.82rem;color:#666;">Please let us know so we can plan accordingly.</p>'
+      + '<a href="' + esc(confirmUrl) + '" style="display:inline-block;background:#27ae60;color:white;text-decoration:none;padding:11px 28px;border-radius:6px;font-weight:700;font-size:0.95rem;margin:0 6px;">'
+      + '\u2713&nbsp; Yes, I\u2019ll be there</a>'
+      + '<a href="' + esc(needsChangeUrl) + '" style="display:inline-block;background:#e67e22;color:white;text-decoration:none;padding:11px 28px;border-radius:6px;font-weight:700;font-size:0.95rem;margin:6px 6px 0;">'
+      + '\u26a0&nbsp; I need a change</a>'
+      + '<p style="margin:14px 0 0;font-size:0.76rem;color:#999;">You can also reply directly to this email with any questions.</p>'
+      + '</div>';
+  }
+
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>'
     + '<body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;color:#222;">'
     + '<div style="max-width:580px;margin:24px auto;">'
@@ -1062,17 +1109,60 @@ function buildHtmlEmail(person, assignments, replyTo) {
     + '</tr></thead>'
     + '<tbody>' + rows + '</tbody>'
     + '</table>'
-    + '<div style="background:#fff8e1;border-left:4px solid #f0b429;padding:14px 16px;border-radius:0 6px 6px 0;margin-bottom:20px;">'
-    + '<strong style="color:#7a4800;">Unable to serve on one of these dates?</strong>'
-    + '<p style="margin:6px 0 0;font-size:0.88rem;color:#555;">Simply <strong>reply to this email</strong> with the date and role you need to be replaced for, and we will work to find a substitute as soon as possible.</p>'
-    + '</div>'
-    + '<p style="font-size:0.9rem;margin:0 0 0;">Thank you for your faithful service to our congregation!</p>'
+    + rsvpSection
+    + (rsvpToken ? '' :
+        '<div style="background:#fff8e1;border-left:4px solid #f0b429;padding:14px 16px;border-radius:0 6px 6px 0;margin-bottom:20px;">'
+      + '<strong style="color:#7a4800;">Unable to serve on one of these dates?</strong>'
+      + '<p style="margin:6px 0 0;font-size:0.88rem;color:#555;">Simply <strong>reply to this email</strong> with the date and role you need to be replaced for, and we will work to find a substitute as soon as possible.</p>'
+      + '</div>')
+    + '<p style="font-size:0.9rem;margin:0 0 6px;">Thank you for your faithful service to our congregation!</p>'
+    + '<p style="font-size:0.78rem;color:#aaa;margin:4px 0 0;">A calendar attachment (.ics) is included \u2014 add it to your calendar to be reminded on each Sunday you serve.</p>'
     + '<p style="font-size:0.8rem;color:#999;margin:20px 0 0;padding-top:14px;border-top:1px solid #eee;">'
     + 'Timothy Lutheran Church'
     + (replyLink ? ' &mdash; Questions? Contact us at ' + replyLink : '')
     + '</p>'
-        + '</div></div>'
+    + '</div></div>'
     + '</body></html>';
+}
+
+function buildPersonIcal(person, assignments) {
+  // Build a .ics file with one VEVENT per assignment
+  var pad = function(n) { return String(n).padStart(2, '0'); };
+  var now = new Date();
+  var stamp = now.getUTCFullYear() + pad(now.getUTCMonth()+1) + pad(now.getUTCDate())
+            + 'T' + pad(now.getUTCHours()) + pad(now.getUTCMinutes()) + pad(now.getUTCSeconds()) + 'Z';
+  var lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Timothy Lutheran Church//Worship Scheduler//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  assignments.forEach(function(a, i) {
+    var dISO = a.dateISO || '';   // "YYYY-MM-DD"
+    if (!dISO) return;
+    var dtStr = dISO.replace(/-/g, '');
+    var startH, startM, endH, endM;
+    if (a.svc === '10:45am') { startH = 10; startM = 45; endH = 12; endM =  0; }
+    else if (a.svc === '8am'){ startH =  8; startM =  0; endH =  9; endM = 15; }
+    else                     { startH =  8; startM =  0; endH = 12; endM =  0; } // both
+    var dtStart = dtStr + 'T' + pad(startH) + pad(startM) + '00';
+    var dtEnd   = dtStr + 'T' + pad(endH)   + pad(endM)   + '00';
+    var svcLabel = a.svc === 'both services' ? 'Both Services' : a.svc;
+    var uid = 'tlc-worship-' + dISO + '-' + a.role.replace(/\s+/g,'-') + '-' + i + '@tlc';
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + uid);
+    lines.push('DTSTAMP:' + stamp);
+    lines.push('DTSTART;TZID=America/Chicago:' + dtStart);
+    lines.push('DTEND;TZID=America/Chicago:' + dtEnd);
+    lines.push('SUMMARY:Worship - ' + roleLabel(a.role) + ' (' + svcLabel + ')');
+    lines.push('DESCRIPTION:You are scheduled to serve as ' + roleLabel(a.role)
+               + ' (' + svcLabel + ') at Timothy Lutheran Church on ' + a.date + '.');
+    lines.push('LOCATION:Timothy Lutheran Church');
+    lines.push('END:VEVENT');
+  });
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
 }
 
 function sendReminderEmails() {
@@ -1090,23 +1180,24 @@ function sendReminderEmails() {
   var pMap = {};
   people.forEach(function(p){ pMap[p.id] = p; });
 
-  // Build person → assignments map from entire schedule
-  var personAssignments = {};  // { personId: [{ date, svc, role }, ...] }
+  // Build person → assignments map from entire schedule (include dateISO for iCal + RSVP)
+  var personAssignments = {};  // { personId: [{ date, dateISO, svc, role }, ...] }
   currentSchedule.forEach(function(row) {
     var dateStr = fmtDate(row.date);
+    var dateISO = row.date.toISOString().slice(0, 10);
     PER_ROLES.forEach(function(role) {
       ['8am','10:45am'].forEach(function(svc) {
         var pid = row.assignments[role][svc];
         if (!pid) return;
         if (!personAssignments[pid]) personAssignments[pid] = [];
-        personAssignments[pid].push({ date: dateStr, svc: svc, role: role });
+        personAssignments[pid].push({ date: dateStr, dateISO: dateISO, svc: svc, role: role });
       });
     });
     SHARED_ROLES.forEach(function(role) {
       var pid = row.assignments[role].shared;
       if (!pid) return;
       if (!personAssignments[pid]) personAssignments[pid] = [];
-      personAssignments[pid].push({ date: dateStr, svc: 'both services', role: role });
+      personAssignments[pid].push({ date: dateStr, dateISO: dateISO, svc: 'both services', role: role });
     });
   });
 
@@ -1125,11 +1216,23 @@ function sendReminderEmails() {
   }
   statusEl.textContent = 'Sending 0 of ' + total + '…';
 
+  // Generate / persist RSVP tokens (one per person, stable across re-sends)
+  var rsvpTokens = getRsvpTokens();
+  pids.forEach(function(pid) {
+    if (pMap[pid] && pMap[pid].email && !rsvpTokens[pid]) {
+      rsvpTokens[pid] = Math.random().toString(36).slice(2)
+                      + Math.random().toString(36).slice(2)
+                      + Date.now().toString(36);
+    }
+  });
+  saveRsvpTokens(rsvpTokens);
+
   var chain = Promise.resolve();
   pids.forEach(function(pid) {
     var person = pMap[pid];
     if (!person || !person.email) return;
     var assignments = personAssignments[pid];
+    var token = rsvpTokens[pid] || '';
 
     // Build plain-text email body
     var lines = [
@@ -1142,52 +1245,85 @@ function sendReminderEmails() {
       var svcLabel = a.svc === 'both services' ? 'Both Services' : a.svc;
       lines.push('  \u2022 ' + a.date + ' \u2014 ' + svcLabel + ': ' + roleLabel(a.role));
     });
+    if (token && s.workerUrl) {
+      lines.push(
+        '',
+        'Please confirm your availability by clicking one of the links below:',
+        '  \u2713 Yes, I\'ll be there: ' + s.workerUrl + '/rsvp?token=' + encodeURIComponent(token) + '&status=confirmed',
+        '  \u26a0 I need a change:  ' + s.workerUrl + '/rsvp?token=' + encodeURIComponent(token) + '&status=needs_changes'
+      );
+    }
     lines.push(
       '',
-      'If you are unable to serve on any of these dates, please reply to this email',
-      'and we will work to find a replacement.',
+      'A calendar attachment (.ics) is included \u2014 add it to your calendar to be reminded on each Sunday you serve.',
       '',
       'Thank you for serving!',
       '',
       'Timothy Lutheran Church'
     );
 
+    // Build iCal attachment (base64)
+    var icalContent = buildPersonIcal(person, assignments);
+    var icalB64 = btoa(unescape(encodeURIComponent(icalContent)));
+
+    // Store token in Worker KV before sending
     chain = chain.then(function() {
-      return fetch(s.workerUrl + '/email/send', {
-        method: 'POST',
-        headers: {
-          'X-Resend-Key':  s.resendKey,
-          'X-Email-From':  s.emailFrom,
-          'Content-Type':  'application/json',
-        },
-        body: JSON.stringify({
-          to:       person.email,
-          subject:  'Your Upcoming Worship Service Assignments \u2014 Timothy Lutheran',
-          text:     lines.join('\n'),
-          html:     buildHtmlEmail(person, assignments, s.replyTo || ''),
-          reply_to: s.replyTo || '',
-        }),
-      })
-        .then(function(r) {
-          var ok = r.ok, status = r.status;
-          return r.json().then(function(body) { return { ok: ok, status: status, body: body }; });
+      var storePromise = (token && s.workerUrl)
+        ? fetch(s.workerUrl + '/rsvp/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token:       token,
+              name:        person.name,
+              personId:    person.id,
+              assignments: assignments.map(function(a) {
+                return { date: a.date, dateISO: a.dateISO, svc: a.svc, role: a.role };
+              }),
+            }),
+          }).catch(function() { /* non-fatal if KV store fails */ })
+        : Promise.resolve();
+
+      return storePromise.then(function() {
+        return fetch(s.workerUrl + '/email/send', {
+          method: 'POST',
+          headers: {
+            'X-Resend-Key':  s.resendKey,
+            'X-Email-From':  s.emailFrom,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            to:       person.email,
+            subject:  'Your Upcoming Worship Service Assignments \u2014 Timothy Lutheran',
+            text:     lines.join('\n'),
+            html:     buildHtmlEmail(person, assignments, s.replyTo || '', token, s.workerUrl || ''),
+            reply_to: s.replyTo || '',
+            attachments: [{
+              filename: 'worship-schedule.ics',
+              content:  icalB64,
+            }],
+          }),
         })
-        .then(function(res) {
-          if (res.ok) {
-            sent++;
-            statusEl.textContent = 'Sent ' + sent + ' of ' + total + '\u2026';
-          } else {
+          .then(function(r) {
+            var ok = r.ok, status = r.status;
+            return r.json().then(function(body) { return { ok: ok, status: status, body: body }; });
+          })
+          .then(function(res) {
+            if (res.ok) {
+              sent++;
+              statusEl.textContent = 'Sent ' + sent + ' of ' + total + '\u2026';
+            } else {
+              errors++;
+              var msg = (res.body && (res.body.message || res.body.error || res.body.name))
+                ? (res.body.message || res.body.error || res.body.name)
+                : JSON.stringify(res.body);
+              statusEl.textContent = '\u00d7 ' + esc(person.name) + ' (error ' + res.status + '): ' + esc(msg);
+            }
+          })
+          .catch(function(e) {
             errors++;
-            var msg = (res.body && (res.body.message || res.body.error || res.body.name))
-              ? (res.body.message || res.body.error || res.body.name)
-              : JSON.stringify(res.body);
-            statusEl.textContent = '\u00d7 ' + esc(person.name) + ' (error ' + res.status + '): ' + esc(msg);
-          }
-        })
-        .catch(function(e) {
-          errors++;
-          statusEl.textContent = '\u00d7 Network error sending to ' + esc(person.name) + ': ' + esc(String(e));
-        });
+            statusEl.textContent = '\u00d7 Network error sending to ' + esc(person.name) + ': ' + esc(String(e));
+          });
+      });
     });
   });
 
@@ -1202,6 +1338,87 @@ function sendReminderEmails() {
 }
 
 document.getElementById('btn-send-emails').addEventListener('click', sendReminderEmails);
+
+// ══════════════════════════════════════════════════════════════════
+// SYNC CONFIRMATIONS — pull RSVP statuses from Worker KV
+// ══════════════════════════════════════════════════════════════════
+function syncConfirmations() {
+  var s = getBreezeSettings();
+  if (!s.workerUrl) {
+    alert('Configure your Worker URL in the Settings tab first.');
+    return;
+  }
+  var rsvpTokens = getRsvpTokens();                   // { pid: token }
+  var tokenList  = Object.keys(rsvpTokens).map(function(pid) { return rsvpTokens[pid]; }).filter(Boolean);
+  var statusEl   = document.getElementById('email-send-status');
+  if (!tokenList.length) {
+    statusEl.textContent = 'No RSVP tokens found \u2014 send reminder emails first.';
+    return;
+  }
+  statusEl.textContent = 'Syncing confirmations\u2026';
+
+  fetch(s.workerUrl + '/rsvp/sync', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ tokens: tokenList }),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(results) {
+      // results: { token: { status, name, updatedAt } }
+      // Build reverse map: token → pid
+      var tokenToPid = {};
+      Object.keys(rsvpTokens).forEach(function(pid) { tokenToPid[rsvpTokens[pid]] = pid; });
+
+      var confs   = getConfirmations();
+      var updated = 0;
+
+      Object.keys(results).forEach(function(token) {
+        var pid = tokenToPid[token];
+        if (!pid) return;
+        var workerStatus = results[token].status;            // 'pending' | 'confirmed' | 'needs_changes'
+        var localStatus  = workerStatus === 'confirmed'     ? 'confirmed'
+                         : workerStatus === 'needs_changes' ? 'needs_changes'
+                         : 'pending';
+
+        // Find all slots in the schedule currently assigned to this person
+        currentSchedule.forEach(function(row) {
+          var dateISO = row.date.toISOString().slice(0, 10);
+          PER_ROLES.forEach(function(role) {
+            ['8am','10:45am'].forEach(function(svc) {
+              if (row.assignments[role][svc] === pid) {
+                var key = dateISO + '|' + role + '|' + svc;
+                if (confs[key] !== localStatus) { confs[key] = localStatus; updated++; }
+              }
+            });
+          });
+          SHARED_ROLES.forEach(function(role) {
+            if (row.assignments[role].shared === pid) {
+              var key = dateISO + '|' + role + '|shared';
+              if (confs[key] !== localStatus) { confs[key] = localStatus; updated++; }
+            }
+          });
+        });
+      });
+
+      saveConfirmations(confs);
+
+      // Re-render confirmation pills without rebuilding the whole table
+      if (currentSchedule.length) {
+        var people = getPeople();
+        var counts = {};
+        people.forEach(function(p) { counts[p.id] = 0; });
+        renderTable(people, counts);
+      }
+
+      statusEl.textContent = '\u2713 Synced \u2014 '
+        + updated + ' assignment' + (updated !== 1 ? 's' : '') + ' updated.';
+    })
+    .catch(function(e) {
+      statusEl.textContent = '\u00d7 Sync failed: ' + esc(String(e));
+    });
+}
+
+document.getElementById('btn-sync-confirmations').addEventListener('click', syncConfirmations);
 
 // ══════════════════════════════════════════════════════════════════
 // SETTINGS
