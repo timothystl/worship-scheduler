@@ -186,15 +186,21 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 .history-item .hi-btns  { display:flex; gap:6px; }
 
 /* ── Stats tab ─────────────────────────────── */
-.stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; }
-.stat-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
-.stat-name { font-size:0.83rem; min-width:130px; font-weight:600; color:#2c3e6b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.stat-bar-wrap { flex:1; background:#eef0f5; border-radius:4px; height:12px; overflow:hidden; }
-.stat-bar { height:12px; background:#2c3e6b; border-radius:4px; transition:width 0.3s; }
-.stat-count { font-size:0.78rem; color:#555; min-width:28px; text-align:right; }
-.stat-last { font-size:0.7rem; color:#999; margin-top:-4px; margin-bottom:4px; padding-left:138px; }
-.stat-roles { font-size:0.72rem; color:#666; padding-left:138px; margin-top:-2px; margin-bottom:8px; }
-@media(max-width:700px){ .stats-grid { grid-template-columns:1fr; } }
+.stats-filter { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+.stats-filter label { font-size:.82rem; color:#555; font-weight:600; }
+.stats-filter input[type=date] { font-size:.82rem; padding:5px 8px; border:1px solid #ccd; border-radius:5px; color:#333; }
+.stats-table { width:100%; border-collapse:collapse; font-size:.84rem; }
+.stats-table thead tr { background:#f0f2f8; }
+.stats-table th { padding:8px 12px; text-align:left; font-size:.72rem; color:#2c3e6b;
+                  text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid #dde; white-space:nowrap; }
+.stats-table th.center { text-align:center; }
+.stats-table td { padding:9px 12px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+.stats-table tbody tr:hover { background:#fafbfe; }
+.sv-name { font-weight:600; color:#2c3e6b; white-space:nowrap; }
+.sv-roles { font-size:.78rem; color:#555; }
+.sv-count { text-align:center; font-weight:700; color:#2c3e6b; }
+.sv-last { font-size:.82rem; color:#555; white-space:nowrap; }
+@media(max-width:600px){ .stats-table th:nth-child(2), .stats-table td:nth-child(2) { display:none; } }
 
 </style>
 </head>
@@ -2312,71 +2318,100 @@ function exportIcal() {
 // ══════════════════════════════════════════════════════════════════
 function renderStatsTab() {
   renderHistoryList();
-  // Build cumulative counts from current schedule + all history
+
+  var people = getPeople();
+  if (!people.length) {
+    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No people added yet.</p>';
+    return;
+  }
+
+  // Collect all rows from history + current schedule
   var allRows = [];
   getHistory().forEach(function(h) { allRows = allRows.concat(h.rows); });
   currentSchedule.forEach(function(row) {
     allRows.push({ dateISO: row.date.toISOString(), ordinal: row.ordinal, assignments: row.assignments });
   });
   if (!allRows.length) {
-    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No schedule data yet.</p>';
+    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">Generate or load a schedule to see statistics.</p>';
     return;
   }
-  var people = getPeople();
-  if (!people.length) {
-    document.getElementById('stats-content').innerHTML = '<p style="color:#aaa;font-size:0.85rem;">No people added yet.</p>';
-    return;
-  }
-  var totals = {};   // { personId: count }
-  var byRole  = {};   // { personId: { role: count } }
-  var lastDate = {};  // { personId: { role: latestISO } }
-  people.forEach(function(p){ totals[p.id]=0; byRole[p.id]={}; lastDate[p.id]={}; });
+
+  var confs    = getConfirmations();
+  var fromDate = (document.getElementById('stats-from') || {}).value || '';
+  var toDate   = (document.getElementById('stats-to')   || {}).value || '';
+
+  // Build counts — confirmed assignments only
+  var totals     = {}; // { pid: count }
+  var byRole     = {}; // { pid: { role: count } }
+  var lastServed = {}; // { pid: latestISO }
+  people.forEach(function(p) { totals[p.id] = 0; byRole[p.id] = {}; lastServed[p.id] = null; });
+
   allRows.forEach(function(row) {
-    var dateISO = (typeof row.dateISO === 'string' ? row.dateISO : new Date(row.dateISO).toISOString()).slice(0,10);
+    var dateISO = (typeof row.dateISO === 'string' ? row.dateISO : new Date(row.dateISO).toISOString()).slice(0, 10);
+    if (fromDate && dateISO < fromDate) return;
+    if (toDate   && dateISO > toDate)   return;
+
     PER_ROLES.forEach(function(role) {
-      ['8am','10:45am'].forEach(function(svc) {
+      ['8am', '10:45am'].forEach(function(svc) {
         var pid = row.assignments[role] && row.assignments[role][svc];
         if (!pid || !totals.hasOwnProperty(pid)) return;
+        if (confs[dateISO + '|' + role + '|' + svc] !== 'confirmed') return;
         totals[pid]++;
-        byRole[pid][role] = (byRole[pid][role]||0)+1;
-        if (!lastDate[pid][role] || dateISO > lastDate[pid][role]) lastDate[pid][role] = dateISO;
+        byRole[pid][role] = (byRole[pid][role] || 0) + 1;
+        if (!lastServed[pid] || dateISO > lastServed[pid]) lastServed[pid] = dateISO;
       });
     });
     SHARED_ROLES.forEach(function(role) {
       var pid = row.assignments[role] && row.assignments[role].shared;
       if (!pid || !totals.hasOwnProperty(pid)) return;
+      if (confs[dateISO + '|' + role + '|shared'] !== 'confirmed') return;
       totals[pid]++;
-      byRole[pid][role] = (byRole[pid][role]||0)+1;
-      if (!lastDate[pid][role] || dateISO > lastDate[pid][role]) lastDate[pid][role] = dateISO;
+      byRole[pid][role] = (byRole[pid][role] || 0) + 1;
+      if (!lastServed[pid] || dateISO > lastServed[pid]) lastServed[pid] = dateISO;
     });
   });
-  var sorted = people.slice().sort(function(a,b){ return (totals[b.id]||0)-(totals[a.id]||0); });
-  var maxCount = sorted.length ? (totals[sorted[0].id]||1) : 1;
-  var html = '<div class="stats-grid">';
-  // Split into two columns by chunking
-  var col1 = sorted.slice(0, Math.ceil(sorted.length/2));
-  var col2 = sorted.slice(Math.ceil(sorted.length/2));
-  [col1, col2].forEach(function(col) {
-    html += '<div>';
-    col.forEach(function(p) {
-      var count = totals[p.id]||0;
-      var pct = Math.round((count/maxCount)*100);
-      html += '<div class="stat-row"><span class="stat-name">'+esc(p.name)+'</span>'
-        +'<div class="stat-bar-wrap"><div class="stat-bar" style="width:'+pct+'%"></div></div>'
-        +'<span class="stat-count">'+count+'</span></div>';
-      // Show role breakdown
-      var roleParts = [];
-      Object.keys(byRole[p.id]).sort().forEach(function(r) { roleParts.push(roleLabel(r)+': '+byRole[p.id][r]); });
-      if (roleParts.length) html += '<div class="stat-roles">'+esc(roleParts.join(' &bull; '))+'</div>';
-      // Last served
-      var lastParts = [];
-      Object.keys(lastDate[p.id]).sort().forEach(function(r) { lastParts.push(roleLabel(r)+' '+lastDate[p.id][r]); });
-      if (lastParts.length) html += '<div class="stat-last">Last served: '+esc(lastParts.join(', '))+'</div>';
-    });
-    html += '</div>';
+
+  // Sort: most recently served first, then by count
+  var sorted = people.slice().sort(function(a, b) {
+    var la = lastServed[a.id] || '';
+    var lb = lastServed[b.id] || '';
+    if (lb !== la) return lb > la ? 1 : -1;
+    return (totals[b.id] || 0) - (totals[a.id] || 0);
   });
-  html += '</div>';
-  html += '<p style="font-size:0.75rem;color:#bbb;margin-top:16px;">Counts include current schedule + '+getHistory().length+' archived schedule(s).</p>';
+
+  var html = '<table class="stats-table">'
+    + '<thead><tr>'
+    + '<th>Volunteer</th>'
+    + '<th>Roles Served</th>'
+    + '<th class="center">Times Served</th>'
+    + '<th>Last Served</th>'
+    + '</tr></thead><tbody>';
+
+  sorted.forEach(function(p) {
+    var count = totals[p.id] || 0;
+    var roleParts = Object.keys(byRole[p.id]).sort().map(function(r) {
+      var n = byRole[p.id][r];
+      return roleLabel(r) + (n > 1 ? ' \xd7' + n : '');
+    });
+    var lastStr = lastServed[p.id]
+      ? new Date(lastServed[p.id] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '<span style="color:#bbb">&mdash;</span>';
+    html += '<tr>'
+      + '<td class="sv-name">' + esc(p.name) + '</td>'
+      + '<td class="sv-roles">' + (roleParts.length ? esc(roleParts.join(' \u2022 ')) : '<span style="color:#bbb">&mdash;</span>') + '</td>'
+      + '<td class="sv-count">' + (count > 0 ? count : '<span style="color:#bbb">0</span>') + '</td>'
+      + '<td class="sv-last">' + lastStr + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+
+  var filterNote = (fromDate || toDate)
+    ? ' &middot; filtered ' + (fromDate ? fromDate : '') + (fromDate && toDate ? ' &ndash; ' : '') + (toDate ? toDate : '')
+    : ' &middot; all time';
+  html += '<p style="font-size:0.75rem;color:#bbb;margin-top:10px;">Confirmed assignments only'
+    + filterNote + ' &middot; current + ' + getHistory().length + ' archived schedule(s).</p>';
+
   document.getElementById('stats-content').innerHTML = html;
 }
 
@@ -2454,7 +2489,14 @@ function deleteHistoryItem(id) {
 <div id="tab-stats" class="tab-content">
   <div class="card">
     <h2>&#128202; Volunteer Statistics</h2>
-    <p style="font-size:0.85rem;color:#888;margin-bottom:16px;">Counts from the current schedule plus all archived schedules.</p>
+    <div class="stats-filter">
+      <label>Date range:</label>
+      <input type="date" id="stats-from">
+      <span style="color:#999;font-size:.82rem;">to</span>
+      <input type="date" id="stats-to">
+      <button class="btn btn-outline btn-sm" onclick="renderStatsTab()">Apply</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('stats-from').value='';document.getElementById('stats-to').value='';renderStatsTab();">All time</button>
+    </div>
     <div id="stats-content">
       <p style="color:#aaa;font-size:0.85rem;">Generate or load a schedule to see statistics.</p>
     </div>
