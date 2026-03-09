@@ -55,12 +55,22 @@ select.form-select { width: 100%; padding: 7px 10px; border: 1px solid #d0d4e0; 
 .btn-sm { padding: 5px 12px; font-size: 0.82rem; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* People list */
-.people-grid { display: grid; gap: 12px; }
-.person-card { border: 1px solid #dde; border-radius: 8px; padding: 14px 16px; background: #fafbfc; }
-.person-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.person-name { font-weight: 700; font-size: 1rem; color: #2c3e6b; }
-.person-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+/* People table */
+.people-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+.people-table thead tr { background:#f0f2f8; }
+.people-table thead th { background:#f0f2f8; color:#2c3e6b; border:none; text-align:left; }
+.people-table th { padding:9px 12px; text-align:left; font-weight:700; color:#2c3e6b; font-size:.8rem; white-space:nowrap; border-bottom:2px solid #d0d4e8; cursor:pointer; user-select:none; }
+.people-table th:hover { background:#e4e8f4; }
+.sort-arrow { display:inline-block; margin-left:4px; opacity:.35; font-size:.72rem; }
+.sort-arrow.on { opacity:1; }
+.people-table td { padding:9px 12px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+.people-table tbody tr:last-child td { border-bottom:none; }
+.people-table tbody tr:hover { background:#f8f9fc; }
+.pt-name { font-weight:700; color:#2c3e6b; }
+.pt-email { font-size:.74rem; color:#888; margin-top:1px; }
+.pt-roles { display:flex; flex-wrap:wrap; gap:4px; }
+.pt-svc { display:inline-block; font-size:.75rem; font-weight:700; color:#856404; background:#fef3cd; padding:2px 8px; border-radius:4px; white-space:nowrap; }
+.pt-actions { white-space:nowrap; text-align:right; }
 .tag { border-radius: 4px; padding: 2px 8px; font-size: 0.78rem; }
 .tag-sunday { background: #e8eaf5; color: #2c3e6b; }
 .tag-service { background: #fef3cd; color: #856404; }
@@ -293,16 +303,12 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
   </div>
 
   <div class="card">
-    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
       <h2 style="margin:0;">All People (<span id="people-count">0</span>)</h2>
-      <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;">
-        <span style="font-size:0.8rem;color:#666;font-weight:600;">Sort:</span>
-        <button class="btn btn-outline btn-sm" id="sort-btn-name"   onclick="setPeopleSort('name')"   >Name</button>
-        <button class="btn btn-outline btn-sm" id="sort-btn-role"   onclick="setPeopleSort('role')"   >Role</button>
-        <button class="btn btn-outline btn-sm" id="sort-btn-service" onclick="setPeopleSort('service')">Service</button>
-      </div>
+      <input type="search" id="people-search" placeholder="Filter by name, role, or service…"
+             style="margin-left:auto;max-width:280px;font-size:.85rem;" oninput="peopleSearchQuery=this.value;renderPeopleList();">
     </div>
-    <div id="people-list" class="people-grid"></div>
+    <div id="people-list" style="overflow-x:auto;"></div>
   </div>
 </div>
 
@@ -610,7 +616,9 @@ function loadSchedule() {
 // ══════════════════════════════════════════════════════════════════
 var currentSchedule = [];
 var currentBlackouts = []; // ISO date strings for the person currently in the form
-var peopleSortBy = 'name';  // 'name' | 'role' | 'service'
+var peopleSortBy  = 'name'; // 'name' | 'role' | 'service'
+var peopleSortDir = 'asc';  // 'asc' | 'desc'
+var peopleSearchQuery = '';
 
 // ══════════════════════════════════════════════════════════════════
 // TABS
@@ -742,61 +750,94 @@ document.getElementById('btn-clear-form').addEventListener('click', clearForm);
 // PEOPLE LIST
 // ══════════════════════════════════════════════════════════════════
 function setPeopleSort(field) {
-  peopleSortBy = field;
+  if (peopleSortBy === field) {
+    peopleSortDir = (peopleSortDir === 'asc') ? 'desc' : 'asc';
+  } else {
+    peopleSortBy  = field;
+    peopleSortDir = 'asc';
+  }
   renderPeopleList();
 }
 
 function renderPeopleList() {
-  var people = getPeople().slice(); // copy so sort doesn't mutate storage
-  // Apply sort
+  var allPeople = getPeople().slice();
+  var container = document.getElementById('people-list');
+
+  // Filter
+  var q = (peopleSearchQuery || '').trim().toLowerCase();
+  var svcLabels = { '8am':'8am 8:00', 'both':'both', '10:45am':'10:45 10:45am' };
+  var people = q ? allPeople.filter(function(p) {
+    var haystack = [
+      p.name,
+      p.email || '',
+      p.roles.map(roleLabel).join(' '),
+      svcLabels[p.servicePreference] || p.servicePreference
+    ].join(' ').toLowerCase();
+    return q.split(/\s+/).every(function(word) { return haystack.indexOf(word) !== -1; });
+  }) : allPeople;
+
+  // Sort
   var svcOrder = { '8am': 0, 'both': 1, '10:45am': 2 };
+  var dir = (peopleSortDir === 'desc') ? -1 : 1;
   people.sort(function(a, b) {
+    var cmp = 0;
     if (peopleSortBy === 'name') {
-      return a.name.localeCompare(b.name);
+      cmp = a.name.localeCompare(b.name);
     } else if (peopleSortBy === 'role') {
       var ar = (a.roles[0] || '').toLowerCase();
       var br = (b.roles[0] || '').toLowerCase();
-      if (ar !== br) return ar.localeCompare(br);
-      return a.name.localeCompare(b.name);
+      cmp = ar.localeCompare(br) || a.name.localeCompare(b.name);
     } else { // service
       var as = svcOrder[a.servicePreference] !== undefined ? svcOrder[a.servicePreference] : 99;
       var bs = svcOrder[b.servicePreference] !== undefined ? svcOrder[b.servicePreference] : 99;
-      if (as !== bs) return as - bs;
-      return a.name.localeCompare(b.name);
+      cmp = (as - bs) || a.name.localeCompare(b.name);
     }
+    return cmp * dir;
   });
-  // Update active sort button styles
-  ['name','role','service'].forEach(function(f) {
-    var btn = document.getElementById('sort-btn-' + f);
-    if (btn) btn.style.background = (f === peopleSortBy) ? '#2c3e6b' : '';
-    if (btn) btn.style.color      = (f === peopleSortBy) ? '#fff'     : '';
-  });
-  document.getElementById('people-count').textContent = people.length;
-  var container = document.getElementById('people-list');
-  if (people.length === 0) {
+
+  document.getElementById('people-count').textContent = allPeople.length;
+
+  if (allPeople.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="icon">&#128101;</div><p>No people added yet. Use the form above to add volunteers.</p></div>';
     return;
   }
-  var html = '';
+  if (people.length === 0) {
+    container.innerHTML = '<div style="padding:16px;color:#888;font-size:.88rem;">No matches for &ldquo;'+esc(peopleSearchQuery)+'&rdquo;</div>';
+    return;
+  }
+
+  function arrow(field) {
+    var active = (peopleSortBy === field);
+    var ch = active ? (peopleSortDir === 'asc' ? '&#9650;' : '&#9660;') : '&#9651;';
+    return '<span class="sort-arrow'+(active?' on':'')+'">'+ch+'</span>';
+  }
+  var svcMap = { 'both':'Both','8am':'8:00 AM','10:45am':'10:45 AM' };
+  var html = '<table class="people-table">'
+    +'<thead><tr>'
+    +'<th onclick="setPeopleSort(\'name\')">Name'+arrow('name')+'</th>'
+    +'<th onclick="setPeopleSort(\'role\')">Roles'+arrow('role')+'</th>'
+    +'<th onclick="setPeopleSort(\'service\')">Service'+arrow('service')+'</th>'
+    +'<th></th>'
+    +'</tr></thead><tbody>';
+
   people.forEach(function(p) {
-    var sundays = p.preferredSundays.length ? p.preferredSundays.map(function(n){ return n+ordSuffix(n); }).join(', ') : 'Any Sunday';
-    var svcMap = { 'both':'Both Services','8am':'8:00 AM only','10:45am':'10:45 AM only' };
-    var roleTags = p.roles.map(function(r){ return '<span class="tag tag-role">'+esc(roleLabel(r))+'</span>'; }).join('');
-    var breezeTag = p.breezePersonId ? '<span class="tag tag-breeze">&#9729; Breeze linked</span>' : '';
-    var emailTag = p.email ? '<span style="font-size:0.78rem;color:#555;margin-left:4px;">&#9993; '+esc(p.email)+'</span>' : '';
-    html += '<div class="person-card">'
-      +'<div class="person-card-header">'
-      +'<span class="person-name">'+esc(p.name)+'</span>'+emailTag
-      +'<div style="display:flex;gap:6px;">'
-      +'<button class="btn btn-outline btn-sm" data-action="edit" data-id="'+p.id+'">Edit</button>'
+    var roleTags = p.roles.length
+      ? p.roles.map(function(r){ return '<span class="tag tag-role">'+esc(roleLabel(r))+'</span>'; }).join(' ')
+      : '<span style="color:#aaa;font-size:.78rem;">—</span>';
+    var breeze = p.breezePersonId ? ' <span title="Breeze linked" style="font-size:.7rem;color:#004085;">&#9729;</span>' : '';
+    html += '<tr>'
+      +'<td><div class="pt-name">'+esc(p.name)+breeze+'</div>'
+      +(p.email ? '<div class="pt-email">'+esc(p.email)+'</div>' : '')
+      +'</td>'
+      +'<td><div class="pt-roles">'+roleTags+'</div></td>'
+      +'<td><span class="pt-svc">'+esc(svcMap[p.servicePreference]||p.servicePreference)+'</span></td>'
+      +'<td class="pt-actions">'
+      +'<button class="btn btn-outline btn-sm" data-action="edit" data-id="'+p.id+'" style="margin-right:4px;">Edit</button>'
       +'<button class="btn btn-danger btn-sm" data-action="delete" data-id="'+p.id+'">Remove</button>'
-      +'</div></div>'
-      +'<div class="person-meta">'
-      +'<span class="tag tag-sunday">'+esc(sundays)+'</span>'
-      +'<span class="tag tag-service">'+esc(svcMap[p.servicePreference]||p.servicePreference)+'</span>'
-      +roleTags+breezeTag
-      +'</div></div>';
+      +'</td>'
+      +'</tr>';
   });
+  html += '</tbody></table>';
   container.innerHTML = html;
 }
 
