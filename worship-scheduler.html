@@ -71,6 +71,12 @@ select.form-select { width: 100%; padding: 7px 10px; border: 1px solid #d0d4e0; 
 .pt-roles { display:flex; flex-wrap:wrap; gap:4px; }
 .pt-svc { display:inline-block; font-size:.75rem; font-weight:700; color:#856404; background:#fef3cd; padding:2px 8px; border-radius:4px; white-space:nowrap; }
 .pt-actions { white-space:nowrap; text-align:right; }
+/* Schedule cell override / primary indicators */
+.override-cell { box-shadow: inset 3px 0 0 #e67e22; }
+.primary-cell  { box-shadow: inset 3px 0 0 #27ae60; }
+.cell-badge { font-size:.62rem; vertical-align:super; margin-left:2px; line-height:0; }
+.cell-badge-override { color:#c0392b; }
+.cell-badge-primary  { color:#27ae60; }
 .tag { border-radius: 4px; padding: 2px 8px; font-size: 0.78rem; }
 .tag-sunday { background: #e8eaf5; color: #2c3e6b; }
 .tag-service { background: #fef3cd; color: #856404; }
@@ -286,6 +292,20 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
       <label><input type="checkbox" value="Liturgist"> Liturgist</label>
       <label><input type="checkbox" value="Preacher"> Preacher</label>
       <label><input type="checkbox" value="Childrens Message"> Children's Message</label>
+    </div>
+
+    <div style="margin-top:14px;padding:10px 14px;background:#f0faf4;border:1px solid #a8d8b9;border-radius:6px;">
+      <label style="font-weight:600;display:block;margin-bottom:6px;">Primary / Always-First For <span style="font-weight:normal;color:#666;">(optional)</span></label>
+      <div class="checkbox-group" id="primary-roles">
+        <label><input type="checkbox" value="Elder"> Elder</label>
+        <label><input type="checkbox" value="Acolyte"> Acolyte</label>
+        <label><input type="checkbox" value="PowerPoint"> PowerPoint</label>
+        <label><input type="checkbox" value="Lector"> Lector</label>
+        <label><input type="checkbox" value="Liturgist"> Liturgist</label>
+        <label><input type="checkbox" value="Preacher"> Preacher</label>
+        <label><input type="checkbox" value="Childrens Message"> Children's Message</label>
+      </div>
+      <small style="color:#666;font-size:0.78rem;display:block;margin-top:6px;">This person is always assigned these roles first, bypassing Sunday rotation. If they have a blackout date, the slot is left empty for manual assignment. Set Preferred Sundays to "Any Sunday" for primary roles.</small>
     </div>
 
     <label style="margin-top:16px;">Unavailable / Blackout Sundays</label>
@@ -568,6 +588,8 @@ function savePeople(a){ localStorage.setItem('ws_people', JSON.stringify(a)); }
 
 function getBreezeSettings() { try { return JSON.parse(localStorage.getItem('ws_breeze_settings') || '{}'); } catch(e) { return {}; } }
 function saveBreezeSettings(o){ localStorage.setItem('ws_breeze_settings', JSON.stringify(o)); }
+function getScheduleOverrides() { try { return JSON.parse(localStorage.getItem('ws_schedule_overrides')||'{}'); } catch(e){ return {}; } }
+function saveScheduleOverrides(o){ localStorage.setItem('ws_schedule_overrides', JSON.stringify(o)); }
 
 function getEventMap() { try { return JSON.parse(localStorage.getItem('ws_breeze_event_map') || '{}'); } catch(e) { return {}; } }
 function getHistory()        { try { return JSON.parse(localStorage.getItem('ws_history')      || '[]'); } catch(e) { return []; } }
@@ -648,8 +670,9 @@ function syncLabels(groupId) {
     if (cb) lbl.classList.toggle('checked', cb.checked);
   });
 }
-document.getElementById('pref-sundays').addEventListener('change', function() { syncLabels('pref-sundays'); });
-document.getElementById('pref-roles').addEventListener('change',   function() { syncLabels('pref-roles'); });
+document.getElementById('pref-sundays').addEventListener('change',  function() { syncLabels('pref-sundays'); });
+document.getElementById('pref-roles').addEventListener('change',    function() { syncLabels('pref-roles'); });
+document.getElementById('primary-roles').addEventListener('change', function() { syncLabels('primary-roles'); });
 
 // ══════════════════════════════════════════════════════════════════
 // BLACKOUT DATES
@@ -700,8 +723,10 @@ function clearForm() {
   document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('pref-service').querySelector('input[value="both"]').checked = true;
   document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
+  document.getElementById('primary-roles').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
   syncLabels('pref-sundays');
   syncLabels('pref-roles');
+  syncLabels('primary-roles');
   document.getElementById('breeze-import-query').value = '';
   document.getElementById('breeze-import-results').innerHTML = '';
   currentBlackouts = [];
@@ -725,18 +750,23 @@ function savePerson() {
   });
   if (roles.length === 0) { alert('Please select at least one role.'); return; }
 
+  var primaryFor = [];
+  document.getElementById('primary-roles').querySelectorAll('input:checked').forEach(function(cb){
+    primaryFor.push(cb.value);
+  });
+
   var importedBreezeId = document.getElementById('breeze-import-id').value || null;
   var people = getPeople();
   var editId = document.getElementById('edit-id').value;
   if (editId) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].id === editId) {
-        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId || people[i].breezePersonId || null, blackoutDates: currentBlackouts.slice() };
+        people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, primaryFor: primaryFor, breezePersonId: importedBreezeId || people[i].breezePersonId || null, blackoutDates: currentBlackouts.slice() };
         break;
       }
     }
   } else {
-    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, breezePersonId: importedBreezeId, blackoutDates: currentBlackouts.slice() });
+    people.push({ id: makeId(), name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, primaryFor: primaryFor, breezePersonId: importedBreezeId, blackoutDates: currentBlackouts.slice() });
   }
   savePeople(people);
   clearForm();
@@ -824,9 +854,10 @@ function renderPeopleList() {
     var roleTags = p.roles.length
       ? p.roles.map(function(r){ return '<span class="tag tag-role">'+esc(roleLabel(r))+'</span>'; }).join(' ')
       : '<span style="color:#aaa;font-size:.78rem;">—</span>';
-    var breeze = p.breezePersonId ? ' <span title="Breeze linked" style="font-size:.7rem;color:#004085;">&#9729;</span>' : '';
+    var breeze   = p.breezePersonId ? ' <span title="Breeze linked" style="font-size:.7rem;color:#004085;">&#9729;</span>' : '';
+    var primary  = (p.primaryFor && p.primaryFor.length) ? ' <span title="Primary: '+esc((p.primaryFor||[]).map(roleLabel).join(', '))+'" style="font-size:.72rem;color:#27ae60;">&#9733;</span>' : '';
     html += '<tr>'
-      +'<td><div class="pt-name">'+esc(p.name)+breeze+'</div>'
+      +'<td><div class="pt-name">'+esc(p.name)+primary+breeze+'</div>'
       +(p.email ? '<div class="pt-email">'+esc(p.email)+'</div>' : '')
       +'</td>'
       +'<td><div class="pt-roles">'+roleTags+'</div></td>'
@@ -864,7 +895,10 @@ function editPerson(id) {
   document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){
     cb.checked = person.roles.indexOf(cb.value) > -1;
   });
-  syncLabels('pref-sundays'); syncLabels('pref-roles');
+  document.getElementById('primary-roles').querySelectorAll('input').forEach(function(cb){
+    cb.checked = (person.primaryFor || []).indexOf(cb.value) > -1;
+  });
+  syncLabels('pref-sundays'); syncLabels('pref-roles'); syncLabels('primary-roles');
   currentBlackouts = (person.blackoutDates || []).slice();
   renderBlackoutChips();
   window.scrollTo(0,0); document.getElementById('person-name').focus();
@@ -928,8 +962,8 @@ function generateSchedule() {
   var start = document.getElementById('start-date').value;
   var end   = document.getElementById('end-date').value;
   showAlert('schedule-alert','','');
-  // Auto-archive existing schedule before overwriting
-  if (currentSchedule.length) archiveCurrentSchedule();
+
+  // Validate before doing anything destructive
   if (!start||!end) { showAlert('schedule-alert','Please select both a start and end date.','warning'); return; }
   if (start>end)    { showAlert('schedule-alert','Start date must be before end date.','warning'); return; }
   var people = getPeople();
@@ -937,30 +971,96 @@ function generateSchedule() {
   var sundays = getSundays(start, end);
   if (!sundays.length) { showAlert('schedule-alert','No Sundays found in that date range.','warning'); return; }
 
+  // Check for existing manual overrides — ask before wiping them
+  var existingOverrides = getScheduleOverrides();
+  var overrideCount = Object.keys(existingOverrides).length;
+  var preserveOverrides = false;
+  if (overrideCount > 0) {
+    preserveOverrides = confirm(
+      'You have ' + overrideCount + ' manual slot assignment(s) in the current schedule.\n\n' +
+      'OK \u2192 Preserve your manual assignments in the new schedule\n' +
+      'Cancel \u2192 Discard manual assignments and regenerate everything fresh'
+    );
+    if (!preserveOverrides) saveScheduleOverrides({});
+  }
+
+  // Archive then generate
+  if (currentSchedule.length) archiveCurrentSchedule();
+
+  // Build primary person map: role → person (first person with that role in primaryFor)
+  var primaryMap = {};
+  people.forEach(function(p) {
+    (p.primaryFor || []).forEach(function(role) {
+      if (!primaryMap[role]) primaryMap[role] = p;
+    });
+  });
+  // Primary person IDs: these people are NOT excluded from other roles after being assigned
+  var primaryIds = {};
+  Object.keys(primaryMap).forEach(function(r) { primaryIds[primaryMap[r].id] = true; });
+
+  var pMap = {};
+  people.forEach(function(p){ pMap[p.id] = p; });
   var counts = {};
-  people.forEach(function(p){ counts[p.id]=0; });
+  people.forEach(function(p){ counts[p.id] = 0; });
 
   currentSchedule = sundays.map(function(date) {
     var ordinal = getOrdinal(date), assignments = {};
     var dateISO = date.toISOString().slice(0, 10);
+
     SHARED_ROLES.forEach(function(role) {
-      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO); });
-      var picked = pickBest(pool,counts);
-      assignments[role] = { shared: picked?picked.id:null };
+      var primary = primaryMap[role];
+      var picked;
+      if (primary) {
+        // Primary exists: assign unless blacked out — if blacked out leave empty (no fallback)
+        var blacked = (primary.blackoutDates || []).indexOf(dateISO) !== -1;
+        picked = blacked ? null : primary;
+      } else {
+        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO); });
+        picked = pickBest(pool, counts);
+      }
+      assignments[role] = { shared: picked ? picked.id : null };
       if (picked) counts[picked.id]++;
     });
+
     PER_ROLES.forEach(function(role) {
       assignments[role] = {};
       var usedIds = {};
+      var primary = primaryMap[role];
       ['8am','10:45am'].forEach(function(svc) {
-        var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO) && !usedIds[p.id]; });
-        var picked = pickBest(pool,counts);
-        assignments[role][svc] = picked?picked.id:null;
-        if (picked){ counts[picked.id]++; usedIds[picked.id]=true; }
+        var picked;
+        if (primary) {
+          var blacked = (primary.blackoutDates || []).indexOf(dateISO) !== -1;
+          var svcOk = primary.servicePreference === 'both' || primary.servicePreference === svc;
+          picked = (!blacked && svcOk) ? primary : null;
+        } else {
+          var pool = people.filter(function(p){
+            return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO) && !usedIds[p.id];
+          });
+          picked = pickBest(pool, counts);
+        }
+        assignments[role][svc] = picked ? picked.id : null;
+        if (picked) { counts[picked.id]++; usedIds[picked.id] = true; }
       });
     });
-    return { date:date, ordinal:ordinal, assignments:assignments };
+
+    return { date: date, ordinal: ordinal, assignments: assignments };
   });
+
+  // Re-apply preserved manual overrides
+  if (preserveOverrides) {
+    var overrides = getScheduleOverrides();
+    currentSchedule.forEach(function(row) {
+      var dateISO = row.date.toISOString().slice(0, 10);
+      Object.keys(overrides).forEach(function(key) {
+        var parts = key.split('|');
+        if (parts[0] !== dateISO) return;
+        var role = parts[1], svc = parts[2];
+        if (!row.assignments[role]) return;
+        if (svc === 'shared') row.assignments[role].shared = overrides[key] || null;
+        else                  row.assignments[role][svc]   = overrides[key] || null;
+      });
+    });
+  }
 
   renderTable(people, counts);
   document.getElementById('schedule-output').style.display = 'block';
@@ -974,9 +1074,10 @@ document.getElementById('btn-autofill').addEventListener('click', autoFillSchedu
 document.getElementById('btn-export-ical').addEventListener('click', exportIcal);
 
 document.getElementById('btn-clear-schedule').addEventListener('click', function() {
-  if (!confirm('Clear the saved schedule?')) return;
+  if (!confirm('Clear the saved schedule? This will also discard any manual slot assignments.')) return;
   currentSchedule = [];
   localStorage.removeItem('ws_schedule');
+  saveScheduleOverrides({});
   document.getElementById('schedule-output').style.display = 'none';
 });
 
@@ -1031,28 +1132,58 @@ function renderTable(people, counts) {
 }
 
 function buildCell(pid, pMap, rowIdx, role, svc, rowspan) {
-  var filled = pid && pMap[pid];
   var people = getPeople();
   var row = currentSchedule[rowIdx];
   var ordinal = row.ordinal;
   var dateISO = row.date.toISOString().slice(0, 10);
-  var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO); });
+
+  // Determine if this cell is a manual override or a primary assignment
+  var overrideKey = dateISO + '|' + role + '|' + svc;
+  var overrides = getScheduleOverrides();
+  var isOverride = overrideKey in overrides;
+
+  // Find primary person for this role (if any)
+  var primaryPerson = null;
+  people.forEach(function(p){ if ((p.primaryFor||[]).indexOf(role) > -1 && !primaryPerson) primaryPerson = p; });
+  var isPrimary = !isOverride && pid && primaryPerson && pid === primaryPerson.id;
+
+  // Build dropdown pool — always include primary person if not blacked out
+  var pool = people.filter(function(p){
+    if (primaryPerson && p.id === primaryPerson.id) {
+      // Include primary person if not blacked out (ignore preferredSundays for primary)
+      var blacked = (p.blackoutDates || []).indexOf(dateISO) !== -1;
+      var svcOk = svc === 'shared' || p.servicePreference === 'both' || p.servicePreference === svc;
+      return p.roles.indexOf(role) > -1 && !blacked && svcOk;
+    }
+    return p.roles.indexOf(role) > -1 && eligible(p, ordinal, svc, dateISO);
+  });
   var opts = '<option value="">-- unassigned --</option>';
   pool.forEach(function(p){
     opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
   });
+  // If current person isn't in pool at all, still show them with a warning
   if (pid && pMap[pid] && !pool.some(function(p){ return p.id===pid; })) {
     opts += '<option value="'+esc(pid)+'" selected>&#9888; '+esc(pMap[pid].name)+'</option>';
   }
+
   var rsAttr = rowspan > 1 ? ' rowspan="'+rowspan+'"' : '';
-  var extraClass = rowspan > 1 ? ' shared-cell' : '';
+  var tdClass = (pid && pMap[pid] ? 'filled-cell' : 'empty-cell')
+    + (rowspan > 1 ? ' shared-cell' : '')
+    + (isOverride ? ' override-cell' : '')
+    + (isPrimary  ? ' primary-cell'  : '');
+
   var confKey = dateISO + '|' + role + '|' + svc;
   var confStatus = pid ? (getConfirmations()[confKey] || 'pending') : '';
   var confLabels = { pending: '? Pending', confirmed: '\u2713 Confirmed', declined: '\u00d7 Declined', needs_changes: '\u26a0 Needs Change' };
   var confPill = pid ? '<button class="conf-pill conf-'+confStatus+'" data-conf-key="'+esc(confKey)+'">'+(confLabels[confStatus]||confLabels.pending)+'</button>' : '';
-  return '<td class="'+(filled?'filled-cell':'empty-cell')+extraClass+'"'+rsAttr+'>'
+
+  var badge = isOverride ? '<span class="cell-badge cell-badge-override" title="Manually assigned">&#9998;</span>'
+            : isPrimary  ? '<span class="cell-badge cell-badge-primary"  title="Primary assignment">&#9733;</span>'
+            : '';
+
+  return '<td class="'+tdClass+'"'+rsAttr+'>'
     +'<select class="cell-select" data-row="'+rowIdx+'" data-role="'+esc(role)+'" data-svc="'+esc(svc)+'">'+opts+'</select>'
-    +confPill+'</td>';
+    +badge+confPill+'</td>';
 }
 
 document.getElementById('schedule-table').addEventListener('change', function(e) {
@@ -1064,7 +1195,32 @@ document.getElementById('schedule-table').addEventListener('change', function(e)
   var pid  = sel.value;
   if (svc==='shared') currentSchedule[rowIdx].assignments[role].shared = pid||null;
   else                currentSchedule[rowIdx].assignments[role][svc]   = pid||null;
-  sel.parentElement.className = pid?'filled-cell':'empty-cell';
+
+  // Save as manual override
+  var dateISO = currentSchedule[rowIdx].date.toISOString().slice(0,10);
+  var overrideKey = dateISO + '|' + role + '|' + svc;
+  var overrides = getScheduleOverrides();
+  overrides[overrideKey] = pid || '';   // '' = explicitly cleared
+  saveScheduleOverrides(overrides);
+
+  // Update td classes to reflect override state
+  var td = sel.parentElement;
+  var isShared = td.classList.contains('shared-cell');
+  td.className = (pid ? 'filled-cell' : 'empty-cell')
+    + (isShared ? ' shared-cell' : '')
+    + ' override-cell';
+  // Replace any existing badge with override badge
+  var existingBadge = td.querySelector('.cell-badge');
+  if (existingBadge) existingBadge.remove();
+  if (pid) {
+    var badge = document.createElement('span');
+    badge.className = 'cell-badge cell-badge-override';
+    badge.title = 'Manually assigned';
+    badge.innerHTML = '&#9998;';
+    var confPill = td.querySelector('.conf-pill');
+    td.insertBefore(badge, confPill || null);
+  }
+
   saveSchedule();
 });
 
