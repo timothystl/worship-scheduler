@@ -77,6 +77,40 @@ select.form-select { width: 100%; padding: 7px 10px; border: 1px solid #d0d4e0; 
 .cell-badge { font-size:.62rem; vertical-align:super; margin-left:2px; line-height:0; }
 .cell-badge-override { color:#c0392b; }
 .cell-badge-primary  { color:#27ae60; }
+
+/* ── Side Panels ─────────────────────────────── */
+.panel-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.45);
+  z-index:300; opacity:0; pointer-events:none; transition:opacity .25s;
+}
+.panel-overlay.open { opacity:1; pointer-events:auto; }
+.side-panel {
+  position:fixed; top:0; right:0; width:min(520px,100vw); height:100vh;
+  background:#fff; z-index:301; box-shadow:-6px 0 32px rgba(0,0,0,0.18);
+  display:flex; flex-direction:column;
+  transform:translateX(100%); transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+.side-panel.open { transform:translateX(0); }
+.panel-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 20px; background:#2c3e6b; color:white; flex-shrink:0;
+}
+.panel-hdr h2 { margin:0; font-size:1.05rem; color:white; font-weight:700; }
+.panel-close {
+  background:none; border:none; color:rgba(255,255,255,0.8);
+  font-size:1.6rem; cursor:pointer; padding:0 4px; line-height:1;
+}
+.panel-close:hover { color:white; }
+.panel-body { flex:1; overflow-y:auto; padding:20px; }
+.header-gear {
+  margin-left:auto; align-self:center;
+  background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.3);
+  color:rgba(255,255,255,0.85); border-radius:6px; padding:7px 14px; cursor:pointer;
+  font-size:.85rem; line-height:1; transition:background .15s; white-space:nowrap;
+  margin-right:8px;
+}
+.header-gear:hover { background:rgba(255,255,255,0.28); }
+
 .tag { border-radius: 4px; padding: 2px 8px; font-size: 0.78rem; }
 .tag-sunday { background: #e8eaf5; color: #2c3e6b; }
 .tag-service { background: #fef3cd; color: #856404; }
@@ -234,16 +268,87 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 <div class="tabs">
   <button class="tab-btn active" id="tab-btn-people">People &amp; Availability</button>
   <button class="tab-btn" id="tab-btn-schedule">Schedule</button>
-  <button class="tab-btn" id="tab-btn-settings">&#9881; Settings</button>
-  <button class="tab-btn" id="tab-btn-breeze">&#9729; Breeze Sync</button>
   <button class="tab-btn" id="tab-btn-stats">&#128202; Stats</button>
+  <button class="header-gear" id="btn-open-settings" title="Settings">&#9881; Settings</button>
 </div>
 
 <!-- ══ PEOPLE TAB ══════════════════════════════════════════════════════════ -->
 <div id="tab-people" class="tab-content active">
   <div class="card">
-    <h2>Add / Edit Person</h2>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <h2 style="margin:0;">Volunteers (<span id="people-count">0</span>)</h2>
+      <button class="btn btn-primary btn-sm" id="btn-open-person-panel" style="margin-left:auto;">+ Add Person</button>
+      <input type="search" id="people-search" placeholder="Filter by name, role, or service…"
+             style="max-width:240px;font-size:.85rem;" oninput="peopleSearchQuery=this.value;renderPeopleList();">
+    </div>
+    <div id="people-list" style="overflow-x:auto;"></div>
+  </div>
+</div>
 
+<!-- ══ SCHEDULE TAB ════════════════════════════════════════════════════════ -->
+<div id="tab-schedule" class="tab-content">
+  <div class="card">
+    <h2>Generate Schedule</h2>
+    <div class="schedule-controls">
+      <div class="field">
+        <label>Start Date</label>
+        <input type="date" id="start-date">
+      </div>
+      <div class="field">
+        <label>End Date</label>
+        <input type="date" id="end-date">
+      </div>
+      <button class="btn btn-primary" id="btn-generate">Generate Schedule</button>
+      <button class="btn btn-outline" id="btn-autofill" title="Auto-fill empty slots using volunteer history">&#9889; Auto-Fill Empty Slots</button>
+    </div>
+    <div id="schedule-alert"></div>
+  </div>
+
+  <div class="card" id="schedule-output" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <h2 style="margin:0; border:none; padding:0;">Schedule</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-success btn-sm" id="btn-export-csv">Export CSV</button>
+        <button class="btn btn-outline btn-sm" id="btn-export-ical">&#128197; iCal</button>
+        <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
+        <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:#e8f4fd;border-color:#3498db;color:#2980b9;">&#9993; Send Reminder Emails</button>
+        <button class="btn btn-outline btn-sm" id="btn-sync-confirmations" style="background:#f0fff4;border-color:#27ae60;color:#1a7a42;">&#8635; Sync Confirmations</button>
+        <button class="btn btn-outline btn-sm" id="btn-restore-tokens" style="background:#fdf6e8;border-color:#e0a800;color:#7a5500;" title="Re-upload RSVP tokens to Worker KV without re-sending emails">&#128274; Re-store Tokens</button>
+        <span id="email-send-status" style="font-size:0.82rem;color:#555;"></span>
+        <button class="btn btn-danger btn-sm" id="btn-clear-schedule">Clear Schedule</button>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3d5a8a;"></div> Per-service (8am / 10:45am)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#247a52;"></div> Shared (both services)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fff3f3;border:1px solid #f5c6cb;"></div> Unfilled</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f0fff4;border:1px solid #c3e6cb;"></div> Filled</div>
+    </div>
+    <div class="table-wrapper">
+      <table id="schedule-table">
+        <thead id="schedule-thead"></thead>
+        <tbody id="schedule-tbody"></tbody>
+      </table>
+    </div>
+    <div id="assignment-summary" class="summary-bar"></div>
+  </div>
+</div>
+
+<div id="tab-settings" class="tab-content"></div>
+
+<div id="tab-breeze" class="tab-content"></div>
+
+
+<!-- ══ PANEL OVERLAY ═══════════════════════════════════════════════════════ -->
+<div id="panel-overlay" class="panel-overlay"></div>
+
+<!-- ══ PERSON ADD/EDIT PANEL ═══════════════════════════════════════════════ -->
+<div id="person-panel" class="side-panel">
+  <div class="panel-hdr">
+    <h2 id="person-panel-title">Add Person</h2>
+    <button class="panel-close" id="btn-close-person-panel">&times;</button>
+  </div>
+  <div class="panel-body">
     <div id="breeze-import-section" style="background:#f0f4ff;border:1px solid #c8d4f0;border-radius:6px;padding:12px 14px;margin-bottom:16px;">
       <label style="font-weight:600;margin-bottom:6px;display:block;">&#128269; Search Breeze to Import</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -316,75 +421,21 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
     <div id="blackout-date-error" style="font-size:0.8rem;color:#c0392b;margin-top:4px;display:none;">Please pick a Sunday.</div>
     <div id="blackout-chips"></div>
 
-    <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid #eee;padding-top:16px;">
       <button class="btn btn-primary" id="btn-save-person">Save Person</button>
       <button class="btn btn-outline" id="btn-clear-form">Clear</button>
     </div>
   </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-      <h2 style="margin:0;">All People (<span id="people-count">0</span>)</h2>
-      <input type="search" id="people-search" placeholder="Filter by name, role, or service…"
-             style="margin-left:auto;max-width:280px;font-size:.85rem;" oninput="peopleSearchQuery=this.value;renderPeopleList();">
-    </div>
-    <div id="people-list" style="overflow-x:auto;"></div>
-  </div>
 </div>
 
-<!-- ══ SCHEDULE TAB ════════════════════════════════════════════════════════ -->
-<div id="tab-schedule" class="tab-content">
-  <div class="card">
-    <h2>Generate Schedule</h2>
-    <div class="schedule-controls">
-      <div class="field">
-        <label>Start Date</label>
-        <input type="date" id="start-date">
-      </div>
-      <div class="field">
-        <label>End Date</label>
-        <input type="date" id="end-date">
-      </div>
-      <button class="btn btn-primary" id="btn-generate">Generate Schedule</button>
-      <button class="btn btn-outline" id="btn-autofill" title="Auto-fill empty slots using volunteer history">&#9889; Auto-Fill Empty Slots</button>
-    </div>
-    <div id="schedule-alert"></div>
+<!-- ══ SETTINGS PANEL ══════════════════════════════════════════════════════ -->
+<div id="settings-panel" class="side-panel">
+  <div class="panel-hdr">
+    <h2>Settings</h2>
+    <button class="panel-close" id="btn-close-settings-panel">&times;</button>
   </div>
-
-  <div class="card" id="schedule-output" style="display:none;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-      <h2 style="margin:0; border:none; padding:0;">Schedule</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-success btn-sm" id="btn-export-csv">Export CSV</button>
-        <button class="btn btn-outline btn-sm" id="btn-export-ical">&#128197; iCal</button>
-        <button class="btn btn-outline btn-sm" id="btn-print">Print</button>
-        <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:#e8f4fd;border-color:#3498db;color:#2980b9;">&#9993; Send Reminder Emails</button>
-        <button class="btn btn-outline btn-sm" id="btn-sync-confirmations" style="background:#f0fff4;border-color:#27ae60;color:#1a7a42;">&#8635; Sync Confirmations</button>
-        <button class="btn btn-outline btn-sm" id="btn-restore-tokens" style="background:#fdf6e8;border-color:#e0a800;color:#7a5500;" title="Re-upload RSVP tokens to Worker KV without re-sending emails">&#128274; Re-store Tokens</button>
-        <span id="email-send-status" style="font-size:0.82rem;color:#555;"></span>
-        <button class="btn btn-danger btn-sm" id="btn-clear-schedule">Clear Schedule</button>
-      </div>
-    </div>
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:#3d5a8a;"></div> Per-service (8am / 10:45am)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#247a52;"></div> Shared (both services)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#fff3f3;border:1px solid #f5c6cb;"></div> Unfilled</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#f0fff4;border:1px solid #c3e6cb;"></div> Filled</div>
-    </div>
-    <div class="table-wrapper">
-      <table id="schedule-table">
-        <thead id="schedule-thead"></thead>
-        <tbody id="schedule-tbody"></tbody>
-      </table>
-    </div>
-    <div id="assignment-summary" class="summary-bar"></div>
-  </div>
-</div>
-
-<!-- ══ SETTINGS TAB ════════════════════════════════════════════════════════ -->
-<div id="tab-settings" class="tab-content">
-  <div class="card">
-    <h2>Breeze CHMS Connection</h2>
+  <div class="panel-body">
+    <h3 style="margin:0 0 12px;font-size:1rem;color:#2c3e6b;">Breeze CHMS Connection</h3>
     <p style="font-size:0.88rem;color:#555;margin-bottom:14px;">
       Enter your Breeze subdomain and API key to enable syncing volunteers to Breeze.
       Your credentials are stored only in this browser's localStorage.
@@ -393,60 +444,55 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
     <label for="breeze-subdomain">Breeze Subdomain</label>
     <div style="display:flex;align-items:center;gap:8px;">
       <span style="color:#666;font-size:0.9rem;white-space:nowrap;">https://</span>
-      <input type="text" id="breeze-subdomain" placeholder="mychurch" style="max-width:240px;">
+      <input type="text" id="breeze-subdomain" placeholder="mychurch" style="max-width:200px;">
       <span style="color:#666;font-size:0.9rem;white-space:nowrap;">.breezechms.com</span>
     </div>
 
-    <label for="breeze-apikey">API Key</label>
-    <input type="password" id="breeze-apikey" placeholder="Paste your Breeze API key here" style="max-width:400px;">
+    <label for="breeze-apikey" style="margin-top:12px;">API Key</label>
+    <input type="password" id="breeze-apikey" placeholder="Paste your Breeze API key here" style="max-width:360px;">
     <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
       Find this in Breeze: Settings &rarr; Advanced &rarr; API
     </small>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
       <label for="breeze-worker-url">Cloudflare Worker Proxy URL</label>
-      <input type="text" id="breeze-worker-url" placeholder="https://your-worker.workers.dev" style="max-width:420px;">
+      <input type="text" id="breeze-worker-url" placeholder="https://your-worker.workers.dev" style="max-width:380px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
         Required for browser access. Paste the Worker URL after deploying <strong>breeze-proxy-worker.js</strong> to Cloudflare.
-        See instructions on the <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a>.
       </small>
     </div>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
       <label for="breeze-worker-secret">Worker Secret <span style="font-weight:normal;color:#888;">(recommended)</span></label>
-      <input type="password" id="breeze-worker-secret" placeholder="Paste your WORKER_SECRET value" style="max-width:420px;">
+      <input type="password" id="breeze-worker-secret" placeholder="Paste your WORKER_SECRET value" style="max-width:380px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
         In Cloudflare Dashboard: Worker Settings &rarr; Variables &rarr; add <code>WORKER_SECRET</code> = any long random string.
-        Paste the same value here. This prevents unauthorized use of your Worker.
       </small>
     </div>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
       <label for="breeze-tag-id">Members Tag ID <span style="font-weight:normal;color:#888;">(optional)</span></label>
-      <input type="text" id="breeze-tag-id" placeholder="e.g. 4884325" style="max-width:240px;">
+      <input type="text" id="breeze-tag-id" placeholder="e.g. 4884325" style="max-width:200px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        Limits people search to a specific Breeze tag (e.g. "Members"). Find the tag ID in the URL when viewing the tag in Breeze:
+        Limits people search to a specific Breeze tag. Find the tag ID in the Breeze URL:
         <code>people/filter#/tag_contains=y_XXXXXXX</code>
       </small>
       <label for="breeze-fieldworkers-tag-id" style="margin-top:12px;display:block;">Fieldworkers Tag ID <span style="font-weight:normal;color:#888;">(optional)</span></label>
-      <input type="text" id="breeze-fieldworkers-tag-id" placeholder="e.g. 5123456" style="max-width:240px;">
+      <input type="text" id="breeze-fieldworkers-tag-id" placeholder="e.g. 5123456" style="max-width:200px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        If set, people searches will also include those tagged as Fieldworkers. Results from both tags are combined automatically.
+        If set, people searches also include those tagged as Fieldworkers.
       </small>
     </div>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
       <label style="font-weight:600;">Breeze Role ID Map</label>
       <p style="font-size:0.82rem;color:#555;margin:4px 0 10px;">
-        Enter the Breeze role ID for each role in each service. To find role IDs:
-        go to your Breeze event page, press <strong>Cmd+U</strong> (View Source),
-        then search for <code>data-role_id</code>. Each result looks like
-        <code>data-role_id="401344"</code> followed by the role name.
+        Enter the Breeze role ID for each role. Find role IDs in Breeze event page source: search for <code>data-role_id</code>.
       </p>
       <div style="display:flex;gap:24px;flex-wrap:wrap;">
         <div>
           <label style="font-size:0.85rem;font-weight:600;">8am Service</label>
-          <textarea id="breeze-rolemap-8am" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:260px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
+          <textarea id="breeze-rolemap-8am" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:220px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
 Acolyte =
 PowerPoint =
 Lector =
@@ -456,7 +502,7 @@ Childrens Message = "></textarea>
         </div>
         <div>
           <label style="font-size:0.85rem;font-weight:600;">10:45am Service</label>
-          <textarea id="breeze-rolemap-1045" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:260px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
+          <textarea id="breeze-rolemap-1045" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:220px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
 Acolyte =
 PowerPoint =
 Lector =
@@ -470,31 +516,19 @@ Childrens Message = "></textarea>
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
       <label style="font-weight:600;">Volunteer Reminder Emails</label>
       <p style="font-size:0.82rem;color:#555;margin:4px 0 10px;">
-        Send personalized reminder emails to volunteers directly from this app via
-        <a href="https://resend.com" target="_blank" style="color:#2c3e6b;">Resend</a>
-        (free up to 3,000 emails/month).
-        Sign up at resend.com, add and verify your domain (e.g. <code>timothystl.org</code>),
-        then paste your API key below. Once configured, add email addresses to each person
-        in the People tab, then click "Send Reminder Emails" on the Schedule tab.
+        Send personalized reminder emails via <a href="https://resend.com" target="_blank" style="color:#2c3e6b;">Resend</a> (free up to 3,000/month).
       </p>
       <label for="email-resend-key">Resend API Key</label>
-      <input type="password" id="email-resend-key" placeholder="re_xxxxxxxxxxxxxxxx" style="max-width:360px;">
-      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        Create an API key in your Resend dashboard → API Keys.
-      </small>
+      <input type="password" id="email-resend-key" placeholder="re_xxxxxxxxxxxxxxxx" style="max-width:320px;">
       <label for="email-from" style="margin-top:12px;">From Address</label>
       <input type="email" id="email-from" placeholder="dinger@reminder.timothystl.org" style="max-width:320px;">
-      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        Must be on a domain verified in Resend. Emails will appear to come from this address.
-      </small>
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">Must be on a domain verified in Resend.</small>
       <label for="email-reply-to" style="margin-top:12px;">Reply-To Address</label>
       <input type="email" id="email-reply-to" placeholder="dinger@timothystl.org" style="max-width:320px;">
-      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        Where volunteer replies are sent. Use your real inbox (e.g. dinger@timothystl.org).
-      </small>
+      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">Where volunteer replies are sent.</small>
     </div>
 
-    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid #eee;padding-top:16px;">
       <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
       <button class="btn btn-outline" id="btn-test-breeze">Test Connection</button>
       <span id="settings-status" style="font-size:0.88rem;"></span>
@@ -503,49 +537,21 @@ Childrens Message = "></textarea>
   </div>
 </div>
 
-<!-- ══ BREEZE SYNC TAB ═════════════════════════════════════════════════════ -->
-<div id="tab-breeze" class="tab-content">
-  <div id="breeze-no-settings" class="alert alert-warning" style="display:none;">
-    &#9888; Please configure your Breeze credentials in the <strong>Settings</strong> tab first.
-  </div>
-  <div id="breeze-no-schedule" class="alert alert-warning" style="display:none;">
-    &#9888; No schedule generated yet. Go to the <strong>Schedule</strong> tab and generate a schedule first.
-  </div>
-
-  <!-- Step 1: Map events -->
-  <div class="card sync-step" id="sync-step2">
-    <div class="sync-step-header">
-      <div class="step-badge">1</div>
-      <div class="step-title">Match Sundays to Breeze Event Instances</div>
+<!-- ══ STATS TAB ════════════════════════════════════════════════════════════ -->
+<div id="tab-stats" class="tab-content">
+  <div class="card">
+    <h2>&#128202; Volunteer Statistics</h2>
+    <div class="stats-filter">
+      <label>Date range:</label>
+      <input type="date" id="stats-from">
+      <span style="color:#999;font-size:.82rem;">to</span>
+      <input type="date" id="stats-to">
+      <button class="btn btn-outline btn-sm" onclick="renderStatsTab()">Apply</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('stats-from').value='';document.getElementById('stats-to').value='';renderStatsTab();">All time</button>
     </div>
-    <p style="font-size:0.85rem;color:#555;margin-bottom:12px;">
-      Fetch your Breeze events for the schedule period, then match each Sunday to the correct 8am and 10:45am event instances.
-    </p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-      <input type="text" id="event-filter" placeholder="Filter by event name (e.g. Worship)" style="max-width:260px;">
-      <button class="btn btn-outline" id="btn-fetch-events">Fetch Events from Breeze</button>
-      <span id="fetch-events-status" style="font-size:0.85rem;color:#555;"></span>
+    <div id="stats-content">
+      <p style="color:#aaa;font-size:0.85rem;">Generate or load a schedule to see statistics.</p>
     </div>
-    <div id="event-map-container">
-      <p style="font-size:0.85rem;color:#888;">Fetch events above to begin mapping.</p>
-    </div>
-  </div>
-
-  <!-- Step 2: Push -->
-  <div class="card sync-step" id="sync-step3">
-    <div class="sync-step-header">
-      <div class="step-badge">2</div>
-      <div class="step-title">Sync Schedule to Breeze</div>
-    </div>
-    <p style="font-size:0.85rem;color:#555;margin-bottom:12px;">
-      For each mapped Sunday, this will <strong>remove all existing volunteers</strong> from the Breeze event instances
-      and then add everyone from your schedule. Sundays without a Breeze event mapped will be skipped.
-    </p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <button class="btn btn-success" id="btn-sync-breeze">Sync to Breeze</button>
-      <span id="sync-overall-status" style="font-size:0.88rem;"></span>
-    </div>
-    <div id="sync-log" class="log-box" style="display:none;"></div>
   </div>
 </div>
 
@@ -578,7 +584,7 @@ var PER_ROLES    = ['Elder', 'Acolyte', 'PowerPoint', 'Lector', 'Liturgist'];
 var SHARED_ROLES = ['Preacher', 'Childrens Message'];
 var SHARED_LABELS = { 'Childrens Message': "Children's Message" };
 function roleLabel(r) { return SHARED_LABELS[r] || r; }
-var ALL_TABS = ['people','schedule','settings','breeze','stats'];
+var ALL_TABS = ['people','schedule','stats'];
 
 // ══════════════════════════════════════════════════════════════════
 // STORAGE
@@ -650,13 +656,41 @@ function showTab(name) {
     document.getElementById('tab-' + t).classList.toggle('active', t === name);
     document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
   });
-  if (name === 'people')   renderPeopleList();
-  if (name === 'settings') loadSettingsForm();
-  if (name === 'breeze')   initBreezeTab();
-  if (name === 'stats')    renderStatsTab();
+  if (name === 'people') renderPeopleList();
+  if (name === 'stats')  renderStatsTab();
 }
 ALL_TABS.forEach(function(t) {
   document.getElementById('tab-btn-' + t).addEventListener('click', function() { showTab(t); });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// SIDE PANELS
+// ══════════════════════════════════════════════════════════════════
+function openPanel(panelId) {
+  document.getElementById('panel-overlay').classList.add('open');
+  document.getElementById(panelId).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeAllPanels() {
+  document.getElementById('panel-overlay').classList.remove('open');
+  document.querySelectorAll('.side-panel').forEach(function(p){ p.classList.remove('open'); });
+  document.body.style.overflow = '';
+}
+function openPersonPanel(title) {
+  document.getElementById('person-panel-title').textContent = title || 'Add Person';
+  openPanel('person-panel');
+  setTimeout(function(){ var el=document.getElementById('person-name'); if(el) el.focus(); }, 280);
+}
+document.getElementById('panel-overlay').addEventListener('click', closeAllPanels);
+document.getElementById('btn-close-person-panel').addEventListener('click', closeAllPanels);
+document.getElementById('btn-close-settings-panel').addEventListener('click', closeAllPanels);
+document.getElementById('btn-open-person-panel').addEventListener('click', function() {
+  clearForm();
+  openPersonPanel('Add Person');
+});
+document.getElementById('btn-open-settings').addEventListener('click', function() {
+  loadSettingsForm();
+  openPanel('settings-panel');
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -770,6 +804,7 @@ function savePerson() {
   }
   savePeople(people);
   clearForm();
+  closeAllPanels();
   renderPeopleList();
 }
 
@@ -901,7 +936,7 @@ function editPerson(id) {
   syncLabels('pref-sundays'); syncLabels('pref-roles'); syncLabels('primary-roles');
   currentBlackouts = (person.blackoutDates || []).slice();
   renderBlackoutChips();
-  window.scrollTo(0,0); document.getElementById('person-name').focus();
+  openPersonPanel('Edit Person');
 }
 
 function deletePerson(id) {
@@ -2673,24 +2708,5 @@ function renderStatsTab() {
 
 
 </script>
-
-<!-- ══ STATS TAB ════════════════════════════════════════════════════════════ -->
-<div id="tab-stats" class="tab-content">
-  <div class="card">
-    <h2>&#128202; Volunteer Statistics</h2>
-    <div class="stats-filter">
-      <label>Date range:</label>
-      <input type="date" id="stats-from">
-      <span style="color:#999;font-size:.82rem;">to</span>
-      <input type="date" id="stats-to">
-      <button class="btn btn-outline btn-sm" onclick="renderStatsTab()">Apply</button>
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('stats-from').value='';document.getElementById('stats-to').value='';renderStatsTab();">All time</button>
-    </div>
-    <div id="stats-content">
-      <p style="color:#aaa;font-size:0.85rem;">Generate or load a schedule to see statistics.</p>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>
