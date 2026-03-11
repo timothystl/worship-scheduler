@@ -287,12 +287,11 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 .special-summary:hover td { background:#fef3d0; }
 .ss-special-name { font-size:.82rem; font-weight:700; color:#b7631a; }
 .special-badge { font-size:.7rem; font-weight:700; background:#ffe5b0; color:#8a5000; border-radius:8px; padding:1px 8px; }
-.special-detail-card { padding:10px 14px; }
-.svc-time-block { margin-bottom:12px; border-left:3px solid #e6c080; padding-left:10px; }
-.svc-time-block strong { font-size:.85rem; color:#8a5000; display:block; margin-bottom:6px; }
-.svc-roles-grid { display:flex; flex-wrap:wrap; gap:8px; }
-.svc-role-item { display:flex; flex-direction:column; gap:2px; min-width:140px; }
-.svc-role-item label { font-size:.75rem; color:#555; font-weight:600; }
+.svc-special { background:#fef3d8; color:#8a5000; font-size:.8rem; font-weight:600; }
+.na-cell { background:#f8f8f8; }
+.btn-edit-special, .btn-delete-special { background:none; border:none; cursor:pointer; font-size:.85rem; padding:0 4px; opacity:.55; transition:opacity .15s; margin-left:2px; }
+.btn-edit-special:hover  { opacity:1; color:#2c3e6b; }
+.btn-delete-special:hover{ opacity:1; color:#c00; }
 .special-expanded { padding:14px 16px; display:flex; flex-wrap:wrap; gap:12px; }
 .special-svc-block { background:#fff; border:1px solid #e2d9c8; border-radius:8px; padding:10px 14px; min-width:190px; }
 .special-svc-time { font-weight:700; color:#2c3e6b; font-size:.85rem; margin-bottom:8px; border-bottom:1px solid #e8e4d8; padding-bottom:6px; }
@@ -1440,10 +1439,21 @@ document.getElementById('btn-add-special').addEventListener('click', function() 
   document.getElementById('special-name').value = '';
   document.getElementById('special-services-list').innerHTML = '';
   addSpecialSvcTimeRow();
+  // Reset any lingering edit mode
+  var saveBtn = document.getElementById('btn-save-special');
+  saveBtn.removeAttribute('data-edit-idx');
+  saveBtn.textContent = 'Add to Schedule';
+  document.getElementById('special-panel-title').textContent = 'Add Special Service';
   openPanel('special-panel');
 });
 
-document.getElementById('btn-close-special-panel').addEventListener('click', closeAllPanels);
+document.getElementById('btn-close-special-panel').addEventListener('click', function() {
+  var saveBtn = document.getElementById('btn-save-special');
+  saveBtn.removeAttribute('data-edit-idx');
+  saveBtn.textContent = 'Add to Schedule';
+  document.getElementById('special-panel-title').textContent = 'Add Special Service';
+  closeAllPanels();
+});
 
 window.addEventListener('beforeunload', function(e) {
   if (isDirty) { e.preventDefault(); e.returnValue = ''; }
@@ -1563,29 +1573,53 @@ function renderTable(people, counts) {
         +'<span class="ss-special-name">'+esc(row.name||'Special Service')+'</span>'
         +'<span class="special-badge">Special</span>'
         +'<span class="ss-fill" style="color:'+fillColor+'">'+filled+'/'+total+' filled</span>'
+        +'<button class="btn-edit-special"   data-idx="'+rowIdx+'" title="Edit">&#9998;</button>'
+        +'<button class="btn-delete-special" data-idx="'+rowIdx+'" title="Delete">&#128465;</button>'
         +'</div></td></tr>';
 
-      // Special detail row
-      var detailHtml = '<div class="special-detail-card">';
+      // One detail row per service time, cells aligned to table columns
+      var numSvcs = (row.services||[]).length;
       (row.services||[]).forEach(function(svc, svcIdx) {
-        detailHtml += '<div class="svc-time-block"><strong>'+esc(svc.time||'Service')+'</strong><div class="svc-roles-grid">';
-        (svc.roles||[]).forEach(function(role){
-          var pid = (svc.assignments||{})[role] || '';
-          var opts = '<option value="">-- unassigned --</option>';
-          allPeople.filter(function(p){
-            return p.roles.indexOf(role)>-1 && (p.blackoutDates||[]).indexOf(dateISO)===-1;
-          }).forEach(function(p){
-            opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
-          });
-          detailHtml += '<div class="svc-role-item">'
-            +'<label>'+esc(roleLabel(role))+'</label>'
-            +'<select class="cell-select" data-row="'+rowIdx+'" data-svc-idx="'+svcIdx+'" data-role="'+esc(role)+'" data-special="1">'+opts+'</select>'
-            +'</div>';
+        var svcRow = '<tr class="sunday-detail row-special" data-idx="'+rowIdx+'">';
+        // Date cell only on first service-time row; spans all service-time rows
+        if (svcIdx === 0) {
+          svcRow += '<td class="date-cell" rowspan="'+numSvcs+'">'+esc(fmtDate(row.date))+'</td>';
+        }
+        // Svc column — time label, aligned under the "Svc" header
+        svcRow += '<td class="svc-label svc-special">'+esc(svc.time||'Service')+'</td>';
+        // Per-service role columns
+        PER_ROLES.forEach(function(role) {
+          if ((svc.roles||[]).indexOf(role) > -1) {
+            var pid = (svc.assignments||{})[role] || '';
+            var opts = '<option value="">-- unassigned --</option>';
+            allPeople.filter(function(p){
+              return p.roles.indexOf(role)>-1 && (p.blackoutDates||[]).indexOf(dateISO)===-1;
+            }).forEach(function(p){
+              opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+            });
+            svcRow += '<td><select class="cell-select" data-row="'+rowIdx+'" data-svc-idx="'+svcIdx+'" data-role="'+esc(role)+'" data-special="1">'+opts+'</select></td>';
+          } else {
+            svcRow += '<td class="na-cell"></td>';
+          }
         });
-        detailHtml += '</div></div>';
+        // Shared role columns
+        SHARED_ROLES.forEach(function(role) {
+          if ((svc.roles||[]).indexOf(role) > -1) {
+            var pid = (svc.assignments||{})[role] || '';
+            var opts = '<option value="">-- unassigned --</option>';
+            allPeople.filter(function(p){
+              return p.roles.indexOf(role)>-1 && (p.blackoutDates||[]).indexOf(dateISO)===-1;
+            }).forEach(function(p){
+              opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+            });
+            svcRow += '<td class="shared-col"><select class="cell-select" data-row="'+rowIdx+'" data-svc-idx="'+svcIdx+'" data-role="'+esc(role)+'" data-special="1">'+opts+'</select></td>';
+          } else {
+            svcRow += '<td class="shared-col na-cell"></td>';
+          }
+        });
+        svcRow += '</tr>';
+        bodyHtml += svcRow;
       });
-      detailHtml += '</div>';
-      bodyHtml += '<tr class="sunday-detail" data-idx="'+rowIdx+'"><td colspan="'+totalCols+'">'+detailHtml+'</td></tr>';
       return;
     }
 
@@ -1754,6 +1788,38 @@ document.getElementById('schedule-table').addEventListener('change', function(e)
 
 // Sunday summary row: click to expand/collapse detail rows
 document.getElementById('schedule-table').addEventListener('click', function(e) {
+  // Delete special service
+  if (e.target.closest('.btn-delete-special')) {
+    var delBtn = e.target.closest('.btn-delete-special');
+    var delIdx = parseInt(delBtn.getAttribute('data-idx'), 10);
+    var delName = currentSchedule[delIdx] && (currentSchedule[delIdx].name || 'this special service');
+    if (confirm('Delete "'+delName+'"?')) {
+      currentSchedule.splice(delIdx, 1);
+      saveCurrentMonth();
+      setDirty(false);
+      renderTable(getPeople(), null);
+    }
+    return;
+  }
+  // Edit special service — open panel pre-filled
+  if (e.target.closest('.btn-edit-special')) {
+    var editBtn = e.target.closest('.btn-edit-special');
+    var editIdx = parseInt(editBtn.getAttribute('data-idx'), 10);
+    var editRow = currentSchedule[editIdx];
+    document.getElementById('special-date').value = editRow.date.toISOString().slice(0,10);
+    document.getElementById('special-name').value = editRow.name || '';
+    var editList = document.getElementById('special-services-list');
+    editList.innerHTML = '';
+    (editRow.services||[]).forEach(function(svc) {
+      addSpecialSvcTimeRow(svc.time, svc.roles);
+    });
+    document.getElementById('special-panel-title').textContent = 'Edit Special Service';
+    var saveBtn = document.getElementById('btn-save-special');
+    saveBtn.textContent = 'Update Service';
+    saveBtn.setAttribute('data-edit-idx', editIdx);
+    openPanel('special-panel');
+    return;
+  }
   var summaryRow = e.target.closest('.sunday-summary');
   if (!summaryRow) return;
   var idx = summaryRow.getAttribute('data-idx');
@@ -3372,7 +3438,7 @@ function renderStatsTab() {
 // ══════════════════════════════════════════════════════════════════
 // SPECIAL SERVICE PANEL
 // ══════════════════════════════════════════════════════════════════
-function addSpecialSvcTimeRow() {
+function addSpecialSvcTimeRow(timeVal, preSelectedRoles) {
   var list = document.getElementById('special-services-list');
   var idx = list.querySelectorAll('.special-svc-row').length;
   // Build role checkboxes (all known roles)
@@ -3393,6 +3459,13 @@ function addSpecialSvcTimeRow() {
     +'<div class="svc-role-checks" style="display:flex;flex-wrap:wrap;gap:2px;">'+roleCheckboxes+'</div>';
   row.querySelector('.btn-remove-svc').addEventListener('click', function(){ list.removeChild(row); });
   list.appendChild(row);
+  // Pre-fill if editing an existing service time
+  if (timeVal) row.querySelector('.svc-time-input').value = timeVal;
+  if (preSelectedRoles) {
+    row.querySelectorAll('.svc-role-checks input[type="checkbox"]').forEach(function(cb) {
+      if (preSelectedRoles.indexOf(cb.getAttribute('data-role')) > -1) cb.checked = true;
+    });
+  }
 }
 
 document.getElementById('btn-add-svc-time').addEventListener('click', addSpecialSvcTimeRow);
@@ -3414,22 +3487,40 @@ document.getElementById('btn-save-special').addEventListener('click', function()
   });
   if (!services.length) { showAlert('special-alert','Add at least one service time with roles.','warning'); return; }
 
-  var specialRow = {
-    type: 'special',
-    date: new Date(date+'T12:00:00'),
-    name: name,
-    services: services
-  };
+  var saveBtn = this;
+  var editIdx = saveBtn.getAttribute('data-edit-idx');
+  var specialRow = { type:'special', date:new Date(date+'T12:00:00'), name:name, services:services };
+  var successMsg;
 
-  // Insert in date order
-  currentSchedule.push(specialRow);
+  if (editIdx !== null && editIdx !== '') {
+    // Editing — preserve existing assignments for matching svc-time/role pairs
+    var oldSvcs = (currentSchedule[parseInt(editIdx,10)] || {}).services || [];
+    specialRow.services.forEach(function(svc, i) {
+      var oldSvc = oldSvcs[i];
+      if (oldSvc && oldSvc.assignments) {
+        svc.assignments = {};
+        svc.roles.forEach(function(r) {
+          if (oldSvc.assignments[r]) svc.assignments[r] = oldSvc.assignments[r];
+        });
+      }
+    });
+    currentSchedule[parseInt(editIdx,10)] = specialRow;
+    saveBtn.removeAttribute('data-edit-idx');
+    saveBtn.textContent = 'Add to Schedule';
+    document.getElementById('special-panel-title').textContent = 'Add Special Service';
+    successMsg = 'Special service "'+name+'" updated.';
+  } else {
+    currentSchedule.push(specialRow);
+    successMsg = 'Special service "'+name+'" added.';
+  }
+
   currentSchedule.sort(function(a,b){ return a.date - b.date; });
   saveCurrentMonth();
   setDirty(false);
   renderTable(getPeople(), null);
   document.getElementById('schedule-output').style.display = 'block';
   closeAllPanels();
-  showAlert('schedule-alert', 'Special service "'+name+'" added.', 'success');
+  showAlert('schedule-alert', successMsg, 'success');
 });
 
 // ══════════════════════════════════════════════════════════════════
