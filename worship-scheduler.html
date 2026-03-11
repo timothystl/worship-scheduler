@@ -2945,6 +2945,18 @@ function getGistSettings() {
 }
 function saveGistSettings(o) { localStorage.setItem('ws_gist_settings', JSON.stringify(o)); }
 
+// Read token/gistId from the live input fields (so user doesn't have to hit Save Settings first)
+// Merges with any already-saved settings and persists before returning.
+function resolveGistSettings() {
+  var s = getGistSettings();
+  var tokenEl = document.getElementById('gist-token');
+  var idEl    = document.getElementById('gist-id');
+  if (tokenEl && tokenEl.value.trim()) s.token  = tokenEl.value.trim();
+  if (idEl    && idEl.value.trim())    s.gistId = idEl.value.trim();
+  saveGistSettings(s);
+  return s;
+}
+
 function updateGistStatus(msg, isError) {
   var el = document.getElementById('gist-status');
   if (!el) return;
@@ -2975,7 +2987,7 @@ function buildGistFiles() {
 }
 
 async function createGist() {
-  var s = getGistSettings();
+  var s = resolveGistSettings();
   if (!s.token) { updateGistStatus('Enter a GitHub token first.', true); return; }
   updateGistStatus('Creating Gist…');
   try {
@@ -3008,7 +3020,7 @@ function queueGistPush() {
 }
 
 async function pushToGist() {
-  var s = getGistSettings();
+  var s = resolveGistSettings();
   if (!s.token || !s.gistId) { updateGistStatus('Enter token and Gist ID first.', true); return; }
   updateGistStatus('Syncing\u2026');
   try {
@@ -3025,7 +3037,7 @@ async function pushToGist() {
 }
 
 async function pullFromGist() {
-  var s = getGistSettings();
+  var s = resolveGistSettings();
   if (!s.token || !s.gistId) { updateGistStatus('Enter token and Gist ID first.', true); return; }
   updateGistStatus('Pulling\u2026');
   try {
