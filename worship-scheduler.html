@@ -590,46 +590,12 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
     </div>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
-      <label for="breeze-tag-id">Members Tag ID <span style="font-weight:normal;color:#888;">(optional)</span></label>
-      <input type="text" id="breeze-tag-id" placeholder="e.g. 4884325" style="max-width:200px;">
+      <label for="breeze-tag-ids">Breeze Tag IDs <span style="font-weight:normal;color:#888;">(optional)</span></label>
+      <input type="text" id="breeze-tag-ids" placeholder="e.g. 4884325, 5123456" style="max-width:280px;">
       <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        Limits people search to a specific Breeze tag. Find the tag ID in the Breeze URL:
-        <code>people/filter#/tag_contains=y_XXXXXXX</code>
+        Comma-separated tag IDs to include in people search. Leave blank to search all.
+        Find tag IDs in the Breeze URL: <code>people/filter#/tag_contains=y_XXXXXXX</code>
       </small>
-      <label for="breeze-fieldworkers-tag-id" style="margin-top:12px;display:block;">Fieldworkers Tag ID <span style="font-weight:normal;color:#888;">(optional)</span></label>
-      <input type="text" id="breeze-fieldworkers-tag-id" placeholder="e.g. 5123456" style="max-width:200px;">
-      <small style="color:#888;font-size:0.78rem;display:block;margin-top:4px;">
-        If set, people searches also include those tagged as Fieldworkers.
-      </small>
-    </div>
-
-    <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
-      <label style="font-weight:600;">Breeze Role ID Map</label>
-      <p style="font-size:0.82rem;color:#555;margin:4px 0 10px;">
-        Enter the Breeze role ID for each role. Find role IDs in Breeze event page source: search for <code>data-role_id</code>.
-      </p>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;">
-        <div>
-          <label style="font-size:0.85rem;font-weight:600;">8am Service</label>
-          <textarea id="breeze-rolemap-8am" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:220px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
-Acolyte =
-PowerPoint =
-Lector =
-Liturgist =
-Preacher =
-Childrens Message = "></textarea>
-        </div>
-        <div>
-          <label style="font-size:0.85rem;font-weight:600;">10:45am Service</label>
-          <textarea id="breeze-rolemap-1045" rows="7" style="display:block;margin-top:4px;font-family:monospace;font-size:0.8rem;width:220px;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="Elder =
-Acolyte =
-PowerPoint =
-Lector =
-Liturgist =
-Preacher =
-Childrens Message = "></textarea>
-        </div>
-      </div>
     </div>
 
     <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
@@ -2384,38 +2350,13 @@ document.getElementById('btn-restore-tokens').addEventListener('click', restoreR
 // ══════════════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════════════
-// Convert a roleMap object {roleName: roleId} to textarea text "Elder = 401344\nAcolyte = 401345\n..."
-// If the stored map is missing a role, show it with a blank value so the user knows to fill it in.
-function roleMapToText(map) {
-  var ALL_ROLES = PER_ROLES.concat(SHARED_ROLES);
-  return ALL_ROLES.map(function(role) {
-    var key = role.toLowerCase().replace(/['']/g, '');
-    return role + ' = ' + (map[key] || '');
-  }).join('\n');
-}
-
-// Parse textarea text back into a roleMap object {normalizedRoleName: roleId}
-function textToRoleMap(text) {
-  var map = {};
-  (text || '').split('\n').forEach(function(line) {
-    var eq = line.indexOf('=');
-    if (eq === -1) return;
-    var name = line.slice(0, eq).trim().toLowerCase().replace(/['']/g, '');
-    var id   = line.slice(eq + 1).trim().replace(/\D/g, '');
-    if (name && id) map[name] = id;
-  });
-  return map;
-}
-
 function loadSettingsForm() {
   var s = getBreezeSettings();
   if (s.subdomain)  document.getElementById('breeze-subdomain').value  = s.subdomain;
   if (s.apiKey)     document.getElementById('breeze-apikey').value     = s.apiKey;
   if (s.workerUrl)  document.getElementById('breeze-worker-url').value = s.workerUrl;
-  if (s.tagId)              document.getElementById('breeze-tag-id').value              = s.tagId;
-  if (s.fieldworkersTagId)  document.getElementById('breeze-fieldworkers-tag-id').value = s.fieldworkersTagId;
-  document.getElementById('breeze-rolemap-8am').value  = roleMapToText(s.roleMap8am  || {});
-  document.getElementById('breeze-rolemap-1045').value = roleMapToText(s.roleMap1045 || {});
+  var tagIds = (s.tagIds || []).join(', ');
+  if (tagIds) document.getElementById('breeze-tag-ids').value = tagIds;
   if (s.resendKey)     document.getElementById('email-resend-key').value     = s.resendKey;
   if (s.emailFrom)     document.getElementById('email-from').value            = s.emailFrom;
   if (s.replyTo)       document.getElementById('email-reply-to').value        = s.replyTo;
@@ -2427,16 +2368,14 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   var apiKey        = document.getElementById('breeze-apikey').value.trim();
   var workerUrl     = document.getElementById('breeze-worker-url').value.trim().replace(/\/$/, '');
   var workerSecret  = document.getElementById('breeze-worker-secret').value.trim();
-  var tagId              = document.getElementById('breeze-tag-id').value.trim().replace(/\D/g,'');
-  var fieldworkersTagId  = document.getElementById('breeze-fieldworkers-tag-id').value.trim().replace(/\D/g,'');
-  var roleMap8am    = textToRoleMap(document.getElementById('breeze-rolemap-8am').value);
-  var roleMap1045   = textToRoleMap(document.getElementById('breeze-rolemap-1045').value);
-  var resendKey     = document.getElementById('email-resend-key').value.trim();
-  var emailFrom     = document.getElementById('email-from').value.trim();
-  var replyTo       = document.getElementById('email-reply-to').value.trim();
+  var tagIds    = document.getElementById('breeze-tag-ids').value
+                    .split(',').map(function(t){ return t.trim().replace(/\D/g,''); }).filter(Boolean);
+  var resendKey = document.getElementById('email-resend-key').value.trim();
+  var emailFrom = document.getElementById('email-from').value.trim();
+  var replyTo   = document.getElementById('email-reply-to').value.trim();
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
-  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, workerSecret:workerSecret, tagId:tagId, fieldworkersTagId:fieldworkersTagId, roleMap8am:roleMap8am, roleMap1045:roleMap1045, resendKey:resendKey, emailFrom:emailFrom, replyTo:replyTo });
+  saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, workerSecret:workerSecret, tagIds:tagIds, resendKey:resendKey, emailFrom:emailFrom, replyTo:replyTo });
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
@@ -2621,14 +2560,11 @@ document.getElementById('btn-breeze-import-search').addEventListener('click', fu
 
   var s = getBreezeSettings();
 
-  // Build one or two fetch promises depending on configured tag IDs
+  // Build fetch promises for each configured tag ID
   var fetches = [];
-  if (s.tagId) {
-    fetches.push(breezeGet('/api/people', { details: 0, limit: 500, filter_json: JSON.stringify({ tag_contains: 'y_' + s.tagId }) }));
-  }
-  if (s.fieldworkersTagId) {
-    fetches.push(breezeGet('/api/people', { details: 0, limit: 500, filter_json: JSON.stringify({ tag_contains: 'y_' + s.fieldworkersTagId }) }));
-  }
+  (s.tagIds || []).forEach(function(id) {
+    if (id) fetches.push(breezeGet('/api/people', { details: 0, limit: 500, filter_json: JSON.stringify({ tag_contains: 'y_' + id }) }));
+  });
   if (!fetches.length) {
     // No tag filter — search all
     fetches.push(breezeGet('/api/people', { details: 0, limit: 500 }));
