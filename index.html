@@ -357,6 +357,11 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
       background:#2c3e6b;color:#fff;font-size:.9rem;font-family:inherit;cursor:pointer;">
       Sign In
     </button>
+    <button id="btn-fb-forgot" style="background:none;border:none;font-size:.78rem;
+      color:#5568a5;cursor:pointer;font-family:inherit;margin-top:6px;
+      text-decoration:underline;display:block;width:100%;text-align:center;">
+      Forgot password / set new password?
+    </button>
     <div id="login-status" style="font-size:.8rem;min-height:20px;margin-top:10px;color:#c00;"></div>
   </div>
 </div>
@@ -3113,14 +3118,37 @@ function fbRegister() {
 function fbSignOut() { fbAuth.signOut(); }
 
 function fbSignInGoogle() {
-  updateLoginStatus('Redirecting to Google…');
+  updateLoginStatus('Opening Google sign-in…');
   var provider = new firebase.auth.GoogleAuthProvider();
-  fbAuth.signInWithRedirect(provider);
+  fbAuth.signInWithPopup(provider)
+    .catch(function(e) {
+      if (e.code === 'auth/popup-blocked') {
+        updateLoginStatus('Popup was blocked. Use Email/Password below instead.', true);
+      } else if (e.code === 'auth/popup-closed-by-user' ||
+                 e.code === 'auth/cancelled-popup-request') {
+        updateLoginStatus('');
+      } else {
+        // COOP / storage-partitioning issues on GitHub Pages
+        updateLoginStatus('Google sign-in unavailable in this browser. Use Email/Password below.', true);
+      }
+    });
 }
 
-// Handle the result when Google redirects back to the app
-fbAuth.getRedirectResult()
-  .catch(function(e) { updateLoginStatus('Google sign-in failed: ' + e.message, true); });
+function fbForgotPassword() {
+  var email = document.getElementById('fb-email').value.trim();
+  if (!email) {
+    updateLoginStatus('Enter your email address above first.', true);
+    return;
+  }
+  updateLoginStatus('Sending password reset email…');
+  fbAuth.sendPasswordResetEmail(email)
+    .then(function() {
+      updateLoginStatus('Password reset email sent to ' + email + '. Check your inbox, then sign in with your new password.');
+    })
+    .catch(function(e) {
+      updateLoginStatus('Error: ' + e.message, true);
+    });
+}
 
 fbAuth.onAuthStateChanged(function(user) {
   var loginScreen = document.getElementById('login-screen');
@@ -3559,6 +3587,7 @@ document.getElementById('btn-save-special').addEventListener('click', function()
 // ══════════════════════════════════════════════════════════════════
 document.getElementById('btn-login-google').addEventListener('click', fbSignInGoogle);
 document.getElementById('btn-fb-signin').addEventListener('click', fbSignIn);
+document.getElementById('btn-fb-forgot').addEventListener('click', fbForgotPassword);
 document.getElementById('btn-fb-push').addEventListener('click', fbPush);
 document.getElementById('btn-fb-pull').addEventListener('click', fbPull);
 document.getElementById('btn-fb-signout').addEventListener('click', fbSignOut);
