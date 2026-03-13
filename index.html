@@ -799,8 +799,7 @@ import { getAuth, onAuthStateChanged,
          signInWithEmailAndPassword,
          createUserWithEmailAndPassword,
          signOut, sendPasswordResetEmail,
-         signInWithPopup, GoogleAuthProvider,
-         getRedirectResult }                     from 'https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js';
+         signInWithPopup, GoogleAuthProvider }   from 'https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js';
 import { getDatabase, ref as dbRef,
          set as dbSet, get as dbGet }            from 'https://www.gstatic.com/firebasejs/10.11.1/firebase-database.js';
 // ══════════════════════════════════════════════════════════════════
@@ -3590,12 +3589,6 @@ function fbForgotPassword() {
     });
 }
 
-// Clear any stale signInWithRedirect state left over from a previous deployment.
-// Firebase compat SDK auto-processes pending redirects on init; if that redirect
-// was initiated on GitHub Pages (COOP: same-origin) it fails and can trigger an
-// internal signOut() that kills a valid email/password session.
-getRedirectResult(fbAuth).catch(function() { /* discard stale redirect errors */ });
-
 onAuthStateChanged(fbAuth, function(user) {
   var loginScreen = document.getElementById('login-screen');
   var appContent  = document.getElementById('app-content');
@@ -3606,7 +3599,7 @@ onAuthStateChanged(fbAuth, function(user) {
     var allowed = ALLOWED_EMAILS.map(function(e) { return e.toLowerCase().trim(); });
     if (allowed.indexOf(email) === -1) {
       signOut(fbAuth).then(function() {
-        updateLoginStatus('Access not authorized. Contact your administrator.', true);
+        updateLoginStatus('Access not authorized for \u201c' + email + '\u201d. Contact your administrator.', true);
       });
       return; // signOut re-triggers this callback with user=null, which restores login screen
     }
