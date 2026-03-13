@@ -1726,7 +1726,7 @@ function sundayStats(rowIdx, pMap, confs) {
   var filled=0, open=0, cfmd=0, pend=0, decl=0;
   PER_ROLES.forEach(function(role){
     ['8am','10:45am'].forEach(function(svc){
-      var pid=row.assignments[role][svc];
+      var pid=(row.assignments[role]||{})[svc];
       if(pid&&pMap[pid]){ filled++;
         var s=confs[dateISO+'|'+role+'|'+svc]||'pending';
         if(s==='confirmed') cfmd++; else if(s==='declined') decl++; else pend++;
@@ -1734,7 +1734,7 @@ function sundayStats(rowIdx, pMap, confs) {
     });
   });
   SHARED_ROLES.forEach(function(role){
-    var pid=row.assignments[role].shared;
+    var pid=(row.assignments[role]||{}).shared;
     if(pid&&pMap[pid]){ filled++;
       var s=confs[dateISO+'|'+role+'|shared']||'pending';
       if(s==='confirmed') cfmd++; else if(s==='declined') decl++; else pend++;
