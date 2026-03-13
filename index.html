@@ -369,6 +369,7 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
   <button class="tab-btn" id="tab-btn-schedule">Schedule</button>
   <button class="tab-btn" id="tab-btn-stats">&#128202; Stats</button>
   <button class="header-gear" id="btn-open-settings" title="Settings">&#9881; Settings</button>
+  <button class="header-gear" id="btn-header-signout" title="Sign Out">&#x2192; Sign Out</button>
 </div>
 
 <!-- ══ PEOPLE TAB ══════════════════════════════════════════════════════════ -->
@@ -3582,6 +3583,7 @@ document.getElementById('btn-fb-forgot').addEventListener('click', fbForgotPassw
 document.getElementById('btn-fb-push').addEventListener('click', fbPush);
 document.getElementById('btn-fb-pull').addEventListener('click', fbPull);
 document.getElementById('btn-fb-signout').addEventListener('click', fbSignOut);
+document.getElementById('btn-header-signout').addEventListener('click', fbSignOut);
 document.getElementById('btn-export-data').addEventListener('click', exportAllData);
 document.getElementById('import-data-file').addEventListener('change', function(e) {
   if (e.target.files && e.target.files[0]) {
