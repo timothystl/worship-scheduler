@@ -3462,12 +3462,9 @@ var fbAuth = getAuth(_fbApp);
 var fbDb   = getDatabase(_fbApp);
 
 // ── ACCESS CONTROL ────────────────────────────────────────────────
-// To authorize a new user: add their email here, save, and re-deploy.
-// Capitalization does not matter — comparison is case-insensitive.
-var ALLOWED_EMAILS = [
-  'dinger@timothystl.org'
-  // add more as needed
-];
+// Security is handled by Firebase Auth (email + password required).
+// Only accounts you create in the Firebase Console can sign in.
+// No client-side allowlist needed — and it only causes kickout bugs.
 // ─────────────────────────────────────────────────────────────────
 
 function updateSyncStatus(msg, isError) {
@@ -3594,25 +3591,18 @@ onAuthStateChanged(fbAuth, function(user) {
   var appContent  = document.getElementById('app-content');
   var userDisplay = document.getElementById('fb-user-display');
   if (user) {
-    // Enforce allowlist — applies to email/password and Google SSO alike
-    var email   = (user.email || '').toLowerCase().trim();
-    var allowed = ALLOWED_EMAILS.map(function(e) { return e.toLowerCase().trim(); });
-    if (allowed.indexOf(email) === -1) {
-      signOut(fbAuth).then(function() {
-        updateLoginStatus('Access not authorized for \u201c' + email + '\u201d. Contact your administrator.', true);
-      });
-      return; // signOut re-triggers this callback with user=null, which restores login screen
-    }
-    // Authorized — show the app
+    // Signed in — show the app
     if (loginScreen) loginScreen.style.display = 'none';
     if (appContent)  appContent.style.display  = 'block';
     if (userDisplay) userDisplay.textContent   = 'Signed in as ' + user.email;
     fbPull();
   } else {
+    // Signed out — show the login screen
     if (loginScreen) loginScreen.style.display = 'flex';
     if (appContent)  appContent.style.display  = 'none';
     if (userDisplay) userDisplay.textContent   = '';
     updateSyncStatus('');
+    updateLoginStatus('');
   }
 });
 
