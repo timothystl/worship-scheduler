@@ -888,14 +888,17 @@ function switchMonth(key) {
   }
   currentMonthKey = key;
   document.getElementById('current-month-label').textContent = monthKeyLabel(key);
-  var found = loadMonthSchedule(key);
-  if (found) {
-    renderTable(getPeople(), null);
-    document.getElementById('schedule-output').style.display = 'block';
-  } else {
-    currentSchedule = [];
-    document.getElementById('schedule-output').style.display = 'none';
+  if (!loadMonthSchedule(key)) {
+    // Auto-build empty Sunday rows so the month grid shows immediately
+    currentSchedule = getSundaysForMonth(key).map(function(s) {
+      var assignments = {};
+      PER_ROLES.forEach(function(role) { assignments[role] = {'8am': null, '10:45am': null}; });
+      SHARED_ROLES.forEach(function(role) { assignments[role] = {shared: null}; });
+      return {type:'sunday', date:s.date, ordinal:s.ordinal, label:'', assignments:assignments};
+    });
   }
+  renderTable(getPeople(), null);
+  document.getElementById('schedule-output').style.display = 'block';
   showAlert('schedule-alert','','');
 }
 
@@ -917,10 +920,16 @@ function showTab(name) {
   if (name === 'people') renderPeopleList();
   if (name === 'stats')  renderStatsTab();
   if (name === 'schedule' && !currentSchedule.length) {
-    if (loadMonthSchedule(currentMonthKey)) {
-      renderTable(getPeople(), null);
-      document.getElementById('schedule-output').style.display = 'block';
+    if (!loadMonthSchedule(currentMonthKey)) {
+      currentSchedule = getSundaysForMonth(currentMonthKey).map(function(s) {
+        var assignments = {};
+        PER_ROLES.forEach(function(role) { assignments[role] = {'8am': null, '10:45am': null}; });
+        SHARED_ROLES.forEach(function(role) { assignments[role] = {shared: null}; });
+        return {type:'sunday', date:s.date, ordinal:s.ordinal, label:'', assignments:assignments};
+      });
     }
+    renderTable(getPeople(), null);
+    document.getElementById('schedule-output').style.display = 'block';
   }
 }
 ALL_TABS.forEach(function(t) {
@@ -3349,7 +3358,7 @@ function pickBestWithHistory(pool, counts, lastServed, role) {
 }
 
 function autoFillSchedule() {
-  if (!currentSchedule.length) { showAlert('schedule-alert','Generate a schedule first, then use Auto-Fill to populate empty slots.','warning'); return; }
+  if (!currentSchedule.length) { showAlert('schedule-alert','No schedule to fill. Navigate to a month with Sundays first.','warning'); return; }
   var people = getPeople();
   if (!people.length) { showAlert('schedule-alert','No people added yet.','warning'); return; }
   var lastServed = getLastServed();
@@ -3615,6 +3624,7 @@ document.getElementById('btn-save-special').addEventListener('click', function()
   var saveBtn = this;
   var editIdx = saveBtn.getAttribute('data-edit-idx');
   var specialRow = { type:'special', date:new Date(date+'T12:00:00'), name:name, services:services };
+  var specialMonthKey = date.slice(0, 7);
   var successMsg;
 
   if (editIdx !== null && editIdx !== '') {
@@ -3629,16 +3639,36 @@ document.getElementById('btn-save-special').addEventListener('click', function()
         });
       }
     });
-    currentSchedule[parseInt(editIdx,10)] = specialRow;
+    // Remove from current schedule regardless (date may have changed months)
+    currentSchedule.splice(parseInt(editIdx, 10), 1);
     saveBtn.removeAttribute('data-edit-idx');
     saveBtn.textContent = 'Add to Schedule';
     document.getElementById('special-panel-title').textContent = 'Add Special Service';
     successMsg = 'Special service "'+name+'" updated.';
   } else {
-    currentSchedule.push(specialRow);
     successMsg = 'Special service "'+name+'" added.';
   }
 
+  if (specialMonthKey !== currentMonthKey) {
+    // Save directly into the target month's storage, not the current view
+    var allMonths = getMonthSchedules();
+    var targetData = allMonths[specialMonthKey] || {rows:[]};
+    // Replace any existing special on the same date
+    targetData.rows = targetData.rows.filter(function(r){ return !(r.type==='special' && r.dateISO===date); });
+    targetData.rows.push({type:'special', dateISO:date, name:name, services:services});
+    targetData.rows.sort(function(a,b){ return a.dateISO > b.dateISO ? 1 : -1; });
+    allMonths[specialMonthKey] = targetData;
+    saveMonthSchedules(allMonths);
+    // Save the current month too (in case we removed an edited item above)
+    saveCurrentMonth();
+    setDirty(false);
+    renderTable(getPeople(), null);
+    closeAllPanels();
+    showAlert('schedule-alert', successMsg + ' (Saved to ' + monthKeyLabel(specialMonthKey) + ')', 'success');
+    return;
+  }
+
+  currentSchedule.push(specialRow);
   currentSchedule.sort(function(a,b){ return a.date - b.date; });
   saveCurrentMonth();
   setDirty(false);
