@@ -938,6 +938,122 @@ function getLectEntry(date) {
   if (!date || !Object.keys(lectCalendar).length) return null;
   return lectCalendar[date.toISOString().slice(0, 10)] || null;
 }
+
+// ── Annual special-service date helpers ────────────────────────────────────
+function _computeEaster(yr) {
+  var a=yr%19, b=Math.floor(yr/100), c=yr%100,
+      d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25),
+      g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
+      i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7,
+      m=Math.floor((a+11*h+22*l)/451),
+      mo=Math.floor((h+l-7*m+114)/31),
+      dy=((h+l-7*m+114)%31)+1;
+  return new Date(yr, mo-1, dy, 12, 0, 0);
+}
+function _computeThanksgiving(yr) {
+  var nov1=new Date(yr,10,1), dow=nov1.getDay();
+  return new Date(yr, 10, 1+(4-dow+7)%7+21, 12, 0, 0);
+}
+function _computeAdvent1(yr) {
+  // Sunday on or before Dec 3
+  var dec3=new Date(yr,11,3), dow=dec3.getDay();
+  return new Date(yr, 11, 3-dow, 12, 0, 0);
+}
+function _isoFromDate(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _addDays(d, n) { var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+
+function seedAnnualSpecialServices(key) {
+  var parts=key.split('-'), yr=parseInt(parts[0]), mo=parseInt(parts[1]);
+  var candidates=[];
+
+  // Easter-anchored services
+  var easter=_computeEaster(yr);
+  var ashWed=_addDays(easter,-46);
+  candidates.push({name:'Ash Wednesday', date:ashWed, services:[
+    {time:'5:00 PM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}},
+    {time:'7:00 PM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+  for (var w=1; w<=5; w++) {
+    candidates.push({name:'Lent Midweek '+w, date:_addDays(ashWed,w*7), services:[
+      {time:'5:00 PM', roles:['PowerPoint','Preacher'], assignments:{}},
+      {time:'7:00 PM', roles:['PowerPoint','Preacher'], assignments:{}}
+    ]});
+  }
+  candidates.push({name:'Maundy Thursday', date:_addDays(easter,-3), services:[
+    {time:'6:30 PM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+  candidates.push({name:'Good Friday', date:_addDays(easter,-2), services:[
+    {time:'6:30 PM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+  candidates.push({name:'Easter Vigil', date:_addDays(easter,-1), services:[
+    {time:'6:30 PM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+
+  // Thanksgiving
+  var thanks=_computeThanksgiving(yr);
+  candidates.push({name:'Thanksgiving Day', date:thanks, services:[
+    {time:'9:00 AM', roles:['PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+  candidates.push({name:'Thanksgiving Eve', date:_addDays(thanks,-1), services:[
+    {time:'6:30 PM', roles:['PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+
+  // Advent midweeks (Wednesdays after each Advent Sunday, before Dec 24)
+  var adv1=_computeAdvent1(yr);
+  var dec24=new Date(yr,11,24,12,0,0);
+  for (var av=0; av<4; av++) {
+    var advWed=_addDays(_addDays(adv1,av*7),3);
+    if (advWed.getTime() < dec24.getTime()) {
+      candidates.push({name:'Advent Midweek '+(av+1), date:advWed, services:[
+        {time:'5:00 PM', roles:['PowerPoint','Preacher'], assignments:{}},
+        {time:'7:00 PM', roles:['PowerPoint','Preacher'], assignments:{}}
+      ]});
+    }
+  }
+
+  // Christmas
+  candidates.push({name:'Christmas Eve', date:new Date(yr,11,24,12,0,0), services:[
+    {time:'TBD', roles:['PowerPoint','Preacher'], assignments:{}}
+  ]});
+  candidates.push({name:'Christmas Day', date:new Date(yr,11,25,12,0,0), services:[
+    {time:'10:00 AM', roles:['Elder','PowerPoint','Liturgist','Preacher'], assignments:{}}
+  ]});
+
+  // Build lookup of already-existing special services in this month
+  var existing={};
+  currentSchedule.forEach(function(row) {
+    if (row.type==='special') existing[_isoFromDate(row.date)+'|'+row.name]=true;
+  });
+
+  // Also check what was previously deleted: any name+date combo that was ever seeded
+  // but is now absent means the user deleted it — we respect that by checking localStorage
+  // for a "ws_seeded" tombstone set.
+  var tombstones={};
+  try { tombstones=JSON.parse(localStorage.getItem('ws_seed_tombstones')||'{}'); } catch(e){}
+
+  var added=false;
+  candidates.forEach(function(c) {
+    var iso=_isoFromDate(c.date);
+    if (parseInt(iso.slice(0,4))!==yr || parseInt(iso.slice(5,7))!==mo) return;
+    var tk=iso+'|'+c.name;
+    if (existing[tk]) return;        // already in schedule
+    if (tombstones[tk]) return;      // user previously deleted it
+    currentSchedule.push({type:'special', date:c.date, name:c.name, services:c.services, readings:{}});
+    added=true;
+  });
+
+  if (added) {
+    currentSchedule.sort(function(a,b){ return a.date-b.date; });
+    var months=getMonthSchedules();
+    months[key]={rows:currentSchedule.map(function(row){
+      if (row.type==='special') return {type:'special', dateISO:_isoFromDate(row.date), name:row.name, services:row.services, readings:row.readings||{}};
+      return {type:'sunday', dateISO:_isoFromDate(row.date), ordinal:row.ordinal, label:row.label||'', assignments:row.assignments};
+    })};
+    saveMonthSchedules(months);
+  }
+}
 // ──────────────────────────────────────────────────────────────────
 
 // SCHEDULE STATE
@@ -1072,6 +1188,7 @@ function switchMonth(key) {
       return {type:'sunday', date:s.date, ordinal:s.ordinal, label:'', assignments:assignments};
     });
   }
+  seedAnnualSpecialServices(key);
   renderTable(getPeople(), null);
   document.getElementById('schedule-output').style.display = 'block';
   showAlert('schedule-alert','','');
@@ -1103,6 +1220,7 @@ function showTab(name) {
         return {type:'sunday', date:s.date, ordinal:s.ordinal, label:'', assignments:assignments};
       });
     }
+    seedAnnualSpecialServices(currentMonthKey);
     renderTable(getPeople(), null);
     document.getElementById('schedule-output').style.display = 'block';
   }
@@ -2080,6 +2198,15 @@ document.getElementById('schedule-table').addEventListener('click', function(e) 
     var delIdx = parseInt(delBtn.getAttribute('data-idx'), 10);
     var delName = currentSchedule[delIdx] && (currentSchedule[delIdx].name || 'this special service');
     if (confirm('Delete "'+delName+'"?')) {
+      // Record tombstone so auto-seeding won't recreate this service
+      var delRow = currentSchedule[delIdx];
+      if (delRow && delRow.type === 'special') {
+        try {
+          var _tb = JSON.parse(localStorage.getItem('ws_seed_tombstones')||'{}');
+          _tb[_isoFromDate(delRow.date)+'|'+delRow.name] = true;
+          localStorage.setItem('ws_seed_tombstones', JSON.stringify(_tb));
+        } catch(e) {}
+      }
       currentSchedule.splice(delIdx, 1);
       saveCurrentMonth();
       setDirty(false);
