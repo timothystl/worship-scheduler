@@ -3533,6 +3533,15 @@ function queueFbPush() {
   _fbSyncTimer = setTimeout(fbPush, 1500);
 }
 
+// Flush any pending push when the tab/browser is closed so no changes are lost
+window.addEventListener('beforeunload', function() {
+  if (_fbSyncTimer && fbAuth.currentUser) {
+    clearTimeout(_fbSyncTimer);
+    _fbSyncTimer = null;
+    fbPush(); // fire-and-forget; browser keeps connection open briefly
+  }
+});
+
 function fbSignIn() {
   var email = document.getElementById('fb-email').value.trim();
   var pass  = document.getElementById('fb-password').value;
@@ -3551,7 +3560,14 @@ function fbRegister() {
     .catch(function(e) { updateLoginStatus('Account creation failed: ' + e.message, true); });
 }
 
-function fbSignOut() { signOut(fbAuth); }
+function fbSignOut() {
+  // Flush any pending debounced push before signing out so no changes are lost
+  if (_fbSyncTimer) {
+    clearTimeout(_fbSyncTimer);
+    _fbSyncTimer = null;
+  }
+  fbPush().finally(function() { signOut(fbAuth); });
+}
 
 function fbSignInGoogle() {
   updateLoginStatus('Opening Google sign-in…');
@@ -3591,11 +3607,26 @@ onAuthStateChanged(fbAuth, function(user) {
   var appContent  = document.getElementById('app-content');
   var userDisplay = document.getElementById('fb-user-display');
   if (user) {
-    // Signed in — show the app
+    // Hide login, show app — but keep a "Loading cloud data…" overlay until
+    // fbPull completes so stale localStorage data never flashes on screen.
     if (loginScreen) loginScreen.style.display = 'none';
-    if (appContent)  appContent.style.display  = 'block';
     if (userDisplay) userDisplay.textContent   = 'Signed in as ' + user.email;
-    fbPull();
+
+    // Show app shell with loading indicator; fbPull will remove it when done
+    if (appContent) {
+      appContent.style.display = 'block';
+      var overlay = document.createElement('div');
+      overlay.id = 'cloud-load-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:8888;background:#f4f5f9;'
+        + 'display:flex;align-items:center;justify-content:center;font-size:1rem;color:#2c3e6b;';
+      overlay.textContent = 'Loading cloud data\u2026';
+      document.body.appendChild(overlay);
+    }
+
+    fbPull().finally(function() {
+      var overlay = document.getElementById('cloud-load-overlay');
+      if (overlay) overlay.remove();
+    });
   } else {
     // Signed out — show the login screen
     if (loginScreen) loginScreen.style.display = 'flex';
