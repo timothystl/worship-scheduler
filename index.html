@@ -933,6 +933,7 @@ function loadSchedule() { return loadMonthSchedule(currentMonthKey); }
 // ── LECTIONARY CALENDAR ────────────────────────────────────────────
 // Populated by fetch('lcms_calendar.json') on load; keyed by ISO date
 var lectCalendar = {};
+function fmtSundayName(name) { return (name||'').replace(/\s*\(prop\d+\)/i,'').trim(); }
 function getLectEntry(date) {
   if (!date || !Object.keys(lectCalendar).length) return null;
   return lectCalendar[date.toISOString().slice(0, 10)] || null;
@@ -1679,7 +1680,7 @@ function openReadingsPanel(dateISO) {
   _readingsDateISO = dateISO;
   var d = new Date(dateISO + 'T12:00:00');
   var lectEntry = getLectEntry(d);
-  var subtitle  = lectEntry ? lectEntry.sundayName + ' \u2014 Series ' + lectEntry.series : fmtDate(d);
+  var subtitle  = lectEntry ? fmtSundayName(lectEntry.sundayName) + ' \u2014 Series ' + lectEntry.series : fmtDate(d);
   document.getElementById('readings-panel-title').textContent = 'Readings for ' + fmtDate(d);
   document.getElementById('readings-panel-subtitle').textContent = subtitle;
   var r = getReadingsForDate(dateISO) || {};
@@ -1793,7 +1794,7 @@ function buildSummaryInner(rowIdx, pMap, confs) {
     labelPart += '<span class="ss-label">'+esc(existingLabel)+'</span>';
   }
   if (lectEntry) {
-    labelPart += '<span class="ss-lect-name">'+esc(lectEntry.sundayName)+'</span>'
+    labelPart += '<span class="ss-lect-name">'+esc(fmtSundayName(lectEntry.sundayName))+'</span>'
       +'<span class="ss-series-badge">'+esc(lectEntry.series)+'</span>';
   }
   if (!existingLabel && !lectEntry) {
@@ -1902,7 +1903,7 @@ function renderTable(people, counts) {
     var r1 = '<tr class="sunday-detail row-8am" data-idx="'+rowIdx+'">';
     var lectEntryDetail = getLectEntry(row.date);
     var ordinalOrLect = lectEntryDetail
-      ? '<span class="lect-name-cell">'+esc(lectEntryDetail.sundayName)+'</span>'
+      ? '<span class="lect-name-cell">'+esc(fmtSundayName(lectEntryDetail.sundayName))+'</span>'
         +'<span class="series-cell">Series '+esc(lectEntryDetail.series)+'</span>'
       : '<span class="ordinal">'+esc(row.ordinal+ordSuffix(row.ordinal)+' Sunday')+'</span>';
     r1 += '<td class="date-cell" rowspan="2">'+esc(fmtDate(row.date))
@@ -3834,7 +3835,7 @@ function exportIcal() {
     var ymd = isoToYMD(row.date);
     var dateISO = row.date.toISOString().slice(0,10);
     var lectEntryPrint = getLectEntry(row.date);
-    var dayLabel = sunLabels[dateISO] || row.label || (lectEntryPrint ? lectEntryPrint.sundayName : '');
+    var dayLabel = sunLabels[dateISO] || row.label || (lectEntryPrint ? fmtSundayName(lectEntryPrint.sundayName) : '');
     var collect = [];
     PER_ROLES.forEach(function(role) {
       ['8am','10:45am'].forEach(function(svc) {
