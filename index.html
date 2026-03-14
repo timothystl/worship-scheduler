@@ -391,8 +391,8 @@ thead th.per-header { background: #3361a8; font-size: 0.75rem; text-transform: u
 </header>
 
 <div class="tabs">
-  <button class="tab-btn" id="tab-btn-people">People &amp; Availability</button>
   <button class="tab-btn active" id="tab-btn-schedule">Schedule</button>
+  <button class="tab-btn" id="tab-btn-people">People &amp; Availability</button>
   <button class="tab-btn" id="tab-btn-stats">&#128202; Stats</button>
   <div style="margin-left:auto;display:flex;align-items:center;gap:4px;margin-right:8px;">
     <button class="header-gear" id="btn-open-settings" title="Settings" style="margin-left:0;margin-right:0;">&#9881; Settings</button>
@@ -1784,16 +1784,12 @@ function buildSummaryInner(rowIdx, pMap, confs) {
 function renderTable(people, counts) {
   var totalCols = 2 + PER_ROLES.length + SHARED_ROLES.length;
   var h1 = '<tr>'
-    +'<th class="date-col" rowspan="2">Date</th>'
-    +'<th class="svc-col" rowspan="2">Svc</th>'
-    +'<th class="per-header" colspan="'+PER_ROLES.length+'">Per-Service Roles</th>'
-    +'<th class="svc-header shared-col" colspan="'+SHARED_ROLES.length+'">Both Services</th>'
-    +'</tr>';
-  var h2 = '<tr>';
-  PER_ROLES.forEach(function(r){ h2+='<th title="'+esc(r)+'">'+esc(roleAbbrev(r))+'</th>'; });
-  SHARED_ROLES.forEach(function(r){ h2+='<th class="shared-col" title="'+esc(roleLabel(r))+'">'+esc(roleAbbrev(r))+'</th>'; });
-  h2 += '</tr>';
-  document.getElementById('schedule-thead').innerHTML = h1+h2;
+    +'<th class="date-col">Date</th>'
+    +'<th class="svc-col">Svc</th>';
+  PER_ROLES.forEach(function(r){ h1+='<th>'+esc(r)+'</th>'; });
+  SHARED_ROLES.forEach(function(r){ h1+='<th class="shared-col">'+esc(roleLabel(r))+'</th>'; });
+  h1 += '</tr>';
+  document.getElementById('schedule-thead').innerHTML = h1;
 
   var pMap = {};
   people.forEach(function(p){ pMap[p.id]=p; });
