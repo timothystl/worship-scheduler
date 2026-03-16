@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timothy Lutheran Church – Volunteer Admin</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="tlc-logo.png">
+<meta name="theme-color" content="#0A3C5C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --steel-anchor: #0A3C5C;
+  --deep-steel:   #2A5470;
+  --mid-steel:    #3D627C;
+  --sky-steel:    #5C8FA8;
+  --ice-blue:     #C4DDE8;
+  --blue-mist:    #EDF5F8;
+  --amber:        #D4922A;
+  --deep-amber:   #C07D1E;
+  --honey:        #E8B86D;
+  --pale-gold:    #F5E0B0;
+  --sage:         #6B8F71;
+  --soft-sage:    #9AB89E;
+  --pale-sage:    #CDE0CF;
+  --warm-white:   #FAF7F0;
+  --linen:        #F2EDE2;
+  --white:        #FFFFFF;
+  --border:       #E8E0D0;
+  --charcoal:     #3D3530;
+  --warm-gray:    #7A6E60;
+  --font-head: 'Lora', Georgia, serif;
+  --font-body: 'Source Sans 3', Arial, sans-serif;
+  /* Ministry accent colors */
+  --min-worship:    #1E2D4A;
+  --min-events:     #2E7EA6;
+  --min-education:  #C9973A;
+  --min-acceptance: #4A5E3A;
+  --min-outreach:   #6A5050;
+  --min-general:    #6A5A7A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--warm-white); color: var(--charcoal); min-height: 100vh; }
+
+/* ── HEADER ── */
+header {
+  background: var(--white);
+  color: var(--steel-anchor);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 3px solid var(--amber);
+  box-shadow: 0 2px 12px rgba(10,60,92,0.07);
+}
+.header-logo-placeholder {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--blue-mist); border: 2px solid var(--ice-blue);
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem;
+}
+.header-text .church-name {
+  font-size: 0.75rem; color: var(--amber);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 2px; font-weight: 700;
+}
+.header-text h1 {
+  font-size: 1.05rem; font-weight: 700; line-height: 1.2;
+  color: var(--steel-anchor); font-family: var(--font-head);
+}
+.header-text p { font-size: 0.82rem; color: var(--warm-gray); margin-top: 2px; }
+.header-actions {
+  margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+#fb-user-display { font-size: 0.8rem; color: var(--warm-gray); }
+.btn-sm {
+  font-family: var(--font-body); font-size: 0.82rem; font-weight: 600;
+  padding: 6px 14px; border-radius: 7px; border: none; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-sm:hover { opacity: 0.85; }
+.btn-outline-sm {
+  background: transparent; border: 1.5px solid var(--steel-anchor);
+  color: var(--steel-anchor);
+}
+.btn-gear {
+  background: var(--linen); border: 1.5px solid var(--border);
+  color: var(--charcoal); font-size: 1rem; padding: 6px 10px;
+}
+
+/* ── LOGIN SCREEN ── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--blue-mist);
+}
+.login-card {
+  background: var(--white); border-radius: 14px;
+  padding: 40px 36px; box-shadow: 0 6px 32px rgba(0,0,0,.12);
+  width: 100%; max-width: 360px; text-align: center;
+}
+.login-card .login-logo {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--blue-mist); border: 2px solid var(--ice-blue);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; margin: 0 auto 16px;
+}
+.login-card h2 {
+  font-family: var(--font-head); font-size: 1.25rem;
+  color: var(--steel-anchor); margin-bottom: 4px;
+}
+.login-card .login-sub {
+  font-size: 0.85rem; color: var(--warm-gray); margin-bottom: 24px;
+}
+.login-card input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-family: var(--font-body); font-size: 0.95rem;
+  color: var(--charcoal); background: var(--warm-white);
+  margin-bottom: 10px; outline: none; transition: border-color 0.15s;
+}
+.login-card input:focus { border-color: var(--steel-anchor); }
+.btn-primary {
+  width: 100%; padding: 11px; background: var(--steel-anchor); color: var(--white);
+  border: none; border-radius: 8px; font-family: var(--font-body);
+  font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  transition: background 0.15s; margin-bottom: 8px;
+}
+.btn-primary:hover { background: var(--deep-steel); }
+.btn-google {
+  width: 100%; padding: 10px; background: var(--white); color: var(--charcoal);
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-family: var(--font-body); font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; transition: border-color 0.15s; margin-bottom: 12px;
+}
+.btn-google:hover { border-color: var(--sky-steel); }
+.login-links { display: flex; justify-content: space-between; gap: 8px; }
+.login-links button {
+  background: none; border: none; color: var(--sky-steel);
+  font-size: 0.82rem; cursor: pointer; text-decoration: underline;
+}
+#login-status {
+  font-size: 0.85rem; min-height: 20px;
+  margin-top: 10px; color: var(--sage);
+}
+
+/* ── SETTINGS MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 8000;
+  background: rgba(0,0,0,0.45); display: none;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-card {
+  background: var(--white); border-radius: 14px;
+  padding: 32px 28px; box-shadow: 0 6px 32px rgba(0,0,0,.15);
+  width: 100%; max-width: 440px;
+}
+.modal-card h3 {
+  font-family: var(--font-head); font-size: 1.1rem;
+  color: var(--steel-anchor); margin-bottom: 18px;
+}
+.field { margin-bottom: 14px; }
+.field label {
+  display: block; font-size: 0.82rem; font-weight: 700;
+  color: var(--warm-gray); text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 4px;
+}
+.field input {
+  width: 100%; padding: 9px 12px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-family: var(--font-body); font-size: 0.92rem;
+  color: var(--charcoal); background: var(--warm-white); outline: none;
+}
+.field input:focus { border-color: var(--steel-anchor); }
+.field .hint { font-size: 0.78rem; color: var(--warm-gray); margin-top: 3px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.btn-cancel {
+  background: var(--linen); border: 1.5px solid var(--border);
+  color: var(--charcoal); padding: 9px 18px; border-radius: 8px;
+  font-family: var(--font-body); font-weight: 600; font-size: 0.9rem;
+  cursor: pointer;
+}
+.btn-save {
+  background: var(--steel-anchor); color: var(--white);
+  padding: 9px 18px; border-radius: 8px; border: none;
+  font-family: var(--font-body); font-weight: 700; font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  background: var(--white); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+}
+.filter-bar .filter-label {
+  font-size: 0.8rem; font-weight: 700; color: var(--warm-gray);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px;
+}
+.filter-btn {
+  padding: 5px 14px; border-radius: 20px; border: 1.5px solid var(--steel-anchor);
+  font-family: var(--font-body); font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; background: transparent;
+  color: var(--steel-anchor);
+}
+.filter-btn.active {
+  background: var(--steel-anchor); color: var(--white);
+}
+.filter-btn:hover:not(.active) { background: var(--blue-mist); }
+.filter-bar .refresh-btn {
+  margin-left: auto; display: flex; align-items: center; gap: 6px;
+  background: var(--linen); border: 1.5px solid var(--border);
+  padding: 5px 14px; border-radius: 8px; font-family: var(--font-body);
+  font-size: 0.82rem; font-weight: 600; color: var(--charcoal);
+  cursor: pointer; transition: background 0.15s;
+}
+.filter-bar .refresh-btn:hover { background: var(--blue-mist); }
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--amber); color: var(--white);
+  font-size: 0.7rem; font-weight: 700; border-radius: 10px;
+  padding: 1px 6px; margin-left: 4px; min-width: 18px;
+}
+
+/* ── MAIN CONTENT ── */
+#app-content { display: none; }
+.main-wrap { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+/* ── STATUS BAR ── */
+#load-status {
+  font-size: 0.85rem; color: var(--warm-gray);
+  padding: 10px 0 4px; min-height: 28px;
+}
+#load-status.error { color: #B85C3A; }
+
+/* ── VOLUNTEER GRID ── */
+.volunteers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+/* ── VOLUNTEER CARD ── */
+.vol-card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 2px 10px rgba(10,60,92,0.06);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.vol-card-top {
+  padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.vol-ministry-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 6px;
+}
+.vol-card-top .vol-name {
+  font-family: var(--font-head); font-size: 1.05rem; font-weight: 600;
+  color: var(--steel-anchor); line-height: 1.2;
+}
+.ministry-badge {
+  display: inline-block; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  padding: 2px 8px; border-radius: 10px; margin-top: 4px;
+  color: var(--white);
+}
+.vol-card-body { padding: 12px 18px; flex: 1; }
+.vol-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-bottom: 8px; font-size: 0.87rem; color: var(--charcoal);
+}
+.vol-row .vol-icon {
+  flex-shrink: 0; width: 16px; text-align: center;
+  color: var(--warm-gray); font-size: 0.85rem; margin-top: 1px;
+}
+.vol-row a { color: var(--sky-steel); text-decoration: none; }
+.vol-row a:hover { text-decoration: underline; }
+.vol-roles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.role-pill {
+  background: var(--linen); border: 1px solid var(--border);
+  padding: 2px 9px; border-radius: 10px; font-size: 0.78rem; color: var(--charcoal);
+}
+.vol-card-footer {
+  padding: 8px 18px 12px; font-size: 0.78rem; color: var(--warm-gray);
+  border-top: 1px solid var(--linen);
+}
+.vol-notes {
+  font-size: 0.82rem; color: var(--warm-gray);
+  font-style: italic; line-height: 1.4; margin-top: 4px;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center; padding: 60px 24px; color: var(--warm-gray);
+  grid-column: 1 / -1;
+}
+.empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.empty-state p { font-size: 0.95rem; }
+
+/* ── LOADING SKELETON ── */
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px; margin-top: 8px;
+}
+.skeleton-card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; height: 160px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.skel-line {
+  background: var(--linen); border-radius: 4px; height: 12px; margin-bottom: 10px;
+}
+
+/* ── MINISTRY COLOR MAP ── */
+.ministry-worship    { background: var(--min-worship); }
+.ministry-events     { background: var(--min-events); }
+.ministry-education  { background: var(--min-education); }
+.ministry-acceptance { background: var(--min-acceptance); }
+.ministry-outreach   { background: var(--min-outreach); }
+.ministry-general    { background: var(--min-general); }
+
+.dot-worship    { background: var(--min-worship); }
+.dot-events     { background: var(--min-events); }
+.dot-education  { background: var(--min-education); }
+.dot-acceptance { background: var(--min-acceptance); }
+.dot-outreach   { background: var(--min-outreach); }
+.dot-general    { background: var(--min-general); }
+
+@media (max-width: 600px) {
+  header { padding: 12px 16px; }
+  .filter-bar { padding: 10px 16px; }
+  .main-wrap { padding: 16px; }
+  .header-actions { gap: 6px; }
+  #fb-user-display { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">✝</div>
+    <h2>Volunteer Admin</h2>
+    <p class="login-sub">Timothy Lutheran Church</p>
+    <button class="btn-google" onclick="fbSignInGoogle()">
+      <span style="margin-right:8px;">🔵</span>Sign in with Google
+    </button>
+    <input type="email" id="fb-email" placeholder="Email address" autocomplete="username">
+    <input type="password" id="fb-password" placeholder="Password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter') fbSignIn()">
+    <button class="btn-primary" onclick="fbSignIn()">Sign In</button>
+    <div class="login-links">
+      <button onclick="fbForgotPassword()">Forgot password?</button>
+    </div>
+    <div id="login-status"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SETTINGS MODAL
+═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-card">
+    <h3>⚙ Admin Settings</h3>
+    <div class="field">
+      <label>Worker URL</label>
+      <input type="url" id="s-worker-url" placeholder="https://your-worker.workers.dev">
+      <div class="hint">Base URL of your Cloudflare Worker (no trailing slash)</div>
+    </div>
+    <div class="field">
+      <label>Worker Secret <span style="font-weight:400;text-transform:none;">(optional)</span></label>
+      <input type="password" id="s-worker-secret" placeholder="Leave blank if not set">
+      <div class="hint">X-Worker-Secret header value, if your worker requires it</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════════════════════════ -->
+<div id="app-content">
+
+  <!-- Header -->
+  <header>
+    <div class="header-logo-placeholder">✝</div>
+    <div class="header-text">
+      <div class="church-name">Timothy Lutheran</div>
+      <h1>Volunteer Admin</h1>
+      <p>View all signups</p>
+    </div>
+    <div class="header-actions">
+      <span id="fb-user-display"></span>
+      <button class="btn-sm btn-gear" onclick="openSettings()" title="Settings">⚙</button>
+      <button class="btn-sm btn-outline-sm" onclick="fbSignOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <span class="filter-label">Ministry</span>
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">
+      All <span class="count-badge" id="cnt-all">0</span>
+    </button>
+    <button class="filter-btn" data-filter="worship" onclick="setFilter('worship')">
+      Worship <span class="count-badge" id="cnt-worship">0</span>
+    </button>
+    <button class="filter-btn" data-filter="events" onclick="setFilter('events')">
+      Events <span class="count-badge" id="cnt-events">0</span>
+    </button>
+    <button class="filter-btn" data-filter="education" onclick="setFilter('education')">
+      Education <span class="count-badge" id="cnt-education">0</span>
+    </button>
+    <button class="filter-btn" data-filter="acceptance" onclick="setFilter('acceptance')">
+      Acceptance <span class="count-badge" id="cnt-acceptance">0</span>
+    </button>
+    <button class="filter-btn" data-filter="outreach" onclick="setFilter('outreach')">
+      Outreach <span class="count-badge" id="cnt-outreach">0</span>
+    </button>
+    <button class="filter-btn" data-filter="general" onclick="setFilter('general')">
+      General <span class="count-badge" id="cnt-general">0</span>
+    </button>
+    <button class="refresh-btn" onclick="loadAll()">
+      <span id="refresh-icon">↻</span> Refresh
+    </button>
+  </div>
+
+  <!-- Main -->
+  <div class="main-wrap">
+    <div id="load-status"></div>
+    <div id="volunteers-container"></div>
+  </div>
+
+</div><!-- /#app-content -->
+
+<script type="module">
+import { initializeApp }
+  from 'https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js';
+import { getAuth, onAuthStateChanged,
+         signInWithEmailAndPassword,
+         signOut, sendPasswordResetEmail,
+         signInWithPopup, GoogleAuthProvider }
+  from 'https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js';
+
+// ── FIREBASE ────────────────────────────────────────────────────
+var firebaseConfig = {
+  apiKey:            "AIzaSyDYHJoLHArmcMDFZrXaMJ62RGUMgusJhD8",
+  authDomain:        "tlc-worship-scheduler.firebaseapp.com",
+  databaseURL:       "https://tlc-worship-scheduler-default-rtdb.firebaseio.com",
+  projectId:         "tlc-worship-scheduler",
+  storageBucket:     "tlc-worship-scheduler.firebasestorage.app",
+  messagingSenderId: "645397350092",
+  appId:             "1:645397350092:web:d6c828f36f721ede3d2469"
+};
+var _fbApp  = initializeApp(firebaseConfig);
+var fbAuth  = getAuth(_fbApp);
+
+// ── SETTINGS ────────────────────────────────────────────────────
+function getSettings() {
+  try { return JSON.parse(localStorage.getItem('va_settings') || '{}'); }
+  catch(e) { return {}; }
+}
+function saveSettings() {
+  var s = getSettings();
+  s.workerUrl    = document.getElementById('s-worker-url').value.trim().replace(/\/$/, '');
+  s.workerSecret = document.getElementById('s-worker-secret').value;
+  localStorage.setItem('va_settings', JSON.stringify(s));
+  closeSettings();
+  loadAll();
+}
+function openSettings() {
+  var s = getSettings();
+  document.getElementById('s-worker-url').value    = s.workerUrl    || '';
+  document.getElementById('s-worker-secret').value = s.workerSecret || '';
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+// Close modal on overlay click
+document.getElementById('settings-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// expose to onclick handlers (module scope isolation fix)
+window.saveSettings  = saveSettings;
+window.openSettings  = openSettings;
+window.closeSettings = closeSettings;
+
+// ── AUTH HELPERS ─────────────────────────────────────────────────
+function updateLoginStatus(msg, isError) {
+  var el = document.getElementById('login-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#B85C3A' : '#6B8F71';
+}
+
+function fbSignIn() {
+  var email = document.getElementById('fb-email').value.trim();
+  var pass  = document.getElementById('fb-password').value;
+  if (!email || !pass) { updateLoginStatus('Enter email and password.', true); return; }
+  updateLoginStatus('Signing in…');
+  signInWithEmailAndPassword(fbAuth, email, pass)
+    .catch(function(e) { updateLoginStatus('Sign-in failed: ' + e.message, true); });
+}
+
+function fbSignOut() {
+  signOut(fbAuth);
+}
+
+function fbSignInGoogle() {
+  updateLoginStatus('Opening Google sign-in…');
+  var provider = new GoogleAuthProvider();
+  signInWithPopup(fbAuth, provider)
+    .catch(function(e) {
+      if (e.code === 'auth/popup-blocked') {
+        updateLoginStatus('Popup was blocked. Use email/password instead.', true);
+      } else if (e.code === 'auth/popup-closed-by-user' ||
+                 e.code === 'auth/cancelled-popup-request') {
+        updateLoginStatus('');
+      } else {
+        updateLoginStatus('Google sign-in unavailable. Use email/password.', true);
+      }
+    });
+}
+
+function fbForgotPassword() {
+  var email = document.getElementById('fb-email').value.trim();
+  if (!email) { updateLoginStatus('Enter your email address first.', true); return; }
+  updateLoginStatus('Sending password reset email…');
+  sendPasswordResetEmail(fbAuth, email)
+    .then(function() {
+      updateLoginStatus('Reset email sent to ' + email + '. Check your inbox.');
+    })
+    .catch(function(e) { updateLoginStatus('Error: ' + e.message, true); });
+}
+
+window.fbSignIn          = fbSignIn;
+window.fbSignOut         = fbSignOut;
+window.fbSignInGoogle    = fbSignInGoogle;
+window.fbForgotPassword  = fbForgotPassword;
+
+// ── AUTH STATE ───────────────────────────────────────────────────
+onAuthStateChanged(fbAuth, function(user) {
+  var loginScreen = document.getElementById('login-screen');
+  var appContent  = document.getElementById('app-content');
+  var userDisplay = document.getElementById('fb-user-display');
+  if (user) {
+    if (loginScreen) loginScreen.style.display = 'none';
+    if (appContent)  appContent.style.display  = 'block';
+    if (userDisplay) userDisplay.textContent   = user.email;
+    loadAll();
+  } else {
+    if (loginScreen) loginScreen.style.display = 'flex';
+    if (appContent)  appContent.style.display  = 'none';
+    if (userDisplay) userDisplay.textContent   = '';
+    updateLoginStatus('');
+  }
+});
+
+// ── DATA FETCHING ────────────────────────────────────────────────
+var _allVolunteers = [];
+var _currentFilter = 'all';
+
+function setStatus(msg, isError) {
+  var el = document.getElementById('load-status');
+  if (!el) return;
+  el.textContent  = msg;
+  el.className    = isError ? 'error' : '';
+}
+
+async function fetchEndpoint(url, secret) {
+  var headers = {};
+  if (secret) headers['X-Worker-Secret'] = secret;
+  var r = await fetch(url, { headers: headers });
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' from ' + url);
+  var data = await r.json();
+  return data.volunteers || [];
+}
+
+async function loadAll() {
+  var s = getSettings();
+  if (!s.workerUrl) {
+    setStatus('⚠ Configure Worker URL in Settings (⚙) to load signups.', true);
+    renderCards([]);
+    return;
+  }
+
+  // Show skeleton
+  showSkeleton();
+  setStatus('Loading signups…');
+
+  var icon = document.getElementById('refresh-icon');
+  if (icon) icon.textContent = '⟳';
+
+  try {
+    var base   = s.workerUrl;
+    var secret = s.workerSecret || '';
+
+    var [worship, general, events] = await Promise.all([
+      fetchEndpoint(base + '/volunteer/pending',         secret).catch(() => []),
+      fetchEndpoint(base + '/volunteer/general-pending', secret).catch(() => []),
+      fetchEndpoint(base + '/volunteer/event-pending',   secret).catch(() => [])
+    ]);
+
+    // Tag each with its source category in case ministry field is missing
+    worship.forEach(function(v)  { if (!v.ministry) v.ministry = 'worship'; });
+    events.forEach(function(v)   { if (!v.ministry) v.ministry = 'events'; });
+    general.forEach(function(v)  { if (!v.ministry) v.ministry = v.ministry || 'general'; });
+
+    _allVolunteers = [].concat(worship, events, general)
+      .sort(function(a, b) {
+        return new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0);
+      });
+
+    updateCounts();
+    renderCards(filteredList());
+
+    var total = _allVolunteers.length;
+    setStatus(total === 0
+      ? 'No signups found.'
+      : total + ' signup' + (total === 1 ? '' : 's') + ' loaded.');
+  } catch(e) {
+    setStatus('Error loading signups: ' + e.message, true);
+    renderCards([]);
+  }
+
+  if (icon) icon.textContent = '↻';
+}
+
+window.loadAll = loadAll;
+
+// ── FILTER ───────────────────────────────────────────────────────
+function setFilter(f) {
+  _currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.filter === f);
+  });
+  renderCards(filteredList());
+}
+window.setFilter = setFilter;
+
+function filteredList() {
+  if (_currentFilter === 'all') return _allVolunteers;
+  return _allVolunteers.filter(function(v) { return v.ministry === _currentFilter; });
+}
+
+function updateCounts() {
+  var counts = { all: _allVolunteers.length };
+  ['worship','events','education','acceptance','outreach','general'].forEach(function(m) {
+    counts[m] = _allVolunteers.filter(function(v) { return v.ministry === m; }).length;
+  });
+  Object.keys(counts).forEach(function(k) {
+    var el = document.getElementById('cnt-' + k);
+    if (el) el.textContent = counts[k];
+  });
+}
+
+// ── RENDERING ───────────────────────────────────────────────────
+var MINISTRY_LABELS = {
+  worship:    'Worship',
+  events:     'Events',
+  education:  'Education',
+  acceptance: 'Acceptance',
+  outreach:   'Outreach',
+  general:    'General'
+};
+
+var SERVICE_LABELS = {
+  '8am':     '8:00 AM',
+  '10:45am': '10:45 AM',
+  'both':    'Both services'
+};
+
+var ORDINALS = { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th' };
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var diff = Date.now() - new Date(iso).getTime();
+  var mins  = Math.floor(diff / 60000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return hrs + 'h ago';
+  var days = Math.floor(hrs / 24);
+  if (days < 30)  return days + 'd ago';
+  var mos = Math.floor(days / 30);
+  return mos + ' mo ago';
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderVolCard(v) {
+  var ministry   = (v.ministry || 'general').toLowerCase();
+  var badgeClass = 'ministry-' + ministry;
+  var dotClass   = 'dot-' + ministry;
+  var label      = MINISTRY_LABELS[ministry] || ministry;
+
+  var rolesHtml = '';
+  if (v.roles && v.roles.length) {
+    rolesHtml = '<div class="vol-row">'
+      + '<span class="vol-icon">✦</span>'
+      + '<div class="vol-roles">'
+      + v.roles.map(function(r) { return '<span class="role-pill">' + escHtml(r) + '</span>'; }).join('')
+      + '</div></div>';
+  }
+
+  var serviceHtml = '';
+  if (v.service) {
+    var svcLabel = SERVICE_LABELS[v.service] || v.service;
+    serviceHtml = '<div class="vol-row">'
+      + '<span class="vol-icon">🕐</span>'
+      + '<span>' + escHtml(svcLabel) + '</span></div>';
+  }
+
+  var sundaysHtml = '';
+  if (v.sundays && v.sundays.length) {
+    var sunLabels = v.sundays.map(function(s) { return (ORDINALS[s] || s) + ' Sunday'; });
+    sundaysHtml = '<div class="vol-row">'
+      + '<span class="vol-icon">📅</span>'
+      + '<span>' + sunLabels.map(escHtml).join(', ') + '</span></div>';
+  }
+
+  var phoneHtml = v.phone
+    ? '<div class="vol-row"><span class="vol-icon">📞</span>'
+      + '<a href="tel:' + escHtml(v.phone) + '">' + escHtml(v.phone) + '</a></div>'
+    : '';
+
+  var notesHtml = v.notes
+    ? '<div class="vol-notes">"' + escHtml(v.notes) + '"</div>'
+    : '';
+
+  var submitted = v.submittedAt
+    ? '<span title="' + escHtml(new Date(v.submittedAt).toLocaleString()) + '">'
+      + 'Submitted ' + timeAgo(v.submittedAt) + '</span>'
+    : '';
+
+  return '<div class="vol-card">'
+    + '<div class="vol-card-top">'
+    + '  <div class="vol-ministry-dot ' + dotClass + '"></div>'
+    + '  <div>'
+    + '    <div class="vol-name">' + escHtml(v.name || '(no name)') + '</div>'
+    + '    <span class="ministry-badge ' + badgeClass + '">' + escHtml(label) + '</span>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="vol-card-body">'
+    + '  <div class="vol-row"><span class="vol-icon">✉</span>'
+    + '    <a href="mailto:' + escHtml(v.email) + '">' + escHtml(v.email) + '</a></div>'
+    + phoneHtml
+    + rolesHtml
+    + serviceHtml
+    + sundaysHtml
+    + notesHtml
+    + '</div>'
+    + '<div class="vol-card-footer">' + submitted + '</div>'
+    + '</div>';
+}
+
+function renderCards(list) {
+  var container = document.getElementById('volunteers-container');
+  if (!container) return;
+  if (!list.length) {
+    container.innerHTML = '<div class="volunteers-grid">'
+      + '<div class="empty-state">'
+      + '<div class="empty-icon">📋</div>'
+      + '<p>No signups found' + (_currentFilter !== 'all' ? ' for this ministry' : '') + '.</p>'
+      + '</div></div>';
+    return;
+  }
+  container.innerHTML = '<div class="volunteers-grid">'
+    + list.map(renderVolCard).join('')
+    + '</div>';
+}
+
+function showSkeleton() {
+  var container = document.getElementById('volunteers-container');
+  if (!container) return;
+  var cards = '';
+  for (var i = 0; i < 6; i++) {
+    cards += '<div class="skeleton-card">'
+      + '<div class="skel-line" style="width:60%;height:16px;margin-bottom:12px;"></div>'
+      + '<div class="skel-line" style="width:40%;height:10px;"></div>'
+      + '<div class="skel-line" style="width:80%;height:10px;"></div>'
+      + '<div class="skel-line" style="width:55%;height:10px;"></div>'
+      + '</div>';
+  }
+  container.innerHTML = '<div class="skeleton-grid">' + cards + '</div>';
+}
+
+</script>
+</body>
+</html>
