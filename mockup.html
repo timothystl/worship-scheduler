@@ -161,6 +161,78 @@ main { max-width: 1060px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
 }
 .spacer { height: 2.5rem; }
 
+/* ── CORE VALUES STRIP ── */
+.values-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+}
+.value-tile {
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  position: relative;
+  overflow: hidden;
+}
+.value-tile::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 12px 12px 0 0;
+}
+.value-tile.v-worship::before    { background: var(--navy); }
+.value-tile.v-education::before  { background: var(--gold); }
+.value-tile.v-acceptance::before { background: var(--moss); }
+.value-tile.v-outreach::before   { background: var(--slate); }
+.value-tile-name {
+  font-family: 'Lora', serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.value-tile.v-worship .value-tile-name    { color: var(--navy); }
+.value-tile.v-education .value-tile-name  { color: #7a5800; }
+.value-tile.v-acceptance .value-tile-name { color: var(--moss); }
+.value-tile.v-outreach .value-tile-name   { color: var(--slate); }
+.value-tile-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+@media (max-width: 640px) {
+  .values-strip { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 380px) {
+  .values-strip { grid-template-columns: 1fr; }
+}
+
+/* ── CARD VALUE TAG ── */
+.card-value-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 0.6rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 100px;
+}
+.card.worship  .card-value-tag { background: rgba(30,45,74,0.07);  color: var(--navy-mid); }
+.card.events   .card-value-tag { background: rgba(58,78,92,0.07);  color: var(--slate); }
+.card.mdo      .card-value-tag { background: rgba(74,94,58,0.08);  color: var(--moss); }
+.card.property .card-value-tag { background: rgba(140,136,128,0.1);color: var(--stone); }
+.card.wol      .card-value-tag { background: rgba(201,151,58,0.1); color: #7a5800; }
+.card.lasm     .card-value-tag { background: rgba(58,78,92,0.07);  color: var(--slate); }
+.card-value-tag svg { width: 9px; height: 9px; }
+
 /* ── OVERVIEW CARDS (landing page cards) ── */
 .cards {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem;
@@ -540,6 +612,26 @@ footer a:hover { text-decoration: underline; }
     <p>"Each of you should use whatever gift you have received to serve others." &mdash; 1 Peter 4:10</p>
   </div>
 
+  <!-- Core values strip -->
+  <div class="values-strip">
+    <div class="value-tile v-worship">
+      <span class="value-tile-name">Worship</span>
+      <span class="value-tile-desc">Lead and support the congregation in praise, prayer, and the sacraments</span>
+    </div>
+    <div class="value-tile v-education">
+      <span class="value-tile-name">Christian Education</span>
+      <span class="value-tile-desc">Nurture faith and discipleship across every age and stage of life</span>
+    </div>
+    <div class="value-tile v-acceptance">
+      <span class="value-tile-name">Acceptance</span>
+      <span class="value-tile-desc">Welcome every person and build a community where all belong</span>
+    </div>
+    <div class="value-tile v-outreach">
+      <span class="value-tile-name">Outreach</span>
+      <span class="value-tile-desc">Serve our neighbors and share God's love beyond our walls</span>
+    </div>
+  </div>
+
   <p class="section-label">Timothy Lutheran Church</p>
   <div class="cards">
 
@@ -554,6 +646,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">View open slots
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Worship</span>
     </a>
 
     <a href="#upcoming-events" class="card events">
@@ -566,6 +659,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">See upcoming events
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Outreach</span>
     </a>
 
     <a href="#" class="card mdo">
@@ -578,6 +672,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">Get involved
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Acceptance</span>
     </a>
 
     <a href="#" class="card property">
@@ -590,6 +685,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">Join the team
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Outreach</span>
     </a>
 
   </div>
@@ -608,6 +704,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">Learn more about Word of Life
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Christian Education</span>
       <span class="card-external">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         Opens separate site
@@ -624,6 +721,7 @@ footer a:hover { text-decoration: underline; }
       <span class="card-cta">Volunteer with LASM
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
+      <span class="card-value-tag">Outreach</span>
       <span class="card-external">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         lasministry.org
