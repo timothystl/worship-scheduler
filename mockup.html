@@ -599,25 +599,45 @@ footer a:hover { text-decoration: underline; }
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── App page routing ── */
+.app-page[hidden] { display: none !important; }
+
+/* ── Event volunteer cards (events page) ── */
+.event-volunteer-list { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+.ev-card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.ev-card-header {
+  width: 100%; display: flex; align-items: center; gap: 1.25rem;
+  padding: 1.25rem 1.5rem; background: none; border: none; cursor: pointer;
+  text-align: left; transition: background 0.15s;
+}
+.ev-card-header:hover { background: rgba(30,45,74,0.03); }
+.ev-card-date {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 52px; background: var(--navy); color: white;
+  border-radius: 10px; padding: 0.4rem 0.6rem; flex-shrink: 0;
+}
+.ev-card-date .month { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+.ev-card-date .day { font-family: 'Lora', serif; font-size: 1.3rem; font-weight: 600; line-height: 1.1; }
+.ev-card-info { flex: 1; }
+.ev-card-tag { font-size: 0.74rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.ev-card-info h3 { font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--text-primary); margin: 0.2rem 0 0.25rem; }
+.ev-card-info p { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45; margin: 0; }
+.ev-card-cta { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; flex-shrink: 0; padding-left: 0.5rem; }
+.ev-volunteer-label { font-size: 0.8rem; font-weight: 600; color: var(--teal); white-space: nowrap; }
+.ev-chevron { width: 20px; height: 20px; color: var(--teal); transition: transform 0.2s; }
+.ev-card-header[aria-expanded="true"] .ev-chevron { transform: rotate(180deg); }
+.ev-card-roles { padding: 1.25rem 1.5rem 1.5rem; border-top: 1px solid var(--border); }
+@media (max-width: 560px) {
+  .ev-card-header { flex-wrap: wrap; }
+  .ev-card-cta { flex-direction: row; width: 100%; justify-content: flex-end; }
+}
 </style>
 </head>
 <body>
 
-<!-- ══ MOCKUP ANNOTATION ══════════════════════════════════════════ -->
-<div class="annotation-bar">
-  <strong>Mockup</strong> — scroll down to see both pages in sequence
-  <span class="annotation-pill">Page 1: serve.html — the landing hub</span>
-  <span class="annotation-pill">Page 2: volunteer.html — restyled to match</span>
-  <span class="annotation-pill" style="color:#ffcf6e; border-color:rgba(255,207,110,0.4);">No real links yet — for layout review only</span>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════════
-     PAGE 1 — serve.html (the landing hub, from your pasted HTML)
-══════════════════════════════════════════════════════════════════ -->
-<div class="page-divider">Page 1 &nbsp;·&nbsp; serve.html — "Every hand makes a difference"</div>
-
-<header>
-  <a href="#" class="header-logo">
+<header id="site-header">
+  <a href="#" onclick="navigate('landing'); return false;" class="header-logo">
     <div class="header-logo-placeholder">✝</div>
     <div class="header-logo-text">
       <span class="header-logo-name">Timothy Lutheran Church</span>
@@ -628,6 +648,9 @@ footer a:hover { text-decoration: underline; }
     6704 Fyler Ave &mdash; St. Louis, MO 63139
   </div>
 </header>
+
+<!-- ══ LANDING PAGE ══════════════════════════════════════════════ -->
+<div class="app-page" id="page-landing">
 
 <section class="hero">
   <p class="hero-eyebrow">Timothy Lutheran &mdash; Serving Together</p>
@@ -641,28 +664,28 @@ footer a:hover { text-decoration: underline; }
 
 <main id="ways-to-serve">
   <div class="section-intro">
-    <p>"Each of you should use whatever gift you have received to serve others." &mdash; 1 Peter 4:10</p>
+    <p>&ldquo;Each of you should use whatever gift you have received to serve others.&rdquo; &mdash; 1 Peter 4:10</p>
   </div>
 
-  <!-- Core values strip -->
+  <!-- Core values strip — each tile navigates to its ministry page -->
   <div class="values-strip">
-    <a href="#ministry-worship" class="value-tile v-worship">
+    <a href="#" onclick="navigate('worship'); return false;" class="value-tile v-worship">
       <span class="value-tile-name">Worship</span>
       <span class="value-tile-desc">Lead and support the congregation in praise, prayer, and the sacraments</span>
     </a>
-    <a href="#ministry-education" class="value-tile v-education">
+    <a href="#" onclick="navigate('education'); return false;" class="value-tile v-education">
       <span class="value-tile-name">Christian Education</span>
       <span class="value-tile-desc">Nurture faith and discipleship across every age and stage of life</span>
     </a>
-    <a href="#ministry-acceptance" class="value-tile v-acceptance">
+    <a href="#" onclick="navigate('acceptance'); return false;" class="value-tile v-acceptance">
       <span class="value-tile-name">Acceptance</span>
       <span class="value-tile-desc">Welcome every person and build a community where all belong</span>
     </a>
-    <a href="#ministry-outreach" class="value-tile v-outreach">
+    <a href="#" onclick="navigate('outreach'); return false;" class="value-tile v-outreach">
       <span class="value-tile-name">Outreach</span>
       <span class="value-tile-desc">Serve our neighbors and share God's love beyond our walls</span>
     </a>
-    <a href="#ministry-events" class="value-tile v-events">
+    <a href="#" onclick="navigate('events'); return false;" class="value-tile v-events">
       <span class="value-tile-name">Special Events</span>
       <span class="value-tile-desc">Christmas Market, Easter Egg Hunt, VBS, and more</span>
     </a>
@@ -671,57 +694,69 @@ footer a:hover { text-decoration: underline; }
   <p class="section-label">Timothy Lutheran Church</p>
   <div class="cards">
 
-    <!-- Worship card → links to the volunteer/roles page (Page 2) -->
-    <a href="#worship-roles-page" class="card worship">
+    <a href="#" onclick="navigate('worship'); return false;" class="card worship">
       <div class="card-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       </div>
       <span class="card-label">Every Sunday</span>
       <h2>Sunday Worship Roles</h2>
-      <p>Lectors, liturgists, greeters, ushers, altar guild, musicians, and more. See what's open and sign up for upcoming Sundays.</p>
-      <span class="card-cta">View open slots
+      <p>Acolytes, altar guild, lectors, musicians, and more. Sign up for upcoming Sundays or let us know your availability.</p>
+      <span class="card-cta">View roles &amp; sign up
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
       <span class="card-value-tag">Worship</span>
     </a>
 
-    <a href="#upcoming-events" class="card events">
+    <a href="#" onclick="navigate('events'); return false;" class="card events">
       <div class="card-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       </div>
       <span class="card-label">Special Events</span>
       <h2>Community Events</h2>
-      <p>Easter Egg Hunt, Neighborhood Recycle Day, Christmas Market, and other gatherings that bring our corner of St. Louis together.</p>
-      <span class="card-cta">See upcoming events
+      <p>Easter Egg Hunt, Christmas Market, VBS, and other gatherings that bring our corner of St. Louis together.</p>
+      <span class="card-cta">See events &amp; volunteer
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
       <span class="card-value-tag">Outreach</span>
     </a>
 
-    <a href="#" class="card mdo">
+    <a href="#" onclick="navigate('acceptance'); return false;" class="card mdo">
       <div class="card-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </div>
-      <span class="card-label">Occasional &amp; seasonal</span>
-      <h2>Mother's Day Out</h2>
-      <p>Our church-run childcare program serves families in Lindenwood Park. Help with activities, seasonal events, and day-to-day support.</p>
+      <span class="card-label">Care &amp; community</span>
+      <h2>Acceptance Ministry</h2>
+      <p>Stephen Ministry, hospitality, caring ministry — help make sure no one walks through a hard season alone.</p>
       <span class="card-cta">Get involved
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
       <span class="card-value-tag">Acceptance</span>
     </a>
 
-    <a href="#" class="card property">
+    <a href="#" onclick="navigate('outreach'); return false;" class="card property">
       <div class="card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       </div>
-      <span class="card-label">Facilities</span>
-      <h2>Property Team</h2>
-      <p>Repairs, maintenance, groundskeeping, and seasonal projects. If you're handy or just willing to show up with a rake, we need you.</p>
-      <span class="card-cta">Join the team
+      <span class="card-label">Neighbors &amp; community</span>
+      <h2>Outreach Ministry</h2>
+      <p>Community Pantry, Bee Ministry, service projects, and prayer. Live out your faith in the neighborhood around us.</p>
+      <span class="card-cta">See opportunities
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
       <span class="card-value-tag">Outreach</span>
+    </a>
+
+    <a href="#" onclick="navigate('education'); return false;" class="card wol">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+      </div>
+      <span class="card-label">Faith formation</span>
+      <h2>Christian Education</h2>
+      <p>Sunday school, youth group, confirmation mentoring, and VBS — share what you know and walk alongside others as they grow.</p>
+      <span class="card-cta">Get involved
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </span>
+      <span class="card-value-tag">Christian Education</span>
     </a>
 
   </div>
@@ -730,30 +765,13 @@ footer a:hover { text-decoration: underline; }
   <p class="section-label">Partner Ministries</p>
   <div class="cards">
 
-    <a href="#" class="card wol" target="_blank" rel="noopener">
-      <div class="card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-      </div>
-      <span class="card-label">Associated school &middot; South City</span>
-      <h2>Word of Life Lutheran School</h2>
-      <p>Timothy proudly supports Christian education at Word of Life, a pre-K through 8th grade Lutheran school. Alongside Ascension and St. Lucas Lutheran Churches, we help provide students an environment to grow academically and in faith.</p>
-      <span class="card-cta">Learn more about Word of Life
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-      </span>
-      <span class="card-value-tag">Christian Education</span>
-      <span class="card-external">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        Opens separate site
-      </span>
-    </a>
-
     <a href="#" class="card lasm" target="_blank" rel="noopener">
       <div class="card-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </div>
       <span class="card-label">Neighborhood partner &middot; Founded 2008</span>
       <h2>Lindenwood Area Senior Ministry</h2>
-      <p>Founded in 2008 by five neighborhood churches including Timothy, LASM serves aging neighbors through companionship, transportation, meals, and community programs.</p>
+      <p>Founded by five neighborhood churches including Timothy, LASM serves aging neighbors through companionship, transportation, meals, and community programs.</p>
       <span class="card-cta">Volunteer with LASM
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
@@ -768,7 +786,7 @@ footer a:hover { text-decoration: underline; }
 
   <div class="spacer"></div>
   <div class="cards" style="grid-template-columns: minmax(260px, 480px);">
-    <a href="#volunteer-form" class="card interest">
+    <a href="#" onclick="navigate('general'); return false;" class="card interest">
       <div class="card-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </div>
@@ -781,78 +799,23 @@ footer a:hover { text-decoration: underline; }
     </a>
   </div>
 
-  <!-- Upcoming events -->
-  <div class="upcoming" id="upcoming-events">
-    <div class="upcoming-header">
-      <h3>Upcoming events needing volunteers</h3>
-      <span>Sign-ups open now</span>
-    </div>
-    <ul class="event-list">
-      <li>
-        <a href="#" class="event-item">
-          <div class="event-date"><span class="month">Apr</span><span class="day">4</span></div>
-          <div class="event-divider"></div>
-          <div class="event-info"><strong>Easter Egg Hunt</strong><span>Egg hiding, activities, check-in &amp; more &mdash; families welcome</span></div>
-          <span class="event-slots few">8 spots left</span>
-        </a>
-      </li>
-      <li>
-        <a href="#" class="event-item">
-          <div class="event-date"><span class="month">May</span><span class="day">16</span></div>
-          <div class="event-divider"></div>
-          <div class="event-info"><strong>Neighborhood Recycle Day</strong><span>Help us serve Lindenwood Park &mdash; no experience needed</span></div>
-          <span class="event-slots open">12 spots open</span>
-        </a>
-      </li>
-      <li>
-        <a href="#" class="event-item">
-          <div class="event-date"><span class="month">Dec</span><span class="day">5</span></div>
-          <div class="event-divider"></div>
-          <div class="event-info"><strong>Christmas Market</strong><span>Two-day community market &mdash; many roles, all skill levels</span></div>
-          <span class="event-slots soon">Sign-ups open soon</span>
-        </a>
-      </li>
-    </ul>
-  </div>
 </main>
+</div><!-- /page-landing -->
 
-<!-- ══════════════════════════════════════════════════════════════
-     PAGE 2 — volunteer.html restyled
-     This is what "Sunday Worship Roles" (and eventually other
-     cards) links to.  The same page works for all 4 ministry
-     areas — the URL would be something like /volunteer or /interest
-══════════════════════════════════════════════════════════════════ -->
-<div class="page-divider" id="worship-roles-page" style="margin-top: 0;">Page 2 &nbsp;·&nbsp; volunteer.html — restyled to match the Serve page</div>
 
-<!-- Shared header (same as serve.html) -->
-<header>
-  <a href="#" class="header-logo">
-    <div class="header-logo-placeholder">✝</div>
-    <div class="header-logo-text">
-      <span class="header-logo-name">Timothy Lutheran Church</span>
-      <span class="header-logo-tag">From our Neighborhood to the Nations</span>
-    </div>
-  </a>
-  <div class="header-address">
-    6704 Fyler Ave &mdash; St. Louis, MO 63139
-  </div>
-</header>
-
-<!-- Sub-hero -->
+<!-- ══ PAGE: WORSHIP ═════════════════════════════════════════════ -->
+<div class="app-page" id="page-worship" hidden>
 <div class="roles-hero">
-  <a href="#ways-to-serve" class="back-link">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     Back to all ways to serve
   </a>
-  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Volunteer Sign-Up</p>
-  <h2>Find your place <em>to serve.</em></h2>
-  <p class="roles-hero-sub">Our ministry is rooted in four core values. However God has gifted you, there's a place for you here. Browse the roles below and select the ones that interest you.</p>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Worship Ministry</p>
+  <h2>Sunday Worship <em>Roles</em></h2>
+  <p class="roles-hero-sub">These roles support every Sunday service. Select what interests you and we'll be in touch — or jump straight to the scheduler to sign up for a specific date.</p>
 </div>
-
-<main style="max-width: 860px;">
-
-  <!-- ── WORSHIP ── -->
-  <div class="ministry-section" id="ministry-worship">
+<main>
+  <div class="ministry-section">
     <div class="ministry-header worship">
       <div class="ministry-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
@@ -867,10 +830,7 @@ footer a:hover { text-decoration: underline; }
 
         <label class="role-card" for="r-acolyte">
           <input type="checkbox" id="r-acolyte" name="roles" value="Acolyte" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">Acolyte</span>
-          </div>
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Acolyte</span></div>
           <p class="role-desc">Light the altar candles before the service begins and extinguish them at the close. A simple, meaningful act of service for all ages.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>
@@ -879,11 +839,8 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-powerpoint">
-          <input type="checkbox" id="r-powerpoint" name="roles" value="PowerPoint" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">PowerPoint Operator</span>
-          </div>
+          <input type="checkbox" id="r-powerpoint" name="roles" value="PowerPoint Operator" data-ministry="worship">
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">PowerPoint Operator</span></div>
           <p class="role-desc">Advance worship slides so the congregation can follow along with hymns, liturgy, and announcements. No tech expertise required.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>
@@ -893,10 +850,7 @@ footer a:hover { text-decoration: underline; }
 
         <label class="role-card" for="r-lector">
           <input type="checkbox" id="r-lector" name="roles" value="Lector" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">Lector</span>
-          </div>
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Lector</span></div>
           <p class="role-desc">Read the appointed Scripture lessons aloud from the lectern. Readings are emailed to you in advance so you can prepare.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> 1 Sunday per month</div>
@@ -906,23 +860,17 @@ footer a:hover { text-decoration: underline; }
 
         <label class="role-card" for="r-altar">
           <input type="checkbox" id="r-altar" name="roles" value="Altar Guild" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">Altar Guild</span>
-          </div>
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Altar Guild</span></div>
           <p class="role-desc">Prepare the sanctuary — flowers, altar linens, paraments, and banners for each liturgical season. A quiet ministry of beauty and care.</p>
           <div class="role-meta">
-            <div class="role-meta-item"><strong>Commitment:</strong> 1–2 Sundays per month</div>
+            <div class="role-meta-item"><strong>Commitment:</strong> 1&ndash;2 Sundays per month</div>
             <div class="role-meta-item"><strong>Training:</strong> Walk-through with coordinator</div>
           </div>
         </label>
 
         <label class="role-card" for="r-choir">
           <input type="checkbox" id="r-choir" name="roles" value="Adult Choir" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">Adult Choir</span>
-          </div>
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Adult Choir</span></div>
           <p class="role-desc">Enhance worship through choral music. Sing anthems and lead the congregation in song throughout the church year.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> Weekly rehearsals + Sundays</div>
@@ -932,10 +880,7 @@ footer a:hover { text-decoration: underline; }
 
         <label class="role-card" for="r-handbells">
           <input type="checkbox" id="r-handbells" name="roles" value="Handbells" data-ministry="worship">
-          <div class="role-card-top">
-            <div class="role-check" aria-hidden="true"></div>
-            <span class="role-name">Handbells</span>
-          </div>
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Handbells</span></div>
           <p class="role-desc">Ring with the handbell choir to add joyful, resonant music to worship. No prior handbell experience needed.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> Weekly rehearsals (seasonal)</div>
@@ -943,9 +888,9 @@ footer a:hover { text-decoration: underline; }
           </div>
         </label>
 
-      </div><!-- /role-grid worship -->
+      </div>
 
-      <!-- Scheduler shortcut — lives inside the Worship section -->
+      <!-- Scheduler shortcut -->
       <div class="scheduler-cta" style="margin-top: 1.5rem;">
         <div class="scheduler-cta-text">
           <h3>Ready to sign up for a specific Sunday?</h3>
@@ -959,8 +904,270 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- ── CHRISTIAN EDUCATION ── -->
-  <div class="ministry-section" id="ministry-education">
+  <!-- Worship sign-up form — shown when a worship role is selected -->
+  <div class="signup-section" id="volunteer-form">
+    <div class="signup-section-header">
+      <div class="signup-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      <div>
+        <h3>Sign up for a worship role</h3>
+        <p>Tell us your availability and we'll schedule you for upcoming Sundays.</p>
+      </div>
+    </div>
+    <span class="form-section-label">Selected worship roles</span>
+    <div class="selected-roles-preview" id="roles-preview"><em>No worship roles selected yet — click a card above.</em></div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="f-name">Full Name *</label>
+        <input type="text" id="f-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="f-email">Email Address *</label>
+        <input type="email" id="f-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="f-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <input type="tel" id="f-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Which service do you typically attend?</label>
+      <div class="chip-group" id="svc-chips">
+        <label class="chip-label checked" for="svc-both"><input type="radio" id="svc-both" name="svc" value="both" checked>Both services</label>
+        <label class="chip-label" for="svc-8am"><input type="radio" id="svc-8am" name="svc" value="8am">8:00 AM only</label>
+        <label class="chip-label" for="svc-1045"><input type="radio" id="svc-1045" name="svc" value="10:45am">10:45 AM only</label>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Which Sundays work best? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(leave blank if flexible)</span></label>
+      <div class="chip-group" id="sun-chips">
+        <label class="chip-label" for="sun-1"><input type="checkbox" id="sun-1" name="sun" value="1">1st Sunday</label>
+        <label class="chip-label" for="sun-2"><input type="checkbox" id="sun-2" name="sun" value="2">2nd Sunday</label>
+        <label class="chip-label" for="sun-3"><input type="checkbox" id="sun-3" name="sun" value="3">3rd Sunday</label>
+        <label class="chip-label" for="sun-4"><input type="checkbox" id="sun-4" name="sun" value="4">4th Sunday</label>
+        <label class="chip-label" for="sun-5"><input type="checkbox" id="sun-5" name="sun" value="5">5th Sunday</label>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="f-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="f-notes" class="form-textarea" placeholder="Schedule constraints, prior experience, questions&hellip;"></textarea>
+    </div>
+    <button class="btn-submit" type="button">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll follow up by email to confirm your schedule and answer any questions.</p>
+  </div>
+
+</main>
+</div><!-- /page-worship -->
+
+
+<!-- ══ PAGE: COMMUNITY EVENTS ════════════════════════════════════ -->
+<div class="app-page" id="page-events" hidden>
+<div class="roles-hero">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to all ways to serve
+  </a>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Community Events</p>
+  <h2>Events that bring us <em>together.</em></h2>
+  <p class="roles-hero-sub">Each of these events runs on the energy of volunteers. Click an event to see the roles and sign up.</p>
+</div>
+<main>
+
+  <div class="event-volunteer-list">
+
+    <!-- Easter Egg Hunt -->
+    <div class="ev-card">
+      <button class="ev-card-header" onclick="toggleEvent('easter')" aria-expanded="false">
+        <div class="ev-card-date"><span class="month">Apr</span><span class="day">4</span></div>
+        <div class="ev-card-info">
+          <span class="ev-card-tag">Spring &middot; Annual</span>
+          <h3>Easter Egg Hunt</h3>
+          <p>A neighborhood tradition — families, eggs, and a lot of happy kids. Many hands make it happen.</p>
+        </div>
+        <div class="ev-card-cta">
+          <span class="ev-volunteer-label">Volunteer for this</span>
+          <svg class="ev-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </button>
+      <div class="ev-card-roles" id="ev-roles-easter" hidden>
+        <div class="role-grid">
+          <label class="role-card" for="r-easter-eggs">
+            <input type="checkbox" id="r-easter-eggs" name="roles" value="Easter Egg Hunt &ndash; Egg Filling" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Egg Filling Party</span></div>
+            <p class="role-desc">Fill hundreds of eggs with candy the week before. A fun evening for all ages.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>When:</strong> Weeknight before the hunt</div></div>
+          </label>
+          <label class="role-card" for="r-easter-setup">
+            <input type="checkbox" id="r-easter-setup" name="roles" value="Easter Egg Hunt &ndash; Setup &amp; Cleanup" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Cleanup</span></div>
+            <p class="role-desc">Hide eggs and set up activity stations in the morning, then clean up the grounds after.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>When:</strong> Morning of the event</div></div>
+          </label>
+          <label class="role-card" for="r-easter-reg">
+            <input type="checkbox" id="r-easter-reg" name="roles" value="Easter Egg Hunt &ndash; Registration" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Registration Table</span></div>
+            <p class="role-desc">Check in families and hand out baskets as people arrive. The first smile they see is yours.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>When:</strong> Morning shift</div></div>
+          </label>
+          <label class="role-card" for="r-easter-stations">
+            <input type="checkbox" id="r-easter-stations" name="roles" value="Easter Egg Hunt &ndash; Activity Stations" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Activity Stations</span></div>
+            <p class="role-desc">Run a craft, game, or snack station. Help make it a morning kids talk about all week.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Open to:</strong> Families, couples, individuals</div></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- VBS -->
+    <div class="ev-card">
+      <button class="ev-card-header" onclick="toggleEvent('vbs')" aria-expanded="false">
+        <div class="ev-card-date"><span class="month">Jun</span><span class="day">TBD</span></div>
+        <div class="ev-card-info">
+          <span class="ev-card-tag">Summer &middot; One week</span>
+          <h3>Vacation Bible School</h3>
+          <p>Five mornings of Bible stories, crafts, music, and snacks. Kids love it &mdash; and leaders do too.</p>
+        </div>
+        <div class="ev-card-cta">
+          <span class="ev-volunteer-label">Volunteer for this</span>
+          <svg class="ev-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </button>
+      <div class="ev-card-roles" id="ev-roles-vbs" hidden>
+        <div class="role-grid">
+          <label class="role-card" for="r-vbs-leader">
+            <input type="checkbox" id="r-vbs-leader" name="roles" value="VBS &ndash; Group Leader" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Group Leader</span></div>
+            <p class="role-desc">Lead a crew of kids through the week's stations. Training provided.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> All 5 mornings</div></div>
+          </label>
+          <label class="role-card" for="r-vbs-helper">
+            <input type="checkbox" id="r-vbs-helper" name="roles" value="VBS &ndash; Station Helper" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Station Helper</span></div>
+            <p class="role-desc">Assist at a specific station — Bible story, games, crafts, or music. Great if you can only commit to part of the week.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> Flexible — 1 or more days</div></div>
+          </label>
+          <label class="role-card" for="r-vbs-crafts">
+            <input type="checkbox" id="r-vbs-crafts" name="roles" value="VBS &ndash; Crafts Coordinator" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Crafts Coordinator</span></div>
+            <p class="role-desc">Plan and prep the daily craft projects. Gather supplies and run the craft station each morning.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> Prep week before + all 5 days</div></div>
+          </label>
+          <label class="role-card" for="r-vbs-snacks">
+            <input type="checkbox" id="r-vbs-snacks" name="roles" value="VBS &ndash; Snacks" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Snacks</span></div>
+            <p class="role-desc">Provide or prepare themed snacks each day. A small thing that makes a big impression on hungry little people.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Open to:</strong> Individuals, families, small groups</div></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Christmas Market -->
+    <div class="ev-card">
+      <button class="ev-card-header" onclick="toggleEvent('market')" aria-expanded="false">
+        <div class="ev-card-date"><span class="month">Dec</span><span class="day">5</span></div>
+        <div class="ev-card-info">
+          <span class="ev-card-tag">December &middot; 2 days</span>
+          <h3>Christmas Market</h3>
+          <p>A beloved community market with booths, baked goods, kids&rsquo; activities, and holiday cheer. Many roles, all skill levels.</p>
+        </div>
+        <div class="ev-card-cta">
+          <span class="ev-volunteer-label">Volunteer for this</span>
+          <svg class="ev-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </button>
+      <div class="ev-card-roles" id="ev-roles-market" hidden>
+        <div class="role-grid">
+          <label class="role-card" for="r-market-setup">
+            <input type="checkbox" id="r-market-setup" name="roles" value="Christmas Market &ndash; Setup &amp; Teardown" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Teardown</span></div>
+            <p class="role-desc">Arrange booths, tables, signage, and lighting before opening, and break everything down after closing.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>When:</strong> Setup day before; teardown evening of Day 2</div></div>
+          </label>
+          <label class="role-card" for="r-market-food">
+            <input type="checkbox" id="r-market-food" name="roles" value="Christmas Market &ndash; Baked Goods &amp; Food" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Baked Goods &amp; Food</span></div>
+            <p class="role-desc">Donate or staff the food table &mdash; cookies, breads, and holiday treats that bring people in and fund church programs.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Open to:</strong> Bakers and table helpers</div></div>
+          </label>
+          <label class="role-card" for="r-market-kids">
+            <input type="checkbox" id="r-market-kids" name="roles" value="Christmas Market &ndash; Kids' Activities" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Kids&rsquo; Activities</span></div>
+            <p class="role-desc">Run crafts, games, or a visit with Santa so families can enjoy the whole market.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Open to:</strong> Families, youth group, anyone who loves kids</div></div>
+          </label>
+          <label class="role-card" for="r-market-welcome">
+            <input type="checkbox" id="r-market-welcome" name="roles" value="Christmas Market &ndash; Welcome Table" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Welcome Table</span></div>
+            <p class="role-desc">Greet visitors, hand out programs, answer questions, and point people to what&rsquo;s happening where.</p>
+            <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> 2&ndash;3 hour shift(s)</div></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /event-volunteer-list -->
+
+  <!-- Event sign-up form — shown when any event role is selected -->
+  <div class="signup-section" id="event-volunteer-form">
+    <div class="signup-section-header">
+      <div class="signup-icon" style="background:rgba(46,126,166,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--teal);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div>
+        <h3>Sign me up to volunteer</h3>
+        <p>Tell us your name and email and the event coordinator will be in touch with details.</p>
+      </div>
+    </div>
+    <span class="form-section-label">Selected roles</span>
+    <div class="selected-roles-preview" id="event-roles-preview"><em>No roles selected yet &mdash; click an event above to see its roles.</em></div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="ev-name">Full Name *</label>
+        <input type="text" id="ev-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="ev-email">Email Address *</label>
+        <input type="email" id="ev-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="ev-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <input type="tel" id="ev-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="ev-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="ev-notes" class="form-textarea" placeholder="Questions, schedule constraints, or anything that would help the coordinator&hellip;"></textarea>
+    </div>
+    <button class="btn-submit" type="button" style="background:var(--teal);">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the event coordinator and they'll be in touch soon.</p>
+  </div>
+
+</main>
+</div><!-- /page-events -->
+
+
+<!-- ══ PAGE: CHRISTIAN EDUCATION ════════════════════════════════ -->
+<div class="app-page" id="page-education" hidden>
+<div class="roles-hero">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to all ways to serve
+  </a>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Christian Education</p>
+  <h2>Nurture faith <em>at every age.</em></h2>
+  <p class="roles-hero-sub">From Sunday school to confirmation mentoring &mdash; share what you know and walk alongside others as they grow.</p>
+</div>
+<main>
+  <div class="ministry-section">
     <div class="ministry-header education">
       <div class="ministry-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
@@ -970,55 +1177,97 @@ footer a:hover { text-decoration: underline; }
         <div class="ministry-tagline">Nurture faith and discipleship across every age and stage of life</div>
       </div>
     </div>
-    <div class="ministry-roles" style="border-color: rgba(201,151,58,0.18);">
+    <div class="ministry-roles" style="border-color:rgba(201,151,58,0.18);">
       <div class="role-grid">
 
         <label class="role-card" for="r-sundayschool">
-          <input type="checkbox" id="r-sundayschool" name="roles" value="Sunday School">
-          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Sunday School</span></div>
-          <p class="role-desc">Teach or assist in Sunday School, helping children explore the Bible and grow in faith through age-appropriate lessons and activities.</p>
+          <input type="checkbox" id="r-sundayschool" name="roles" value="Sunday School Teacher" data-ministry="education">
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Sunday School Teacher</span></div>
+          <p class="role-desc">Lead a class through Bible stories and lessons each week. Curriculum provided; your heart for teaching matters most.</p>
           <div class="role-meta">
-            <div class="role-meta-item"><strong>Commitment:</strong> Weekly during program year</div>
-            <div class="role-meta-item"><strong>Open to:</strong> Adults; curriculum provided</div>
+            <div class="role-meta-item"><strong>Commitment:</strong> Weekly during the school year</div>
+            <div class="role-meta-item"><strong>Training:</strong> Curriculum orientation provided</div>
           </div>
         </label>
 
         <label class="role-card" for="r-youthgroup">
-          <input type="checkbox" id="r-youthgroup" name="roles" value="Youth Group">
-          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Youth Group</span></div>
-          <p class="role-desc">Help lead, mentor, or chaperone youth group gatherings for middle and high school students — faith and community in a fun environment.</p>
+          <input type="checkbox" id="r-youthgroup" name="roles" value="Youth Group Leader" data-ministry="education">
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Youth Group Leader</span></div>
+          <p class="role-desc">Walk alongside middle and high school students through discussion, activities, and faith-building events.</p>
           <div class="role-meta">
-            <div class="role-meta-item"><strong>Commitment:</strong> Regular meetings + events</div>
-            <div class="role-meta-item"><strong>Open to:</strong> Adults who enjoy teens</div>
+            <div class="role-meta-item"><strong>Commitment:</strong> Monthly + events</div>
+            <div class="role-meta-item"><strong>Open to:</strong> Adults 21+</div>
           </div>
         </label>
 
-        <label class="role-card" for="r-mentor">
-          <input type="checkbox" id="r-mentor" name="roles" value="Confirmation Mentor">
+        <label class="role-card" for="r-confirm">
+          <input type="checkbox" id="r-confirm" name="roles" value="Confirmation Mentor" data-ministry="education">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Confirmation Mentor</span></div>
-          <p class="role-desc">Walk alongside a confirmation student as they explore and affirm their faith. Meet periodically to discuss faith, life, and what it means to be Lutheran.</p>
-          <div class="role-meta">
-            <div class="role-meta-item"><strong>Commitment:</strong> Periodic meetings, program year</div>
-            <div class="role-meta-item"><strong>Open to:</strong> Confirmed adults</div>
-          </div>
+          <p class="role-desc">Be paired with a confirmation student to meet, pray, and talk through what it means to affirm their faith. An investment that lasts a lifetime.</p>
+          <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> 1&ndash;2 years alongside a student</div></div>
         </label>
 
-        <label class="role-card" for="r-vbs">
-          <input type="checkbox" id="r-vbs" name="roles" value="VBS">
-          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">VBS (Vacation Bible School)</span></div>
-          <p class="role-desc">Help bring VBS to life each summer — lead a station, shepherd a small group of kids, assist with crafts or music, or help behind the scenes.</p>
-          <div class="role-meta">
-            <div class="role-meta-item"><strong>Commitment:</strong> One week in summer</div>
-            <div class="role-meta-item"><strong>Open to:</strong> Adults and older youth</div>
-          </div>
+        <label class="role-card" for="r-vbs-gen">
+          <input type="checkbox" id="r-vbs-gen" name="roles" value="VBS General Interest" data-ministry="education">
+          <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Vacation Bible School</span></div>
+          <p class="role-desc">Help during VBS week &mdash; leading groups, running stations, or helping behind the scenes. One of the most energizing weeks of the year.</p>
+          <div class="role-meta"><div class="role-meta-item"><strong>Commitment:</strong> One week each summer</div></div>
         </label>
 
       </div>
     </div>
   </div>
 
-  <!-- ── ACCEPTANCE ── -->
-  <div class="ministry-section" id="ministry-acceptance">
+  <div class="signup-section visible" id="edu-volunteer-form">
+    <div class="signup-section-header">
+      <div class="signup-icon" style="background:rgba(201,151,58,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:#7a5800;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div>
+        <h3>Express your interest</h3>
+        <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>
+      </div>
+    </div>
+    <span class="form-section-label">Selected areas</span>
+    <div class="selected-roles-preview" id="edu-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="edu-name">Full Name *</label>
+        <input type="text" id="edu-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="edu-email">Email Address *</label>
+        <input type="email" id="edu-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="edu-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="edu-notes" class="form-textarea" placeholder="Experience with kids/youth, scheduling, questions&hellip;"></textarea>
+    </div>
+    <button class="btn-submit" type="button" style="background:#7a5800;">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>
+  </div>
+
+</main>
+</div><!-- /page-education -->
+
+
+<!-- ══ PAGE: ACCEPTANCE ══════════════════════════════════════════ -->
+<div class="app-page" id="page-acceptance" hidden>
+<div class="roles-hero">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to all ways to serve
+  </a>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Acceptance Ministry</p>
+  <h2>Welcome every <em>person.</em></h2>
+  <p class="roles-hero-sub">Help make sure no one walks through our doors &mdash; or through a hard season &mdash; alone.</p>
+</div>
+<main>
+  <div class="ministry-section">
     <div class="ministry-header acceptance">
       <div class="ministry-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -1028,13 +1277,13 @@ footer a:hover { text-decoration: underline; }
         <div class="ministry-tagline">Welcome every person and build a community where all belong</div>
       </div>
     </div>
-    <div class="ministry-roles" style="border-color: rgba(74,94,58,0.15);">
+    <div class="ministry-roles" style="border-color:rgba(74,94,58,0.15);">
       <div class="role-grid">
 
         <label class="role-card" for="r-stephen">
-          <input type="checkbox" id="r-stephen" name="roles" value="Stephen Ministry">
+          <input type="checkbox" id="r-stephen" name="roles" value="Stephen Ministry" data-ministry="acceptance">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Stephen Ministry</span></div>
-          <p class="role-desc">Provide one-on-one Christian care to people experiencing grief, illness, loneliness, divorce, job loss, or other life challenges. Walk alongside someone through a difficult season.</p>
+          <p class="role-desc">Provide one-on-one Christian care to people experiencing grief, illness, loneliness, divorce, or job loss. Walk alongside someone through a difficult season.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> Weekly meetings with a care receiver</div>
             <div class="role-meta-item"><strong>Training:</strong> Comprehensive Stephen Ministry training provided</div>
@@ -1042,9 +1291,9 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-hospitality">
-          <input type="checkbox" id="r-hospitality" name="roles" value="Hospitality">
+          <input type="checkbox" id="r-hospitality" name="roles" value="Hospitality / Coffee Hour" data-ministry="acceptance">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Hospitality / Coffee Hour</span></div>
-          <p class="role-desc">Set up and serve refreshments after Sunday worship — a warm space for conversation and connection. Individuals, families, or small groups welcome.</p>
+          <p class="role-desc">Set up and serve refreshments after Sunday worship. A warm space for conversation and connection. Individuals, families, or small groups welcome.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> Occasional Sundays</div>
             <div class="role-meta-item"><strong>Open to:</strong> Individuals, families, groups</div>
@@ -1052,7 +1301,7 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-caring">
-          <input type="checkbox" id="r-caring" name="roles" value="Caring Ministry">
+          <input type="checkbox" id="r-caring" name="roles" value="Caring Ministry" data-ministry="acceptance">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Caring Ministry</span></div>
           <p class="role-desc">Reach out to members who are homebound, recovering, or grieving. A friendly visit, a card, or a phone call can make a profound difference.</p>
           <div class="role-meta">
@@ -1065,8 +1314,56 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- ── OUTREACH ── -->
-  <div class="ministry-section" id="ministry-outreach">
+  <div class="signup-section visible" id="acc-volunteer-form">
+    <div class="signup-section-header">
+      <div class="signup-icon" style="background:rgba(74,94,58,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--moss);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div>
+        <h3>Express your interest</h3>
+        <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>
+      </div>
+    </div>
+    <span class="form-section-label">Selected areas</span>
+    <div class="selected-roles-preview" id="acc-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="acc-name">Full Name *</label>
+        <input type="text" id="acc-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="acc-email">Email Address *</label>
+        <input type="email" id="acc-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="acc-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="acc-notes" class="form-textarea" placeholder="Questions, prior experience, or anything that would help us connect you well&hellip;"></textarea>
+    </div>
+    <button class="btn-submit" type="button" style="background:var(--moss);">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>
+  </div>
+
+</main>
+</div><!-- /page-acceptance -->
+
+
+<!-- ══ PAGE: OUTREACH ════════════════════════════════════════════ -->
+<div class="app-page" id="page-outreach" hidden>
+<div class="roles-hero">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to all ways to serve
+  </a>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Outreach Ministry</p>
+  <h2>Serve our neighbors <em>beyond our walls.</em></h2>
+  <p class="roles-hero-sub">Share God's love through hands-on service, prayer, and partnership with the community around us.</p>
+</div>
+<main>
+  <div class="ministry-section">
     <div class="ministry-header outreach">
       <div class="ministry-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -1076,11 +1373,11 @@ footer a:hover { text-decoration: underline; }
         <div class="ministry-tagline">Serve our neighbors and share God's love beyond our walls</div>
       </div>
     </div>
-    <div class="ministry-roles" style="border-color: rgba(58,78,92,0.13);">
+    <div class="ministry-roles" style="border-color:rgba(58,78,92,0.13);">
       <div class="role-grid">
 
         <label class="role-card" for="r-pantry">
-          <input type="checkbox" id="r-pantry" name="roles" value="Community Pantry">
+          <input type="checkbox" id="r-pantry" name="roles" value="Community Pantry" data-ministry="outreach">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Community Pantry</span></div>
           <p class="role-desc">Help sort, stock, and distribute food and essentials to neighbors in need. A hands-on way to live out our faith in the community around us.</p>
           <div class="role-meta">
@@ -1090,7 +1387,7 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-service">
-          <input type="checkbox" id="r-service" name="roles" value="Service Projects">
+          <input type="checkbox" id="r-service" name="roles" value="Service Projects" data-ministry="outreach">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Service Projects</span></div>
           <p class="role-desc">Participate in organized community service days, mission trips, and collaborative events with partner organizations.</p>
           <div class="role-meta">
@@ -1100,7 +1397,7 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-prayer">
-          <input type="checkbox" id="r-prayer" name="roles" value="Prayer Ministry">
+          <input type="checkbox" id="r-prayer" name="roles" value="Prayer Ministry" data-ministry="outreach">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Prayer Ministry</span></div>
           <p class="role-desc">Commit to praying regularly for congregation members, our community, and the world. Receive prayer requests and lift them up from anywhere.</p>
           <div class="role-meta">
@@ -1110,9 +1407,9 @@ footer a:hover { text-decoration: underline; }
         </label>
 
         <label class="role-card" for="r-bee">
-          <input type="checkbox" id="r-bee" name="roles" value="Bee Ministry">
+          <input type="checkbox" id="r-bee" name="roles" value="Bee Ministry" data-ministry="outreach">
           <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Bee Ministry</span></div>
-          <p class="role-desc">Join our Bee Ministry and help create handmade quilts, blankets, and items for those in need — a labor of love that stitches our community together and reaches neighbors near and far.</p>
+          <p class="role-desc">Join our Bee Ministry and help create handmade quilts, blankets, and items for those in need &mdash; a labor of love that stitches our community together.</p>
           <div class="role-meta">
             <div class="role-meta-item"><strong>Commitment:</strong> Regular meeting times (flexible)</div>
             <div class="role-meta-item"><strong>Open to:</strong> All skill levels welcome</div>
@@ -1123,272 +1420,95 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- ── SPECIAL EVENTS ── -->
-  <div class="ministry-section" id="ministry-events">
-    <div class="ministry-header events">
-      <div class="ministry-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      </div>
-      <div>
-        <div class="ministry-name">Special Events</div>
-        <div class="ministry-tagline">Seasonal celebrations that bring our neighborhood together — many hands make light work</div>
-      </div>
-    </div>
-    <div class="ministry-roles" style="border-color: rgba(46,126,166,0.18);">
-
-      <!-- Christmas Market -->
-      <div class="event-group">
-        <div class="event-group-header">
-          <span class="event-group-icon">🎄</span>
-          <span class="event-group-name">Christmas Market</span>
-          <span class="event-group-when">December &mdash; 2 days</span>
-        </div>
-        <div class="role-grid">
-          <label class="role-card" for="r-market-setup">
-            <input type="checkbox" id="r-market-setup" name="roles" value="Christmas Market – Setup &amp; Teardown" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Teardown</span></div>
-            <p class="role-desc">Help arrange booths, tables, signage, and lighting before the market opens, and break everything down after closing.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>When:</strong> Setup day before; teardown evening of Day 2</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-market-food">
-            <input type="checkbox" id="r-market-food" name="roles" value="Christmas Market – Baked Goods &amp; Food" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Baked Goods &amp; Food</span></div>
-            <p class="role-desc">Donate or staff the food table — cookies, breads, holiday treats that bring people in and fund church programs.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Open to:</strong> Bakers and table helpers</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-market-kids">
-            <input type="checkbox" id="r-market-kids" name="roles" value="Christmas Market – Kids' Activities" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Kids' Activities</span></div>
-            <p class="role-desc">Run crafts, games, or a visit with Santa. Keep the little ones engaged so families can enjoy the whole market.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Open to:</strong> Families, youth group, anyone who loves kids</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-market-welcome">
-            <input type="checkbox" id="r-market-welcome" name="roles" value="Christmas Market – Welcome Table" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Welcome Table</span></div>
-            <p class="role-desc">Greet visitors, hand out programs, answer questions about the church, and point people to what's happening where.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Commitment:</strong> 2–3 hour shift(s)</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Easter Egg Hunt -->
-      <div class="event-group">
-        <div class="event-group-header">
-          <span class="event-group-icon">🐣</span>
-          <span class="event-group-name">Easter Egg Hunt</span>
-          <span class="event-group-when">Spring &mdash; Saturday before Easter</span>
-        </div>
-        <div class="role-grid">
-          <label class="role-card" for="r-easter-eggs">
-            <input type="checkbox" id="r-easter-eggs" name="roles" value="Easter Egg Hunt – Egg Filling" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Egg Filling Party</span></div>
-            <p class="role-desc">Join us the week before to fill hundreds of eggs with candy and prizes. A fun, low-key evening for all ages.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>When:</strong> Weeknight before the hunt</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-easter-setup">
-            <input type="checkbox" id="r-easter-setup" name="roles" value="Easter Egg Hunt – Setup &amp; Cleanup" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Cleanup</span></div>
-            <p class="role-desc">Hide eggs across the field and set up activity stations in the morning, then help clean up the grounds afterward.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>When:</strong> Morning of the event</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-easter-reg">
-            <input type="checkbox" id="r-easter-reg" name="roles" value="Easter Egg Hunt – Registration" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Registration Table</span></div>
-            <p class="role-desc">Check in families, hand out baskets, and answer questions as the crowds arrive. The first smile they see is yours.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>When:</strong> Morning shift</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-easter-stations">
-            <input type="checkbox" id="r-easter-stations" name="roles" value="Easter Egg Hunt – Activity Stations" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Activity Stations</span></div>
-            <p class="role-desc">Run a craft, game, or snack station. Help make it a morning kids talk about all the way home.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Open to:</strong> Families, couples, individuals</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- VBS -->
-      <div class="event-group">
-        <div class="event-group-header">
-          <span class="event-group-icon">✏️</span>
-          <span class="event-group-name">Vacation Bible School</span>
-          <span class="event-group-when">Summer &mdash; one week</span>
-        </div>
-        <div class="role-grid">
-          <label class="role-card" for="r-vbs-leader">
-            <input type="checkbox" id="r-vbs-leader" name="roles" value="VBS – Group Leader" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Group Leader</span></div>
-            <p class="role-desc">Lead a crew of kids through the week's stations, keeping them engaged, on schedule, and having a great time.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Commitment:</strong> All 5 days (mornings)</div>
-              <div class="role-meta-item"><strong>Training:</strong> Leader orientation provided</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-vbs-helper">
-            <input type="checkbox" id="r-vbs-helper" name="roles" value="VBS – Station Helper" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Station Helper</span></div>
-            <p class="role-desc">Assist at a specific station — Bible story, games, crafts, or music. Great if you can only commit to part of the week.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Commitment:</strong> Flexible — 1 or more days</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-vbs-crafts">
-            <input type="checkbox" id="r-vbs-crafts" name="roles" value="VBS – Crafts Coordinator" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Crafts Coordinator</span></div>
-            <p class="role-desc">Plan and prep the daily craft projects tied to that year's theme. Gather supplies and run the craft station each morning.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Commitment:</strong> Prep week before + all 5 days</div>
-            </div>
-          </label>
-          <label class="role-card" for="r-vbs-snacks">
-            <input type="checkbox" id="r-vbs-snacks" name="roles" value="VBS – Snacks" data-ministry="events">
-            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Snacks</span></div>
-            <p class="role-desc">Provide or prepare themed snacks for the kids each day. A small thing that makes a big impression on hungry little people.</p>
-            <div class="role-meta">
-              <div class="role-meta-item"><strong>Open to:</strong> Individuals, families, small groups</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── WORSHIP SIGN-UP FORM ── -->
-  <div class="signup-section" id="volunteer-form">
+  <div class="signup-section visible" id="out-volunteer-form">
     <div class="signup-section-header">
-      <div class="signup-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <div class="signup-icon" style="background:rgba(58,78,92,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--slate);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </div>
       <div>
-        <h3>Sign up for a worship role</h3>
-        <p>Tell us your availability and we'll schedule you for upcoming Sundays — or use the scheduler to pick a specific date.</p>
+        <h3>Express your interest</h3>
+        <p>Select the roles that interest you above, then fill this out and we'll connect you with the ministry leader.</p>
       </div>
     </div>
-
-    <!-- Selected worship roles preview -->
-    <span class="form-section-label">Selected worship roles</span>
-    <div class="selected-roles-preview" id="roles-preview">
-      <em>No worship roles selected yet.</em>
-    </div>
-
+    <span class="form-section-label">Selected areas</span>
+    <div class="selected-roles-preview" id="out-roles-preview"><em>No roles selected yet &mdash; click any card above.</em></div>
     <div class="form-row">
       <div class="form-field">
-        <label class="form-label" for="f-name">Full Name *</label>
-        <input type="text" id="f-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+        <label class="form-label" for="out-name">Full Name *</label>
+        <input type="text" id="out-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
       </div>
       <div class="form-field">
-        <label class="form-label" for="f-email">Email Address *</label>
-        <input type="email" id="f-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+        <label class="form-label" for="out-email">Email Address *</label>
+        <input type="email" id="out-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
       </div>
     </div>
-
     <div class="form-field">
-      <label class="form-label" for="f-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-      <input type="tel" id="f-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
+      <label class="form-label" for="out-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="out-notes" class="form-textarea" placeholder="Questions, prior experience, or anything that would help us connect you well&hellip;"></textarea>
     </div>
+    <button class="btn-submit" type="button" style="background:var(--slate);">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll pass your info to the right ministry leader and they'll be in touch soon.</p>
+  </div>
 
-    <div class="form-field">
-      <label class="form-label">Which service do you typically attend?</label>
-      <div class="chip-group" id="svc-chips">
-        <label class="chip-label checked" for="svc-both"><input type="radio" id="svc-both" name="svc" value="both" checked>Both services</label>
-        <label class="chip-label" for="svc-8am"><input type="radio" id="svc-8am" name="svc" value="8am">8:00 AM only</label>
-        <label class="chip-label" for="svc-1045"><input type="radio" id="svc-1045" name="svc" value="10:45am">10:45 AM only</label>
+</main>
+</div><!-- /page-outreach -->
+
+
+<!-- ══ PAGE: GENERAL INTEREST ════════════════════════════════════ -->
+<div class="app-page" id="page-general" hidden>
+<div class="roles-hero">
+  <a href="#" onclick="navigate('landing'); return false;" class="back-link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to all ways to serve
+  </a>
+  <p class="roles-hero-eyebrow">Timothy Lutheran &mdash; Get Involved</p>
+  <h2>I just want <em>to help.</em></h2>
+  <p class="roles-hero-sub">Not sure where to start? Tell us a little about yourself and we'll reach out with opportunities that might be a good fit.</p>
+</div>
+<main>
+  <div class="signup-section visible" style="margin-top:0;">
+    <div class="signup-section-header">
+      <div class="signup-icon" style="background:rgba(30,45,74,0.08);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--navy);"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </div>
+      <div>
+        <h3>Tell us about yourself</h3>
+        <p>No pressure, no commitment &mdash; just let us know you're interested and we'll take it from there.</p>
       </div>
     </div>
-
-    <div class="form-field">
-      <label class="form-label">Which Sundays work best? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(leave blank if flexible)</span></label>
-      <div class="chip-group" id="sun-chips">
-        <label class="chip-label" for="sun-1"><input type="checkbox" id="sun-1" name="sun" value="1">1st Sunday</label>
-        <label class="chip-label" for="sun-2"><input type="checkbox" id="sun-2" name="sun" value="2">2nd Sunday</label>
-        <label class="chip-label" for="sun-3"><input type="checkbox" id="sun-3" name="sun" value="3">3rd Sunday</label>
-        <label class="chip-label" for="sun-4"><input type="checkbox" id="sun-4" name="sun" value="4">4th Sunday</label>
-        <label class="chip-label" for="sun-5"><input type="checkbox" id="sun-5" name="sun" value="5">5th Sunday</label>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="gen-name">Full Name *</label>
+        <input type="text" id="gen-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="gen-email">Email Address *</label>
+        <input type="email" id="gen-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
       </div>
     </div>
-
     <div class="form-field">
-      <label class="form-label" for="f-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-      <textarea id="f-notes" class="form-textarea" placeholder="Schedule constraints, prior experience, questions…"></textarea>
+      <label class="form-label" for="gen-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <input type="tel" id="gen-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
     </div>
-
+    <div class="form-field">
+      <label class="form-label" for="gen-notes">What do you enjoy or feel gifted for? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="gen-notes" class="form-textarea" placeholder="Working with kids, music, hands-on projects, behind-the-scenes support, etc. &mdash; anything helps!"></textarea>
+    </div>
     <button class="btn-submit" type="button">
       Submit My Interest
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
     </button>
-    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">
-      We'll follow up by email to confirm your schedule and answer any questions.
-    </p>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">We'll follow up by email within a week.</p>
   </div>
-
-  <!-- ── GENERAL VOLUNTEER INTEREST FORM ── -->
-  <div class="signup-section" id="general-volunteer-form">
-    <div class="signup-section-header">
-      <div class="signup-icon" style="background: rgba(46,126,166,0.1);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--teal);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      </div>
-      <div>
-        <h3>Express your interest</h3>
-        <p>Tell us where you'd like to serve and we'll connect you with the right ministry leader — no commitment required.</p>
-      </div>
-    </div>
-
-    <!-- Selected non-worship roles preview -->
-    <span class="form-section-label">Selected areas of interest</span>
-    <div class="selected-roles-preview" id="general-roles-preview">
-      <em>No areas selected yet.</em>
-    </div>
-
-    <div class="form-row">
-      <div class="form-field">
-        <label class="form-label" for="gf-name">Full Name *</label>
-        <input type="text" id="gf-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
-      </div>
-      <div class="form-field">
-        <label class="form-label" for="gf-email">Email Address *</label>
-        <input type="email" id="gf-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
-      </div>
-    </div>
-
-    <div class="form-field">
-      <label class="form-label" for="gf-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-      <input type="tel" id="gf-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
-    </div>
-
-    <div class="form-field">
-      <label class="form-label" for="gf-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-      <textarea id="gf-notes" class="form-textarea" placeholder="Questions, prior experience, schedule constraints, or anything that would help us connect you well…"></textarea>
-    </div>
-
-    <button class="btn-submit" type="button" style="background: var(--teal);">
-      Submit My Interest
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-    </button>
-    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">
-      We'll pass your info to the right ministry or event coordinator and they'll be in touch soon.
-    </p>
-  </div>
-
 </main>
+</div><!-- /page-general -->
+
 
 <footer>
-  <div class="footer-logo"><div class="footer-logo-placeholder">✝</div></div>
+  <div class="footer-logo"><div class="footer-logo-placeholder">&#10013;</div></div>
   <p>
     Timothy Lutheran Church &mdash; LCMS &mdash; St. Louis, Missouri<br>
     6704 Fyler Ave, St. Louis, MO 63139<br>
@@ -1397,7 +1517,34 @@ footer a:hover { text-decoration: underline; }
 </footer>
 
 <script>
-// Role card toggle + preview sync
+// ── Page navigation ────────────────────────────────────────────────
+function navigate(pageId) {
+  document.querySelectorAll('.app-page').forEach(function(p) { p.hidden = true; });
+  var target = document.getElementById('page-' + pageId);
+  if (target) { target.hidden = false; }
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+// ── Events page: expand/collapse event roles ───────────────────────
+function toggleEvent(eventId) {
+  var rolesEl = document.getElementById('ev-roles-' + eventId);
+  var btn = rolesEl.previousElementSibling;
+  var isOpen = !rolesEl.hidden;
+  // Close all others first
+  document.querySelectorAll('.ev-card-roles').forEach(function(el) {
+    el.hidden = true;
+    el.previousElementSibling.setAttribute('aria-expanded', 'false');
+  });
+  if (!isOpen) {
+    rolesEl.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    setTimeout(function() {
+      rolesEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  }
+}
+
+// ── Role card checkbox toggle ──────────────────────────────────────
 document.addEventListener('change', function(e) {
   var t = e.target;
   if (t.type === 'checkbox' && t.name === 'roles') {
@@ -1405,57 +1552,63 @@ document.addEventListener('change', function(e) {
     if (card) {
       card.classList.toggle('selected', t.checked);
       var chk = card.querySelector('.role-check');
-      if (chk) chk.textContent = t.checked ? '✓' : '';
+      if (chk) chk.textContent = t.checked ? '\u2713' : '';
     }
-    updateRolesPreview();
+    updatePreviews();
   }
   if (t.type === 'radio' && t.name === 'svc') {
     document.querySelectorAll('#svc-chips .chip-label').forEach(function(l) {
-      var i = l.querySelector('input');
-      l.classList.toggle('checked', i && i.checked);
+      l.classList.toggle('checked', l.querySelector('input').checked);
     });
   }
   if (t.type === 'checkbox' && t.name === 'sun') {
-    var lbl = t.closest('.chip-label');
-    if (lbl) lbl.classList.toggle('checked', t.checked);
+    t.closest('.chip-label').classList.toggle('checked', t.checked);
   }
 });
 
-function roleTag(r, bgColor, borderColor) {
-  return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:.2rem .65rem;font-size:.82rem;margin:.2rem .2rem 0 0;">' + r + '</span>';
+function roleTag(r, bg, border) {
+  return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:.2rem .65rem;font-size:.82rem;margin:.2rem .2rem 0 0;">' + r + '</span>';
 }
 
-function updateRolesPreview() {
-  var worshipChecked  = Array.from(document.querySelectorAll('input[name="roles"][data-ministry="worship"]:checked'));
-  var generalChecked  = Array.from(document.querySelectorAll('input[name="roles"]:not([data-ministry="worship"]):checked'));
-
-  // Worship form
-  var worshipForm = document.getElementById('volunteer-form');
-  var worshipPreview = document.getElementById('roles-preview');
-  var showWorship = worshipChecked.length > 0;
-  worshipForm.classList.toggle('visible', showWorship);
-  worshipPreview.innerHTML = showWorship
-    ? worshipChecked.map(function(cb){ return roleTag(cb.value, 'rgba(30,45,74,0.08)', 'rgba(30,45,74,0.18)'); }).join('')
-    : '<em>No worship roles selected yet.</em>';
-
-  // General form
-  var generalForm = document.getElementById('general-volunteer-form');
-  var generalPreview = document.getElementById('general-roles-preview');
-  var showGeneral = generalChecked.length > 0;
-  generalForm.classList.toggle('visible', showGeneral);
-  generalPreview.innerHTML = showGeneral
-    ? generalChecked.map(function(cb){ return roleTag(cb.value, 'rgba(46,126,166,0.08)', 'rgba(46,126,166,0.2)'); }).join('')
-    : '<em>No areas selected yet.</em>';
-
-  // Scroll to whichever form just became visible
-  if (showWorship && !worshipForm._wasVisible) {
-    worshipForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function syncPreview(selector, previewId, formId, bg, border, emptyMsg, alwaysShow) {
+  var checked = Array.from(document.querySelectorAll(selector + ':checked'));
+  var preview = document.getElementById(previewId);
+  var form = document.getElementById(formId);
+  if (!preview) return;
+  preview.innerHTML = checked.length
+    ? checked.map(function(cb) { return roleTag(cb.value, bg, border); }).join('')
+    : '<em>' + emptyMsg + '</em>';
+  if (form && !alwaysShow) {
+    form.classList.toggle('visible', checked.length > 0);
   }
-  if (showGeneral && !generalForm._wasVisible) {
-    generalForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-  worshipForm._wasVisible  = showWorship;
-  generalForm._wasVisible  = showGeneral;
+}
+
+function updatePreviews() {
+  // Worship page
+  syncPreview(
+    'input[name="roles"][data-ministry="worship"]', 'roles-preview', 'volunteer-form',
+    'rgba(30,45,74,0.08)', 'rgba(30,45,74,0.18)', 'No worship roles selected yet &mdash; click a card above.', false
+  );
+  // Events page
+  syncPreview(
+    'input[name="roles"][data-ministry="events"]', 'event-roles-preview', 'event-volunteer-form',
+    'rgba(46,126,166,0.08)', 'rgba(46,126,166,0.2)', 'No roles selected yet &mdash; click an event above to see its roles.', false
+  );
+  // Education page (form always visible)
+  syncPreview(
+    'input[name="roles"][data-ministry="education"]', 'edu-roles-preview', null,
+    'rgba(201,151,58,0.08)', 'rgba(201,151,58,0.25)', 'No roles selected yet &mdash; click any card above.', true
+  );
+  // Acceptance page (form always visible)
+  syncPreview(
+    'input[name="roles"][data-ministry="acceptance"]', 'acc-roles-preview', null,
+    'rgba(74,94,58,0.08)', 'rgba(74,94,58,0.2)', 'No roles selected yet &mdash; click any card above.', true
+  );
+  // Outreach page (form always visible)
+  syncPreview(
+    'input[name="roles"][data-ministry="outreach"]', 'out-roles-preview', null,
+    'rgba(58,78,92,0.08)', 'rgba(58,78,92,0.2)', 'No roles selected yet &mdash; click any card above.', true
+  );
 }
 </script>
 </body>
