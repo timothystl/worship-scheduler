@@ -442,7 +442,7 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
       <h2 style="margin:0;">Volunteers (<span id="people-count">0</span>)</h2>
       <button class="btn btn-warning btn-sm" id="review-signups-btn" style="display:none;" onclick="openPanel('signups-panel');renderSignupsPanel();">&#128203; Scheduler Sign-Ups (<span id="review-signups-count">0</span>)</button>
       <button class="btn btn-success btn-sm" id="review-general-btn" style="display:none;" onclick="openPanel('general-panel');renderGeneralPanel();">&#128101; General Volunteers (<span id="review-general-count">0</span>)</button>
-      <button class="btn btn-outline btn-sm" id="review-events-btn" style="display:none;" onclick="openPanel('events-panel');renderEventsPanel();">&#127881; Event Volunteers (<span id="review-events-count">0</span>)</button>
+      <button class="btn btn-outline btn-sm" id="review-events-btn" onclick="openPanel('events-panel');renderEventsPanel();">&#127881; Events (<span id="review-events-count">0</span>)</button>
       <button class="btn btn-primary btn-sm" id="btn-open-person-panel" style="margin-left:auto;">+ Add Person</button>
       <input type="search" id="people-search" placeholder="Filter by name, role, or service…"
              style="max-width:240px;font-size:.85rem;" oninput="peopleSearchQuery=this.value;renderPeopleList();">
@@ -4022,9 +4022,7 @@ async function fetchEventVolunteers() {
 
 function updateEventBadge() {
   var n = _eventVolunteers.length;
-  var btn   = document.getElementById('review-events-btn');
   var count = document.getElementById('review-events-count');
-  if (btn)   btn.style.display = n > 0 ? '' : 'none';
   if (count) count.textContent = n;
 }
 
