@@ -164,7 +164,7 @@ main { max-width: 1060px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
 /* ── CORE VALUES STRIP ── */
 .values-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.75rem;
   margin-bottom: 3rem;
 }
@@ -214,12 +214,17 @@ main { max-width: 1060px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
   color: var(--text-muted);
   line-height: 1.4;
 }
-@media (max-width: 640px) {
+@media (max-width: 860px) {
+  .values-strip { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 580px) {
   .values-strip { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 380px) {
   .values-strip { grid-template-columns: 1fr; }
 }
+.value-tile.v-events::before { background: var(--teal); }
+.value-tile.v-events .value-tile-name { color: var(--teal); }
 
 /* ── CARD VALUE TAG ── */
 .card-value-tag {
@@ -413,6 +418,22 @@ main { max-width: 1060px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
 .ministry-header.education .ministry-name { color: #7a5800; }
 .ministry-header.acceptance .ministry-name { color: var(--moss); }
 .ministry-header.outreach .ministry-name { color: var(--slate); }
+.ministry-header.events { background: rgba(46,126,166,0.07); border: 1px solid rgba(46,126,166,0.2); border-bottom: none; }
+.ministry-header.events .ministry-icon { background: rgba(46,126,166,0.12); }
+.ministry-header.events .ministry-icon svg { color: var(--teal); }
+.ministry-header.events .ministry-name { color: var(--teal); }
+
+.event-group { margin-bottom: 1.75rem; }
+.event-group:last-child { margin-bottom: 0; }
+.event-group-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-bottom: 0.85rem; padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(46,126,166,0.18);
+}
+.event-group-name { font-family: 'Lora', serif; font-weight: 600; font-size: 0.95rem; color: var(--teal); }
+.event-group-when { font-size: 0.75rem; color: var(--text-muted); margin-left: auto; padding-left: 0.75rem; white-space: nowrap; }
+.event-group-icon { font-size: 1.15rem; line-height: 1; }
+
 .ministry-tagline { font-size: 0.83rem; color: var(--text-muted); margin-top: 0.1rem; }
 .ministry-roles {
   border: 1px solid rgba(30,45,74,0.1); border-top: none;
@@ -640,6 +661,10 @@ footer a:hover { text-decoration: underline; }
     <a href="#ministry-outreach" class="value-tile v-outreach">
       <span class="value-tile-name">Outreach</span>
       <span class="value-tile-desc">Serve our neighbors and share God's love beyond our walls</span>
+    </a>
+    <a href="#ministry-events" class="value-tile v-events">
+      <span class="value-tile-name">Special Events</span>
+      <span class="value-tile-desc">Christmas Market, Easter Egg Hunt, VBS, and more</span>
     </a>
   </div>
 
@@ -1098,22 +1123,168 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- ── SIGN-UP FORM ── -->
+  <!-- ── SPECIAL EVENTS ── -->
+  <div class="ministry-section" id="ministry-events">
+    <div class="ministry-header events">
+      <div class="ministry-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+      <div>
+        <div class="ministry-name">Special Events</div>
+        <div class="ministry-tagline">Seasonal celebrations that bring our neighborhood together — many hands make light work</div>
+      </div>
+    </div>
+    <div class="ministry-roles" style="border-color: rgba(46,126,166,0.18);">
+
+      <!-- Christmas Market -->
+      <div class="event-group">
+        <div class="event-group-header">
+          <span class="event-group-icon">🎄</span>
+          <span class="event-group-name">Christmas Market</span>
+          <span class="event-group-when">December &mdash; 2 days</span>
+        </div>
+        <div class="role-grid">
+          <label class="role-card" for="r-market-setup">
+            <input type="checkbox" id="r-market-setup" name="roles" value="Christmas Market – Setup &amp; Teardown" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Teardown</span></div>
+            <p class="role-desc">Help arrange booths, tables, signage, and lighting before the market opens, and break everything down after closing.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>When:</strong> Setup day before; teardown evening of Day 2</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-market-food">
+            <input type="checkbox" id="r-market-food" name="roles" value="Christmas Market – Baked Goods &amp; Food" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Baked Goods &amp; Food</span></div>
+            <p class="role-desc">Donate or staff the food table — cookies, breads, holiday treats that bring people in and fund church programs.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Open to:</strong> Bakers and table helpers</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-market-kids">
+            <input type="checkbox" id="r-market-kids" name="roles" value="Christmas Market – Kids' Activities" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Kids' Activities</span></div>
+            <p class="role-desc">Run crafts, games, or a visit with Santa. Keep the little ones engaged so families can enjoy the whole market.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Open to:</strong> Families, youth group, anyone who loves kids</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-market-welcome">
+            <input type="checkbox" id="r-market-welcome" name="roles" value="Christmas Market – Welcome Table" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Welcome Table</span></div>
+            <p class="role-desc">Greet visitors, hand out programs, answer questions about the church, and point people to what's happening where.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Commitment:</strong> 2–3 hour shift(s)</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Easter Egg Hunt -->
+      <div class="event-group">
+        <div class="event-group-header">
+          <span class="event-group-icon">🐣</span>
+          <span class="event-group-name">Easter Egg Hunt</span>
+          <span class="event-group-when">Spring &mdash; Saturday before Easter</span>
+        </div>
+        <div class="role-grid">
+          <label class="role-card" for="r-easter-eggs">
+            <input type="checkbox" id="r-easter-eggs" name="roles" value="Easter Egg Hunt – Egg Filling" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Egg Filling Party</span></div>
+            <p class="role-desc">Join us the week before to fill hundreds of eggs with candy and prizes. A fun, low-key evening for all ages.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>When:</strong> Weeknight before the hunt</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-easter-setup">
+            <input type="checkbox" id="r-easter-setup" name="roles" value="Easter Egg Hunt – Setup &amp; Cleanup" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Setup &amp; Cleanup</span></div>
+            <p class="role-desc">Hide eggs across the field and set up activity stations in the morning, then help clean up the grounds afterward.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>When:</strong> Morning of the event</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-easter-reg">
+            <input type="checkbox" id="r-easter-reg" name="roles" value="Easter Egg Hunt – Registration" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Registration Table</span></div>
+            <p class="role-desc">Check in families, hand out baskets, and answer questions as the crowds arrive. The first smile they see is yours.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>When:</strong> Morning shift</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-easter-stations">
+            <input type="checkbox" id="r-easter-stations" name="roles" value="Easter Egg Hunt – Activity Stations" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Activity Stations</span></div>
+            <p class="role-desc">Run a craft, game, or snack station. Help make it a morning kids talk about all the way home.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Open to:</strong> Families, couples, individuals</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- VBS -->
+      <div class="event-group">
+        <div class="event-group-header">
+          <span class="event-group-icon">✏️</span>
+          <span class="event-group-name">Vacation Bible School</span>
+          <span class="event-group-when">Summer &mdash; one week</span>
+        </div>
+        <div class="role-grid">
+          <label class="role-card" for="r-vbs-leader">
+            <input type="checkbox" id="r-vbs-leader" name="roles" value="VBS – Group Leader" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Group Leader</span></div>
+            <p class="role-desc">Lead a crew of kids through the week's stations, keeping them engaged, on schedule, and having a great time.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Commitment:</strong> All 5 days (mornings)</div>
+              <div class="role-meta-item"><strong>Training:</strong> Leader orientation provided</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-vbs-helper">
+            <input type="checkbox" id="r-vbs-helper" name="roles" value="VBS – Station Helper" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Station Helper</span></div>
+            <p class="role-desc">Assist at a specific station — Bible story, games, crafts, or music. Great if you can only commit to part of the week.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Commitment:</strong> Flexible — 1 or more days</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-vbs-crafts">
+            <input type="checkbox" id="r-vbs-crafts" name="roles" value="VBS – Crafts Coordinator" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Crafts Coordinator</span></div>
+            <p class="role-desc">Plan and prep the daily craft projects tied to that year's theme. Gather supplies and run the craft station each morning.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Commitment:</strong> Prep week before + all 5 days</div>
+            </div>
+          </label>
+          <label class="role-card" for="r-vbs-snacks">
+            <input type="checkbox" id="r-vbs-snacks" name="roles" value="VBS – Snacks" data-ministry="events">
+            <div class="role-card-top"><div class="role-check" aria-hidden="true"></div><span class="role-name">Snacks</span></div>
+            <p class="role-desc">Provide or prepare themed snacks for the kids each day. A small thing that makes a big impression on hungry little people.</p>
+            <div class="role-meta">
+              <div class="role-meta-item"><strong>Open to:</strong> Individuals, families, small groups</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── WORSHIP SIGN-UP FORM ── -->
   <div class="signup-section" id="volunteer-form">
     <div class="signup-section-header">
       <div class="signup-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       </div>
       <div>
-        <h3>Tell us you're interested</h3>
-        <p>Select roles above, fill this out, and we'll be in touch — no commitment yet.</p>
+        <h3>Sign up for a worship role</h3>
+        <p>Tell us your availability and we'll schedule you for upcoming Sundays — or use the scheduler to pick a specific date.</p>
       </div>
     </div>
 
-    <!-- Selected roles preview -->
-    <span class="form-section-label">Selected areas of interest</span>
+    <!-- Selected worship roles preview -->
+    <span class="form-section-label">Selected worship roles</span>
     <div class="selected-roles-preview" id="roles-preview">
-      <em>No roles selected yet — click any card above to add one.</em>
+      <em>No worship roles selected yet.</em>
     </div>
 
     <div class="form-row">
@@ -1166,6 +1337,54 @@ footer a:hover { text-decoration: underline; }
     </p>
   </div>
 
+  <!-- ── GENERAL VOLUNTEER INTEREST FORM ── -->
+  <div class="signup-section" id="general-volunteer-form">
+    <div class="signup-section-header">
+      <div class="signup-icon" style="background: rgba(46,126,166,0.1);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--teal);"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div>
+        <h3>Express your interest</h3>
+        <p>Tell us where you'd like to serve and we'll connect you with the right ministry leader — no commitment required.</p>
+      </div>
+    </div>
+
+    <!-- Selected non-worship roles preview -->
+    <span class="form-section-label">Selected areas of interest</span>
+    <div class="selected-roles-preview" id="general-roles-preview">
+      <em>No areas selected yet.</em>
+    </div>
+
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="gf-name">Full Name *</label>
+        <input type="text" id="gf-name" class="form-input" placeholder="Jane Smith" autocomplete="name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="gf-email">Email Address *</label>
+        <input type="email" id="gf-email" class="form-input" placeholder="jane@example.com" autocomplete="email">
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label" for="gf-phone">Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <input type="tel" id="gf-phone" class="form-input" placeholder="(314) 555-0123" autocomplete="tel">
+    </div>
+
+    <div class="form-field">
+      <label class="form-label" for="gf-notes">Anything else? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea id="gf-notes" class="form-textarea" placeholder="Questions, prior experience, schedule constraints, or anything that would help us connect you well…"></textarea>
+    </div>
+
+    <button class="btn-submit" type="button" style="background: var(--teal);">
+      Submit My Interest
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">
+      We'll pass your info to the right ministry or event coordinator and they'll be in touch soon.
+    </p>
+  </div>
+
 </main>
 
 <footer>
@@ -1202,23 +1421,41 @@ document.addEventListener('change', function(e) {
   }
 });
 
-function updateRolesPreview() {
-  var selected = Array.from(document.querySelectorAll('input[name="roles"]:checked')).map(function(cb){ return cb.value; });
-  var el = document.getElementById('roles-preview');
-  if (!selected.length) {
-    el.innerHTML = '<em>No roles selected yet — click any card above to add one.</em>';
-  } else {
-    el.innerHTML = selected.map(function(r){
-      return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(30,45,74,0.08);border:1px solid rgba(30,45,74,0.15);border-radius:6px;padding:.2rem .65rem;font-size:.82rem;margin:.2rem .2rem 0 0;">' + r + '</span>';
-    }).join('');
-  }
+function roleTag(r, bgColor, borderColor) {
+  return '<span style="display:inline-flex;align-items:center;gap:.3rem;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:.2rem .65rem;font-size:.82rem;margin:.2rem .2rem 0 0;">' + r + '</span>';
+}
 
-  var hasWorshipRole = !!document.querySelector('input[name="roles"][data-ministry="worship"]:checked');
-  var form = document.getElementById('volunteer-form');
-  form.classList.toggle('visible', hasWorshipRole);
-  if (hasWorshipRole) {
-    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function updateRolesPreview() {
+  var worshipChecked  = Array.from(document.querySelectorAll('input[name="roles"][data-ministry="worship"]:checked'));
+  var generalChecked  = Array.from(document.querySelectorAll('input[name="roles"]:not([data-ministry="worship"]):checked'));
+
+  // Worship form
+  var worshipForm = document.getElementById('volunteer-form');
+  var worshipPreview = document.getElementById('roles-preview');
+  var showWorship = worshipChecked.length > 0;
+  worshipForm.classList.toggle('visible', showWorship);
+  worshipPreview.innerHTML = showWorship
+    ? worshipChecked.map(function(cb){ return roleTag(cb.value, 'rgba(30,45,74,0.08)', 'rgba(30,45,74,0.18)'); }).join('')
+    : '<em>No worship roles selected yet.</em>';
+
+  // General form
+  var generalForm = document.getElementById('general-volunteer-form');
+  var generalPreview = document.getElementById('general-roles-preview');
+  var showGeneral = generalChecked.length > 0;
+  generalForm.classList.toggle('visible', showGeneral);
+  generalPreview.innerHTML = showGeneral
+    ? generalChecked.map(function(cb){ return roleTag(cb.value, 'rgba(46,126,166,0.08)', 'rgba(46,126,166,0.2)'); }).join('')
+    : '<em>No areas selected yet.</em>';
+
+  // Scroll to whichever form just became visible
+  if (showWorship && !worshipForm._wasVisible) {
+    worshipForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+  if (showGeneral && !generalForm._wasVisible) {
+    generalForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  worshipForm._wasVisible  = showWorship;
+  generalForm._wasVisible  = showGeneral;
 }
 </script>
 </body>
