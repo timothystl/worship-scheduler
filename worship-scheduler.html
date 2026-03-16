@@ -2518,6 +2518,7 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
   if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
   saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, workerSecret:workerSecret, tagIds:tagIds, resendKey:resendKey, emailFrom:emailFrom, replyTo:replyTo });
+  queueFbPush();
   showAlert('settings-alert','Settings saved!','success');
   document.getElementById('settings-status').textContent = '';
 });
@@ -3135,6 +3136,7 @@ async function fbPull() {
       if (data[k] !== undefined) localStorage.setItem(k, JSON.stringify(data[k]));
     });
     updateSyncStatus('Loaded \u2713 ' + new Date().toLocaleTimeString());
+    loadSettingsForm();
     renderPeopleList();
     if (loadSchedule()) {
       renderTable(getPeople(), null);
