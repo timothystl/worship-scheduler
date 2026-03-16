@@ -533,6 +533,7 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
       <label><input type="checkbox" value="Acolyte"> Acolyte</label>
       <label><input type="checkbox" value="PowerPoint"> PowerPoint</label>
       <label><input type="checkbox" value="Lector"> Lector</label>
+      <label><input type="checkbox" value="Altar Guild"> Altar Guild</label>
     </div>
 
     <span class="role-override-toggle" id="toggle-role-overrides">&#9658; Customize Sundays per role (optional)</span>
@@ -552,6 +553,7 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
         <label><input type="checkbox" value="Acolyte"> Acolyte</label>
         <label><input type="checkbox" value="PowerPoint"> PowerPoint</label>
         <label><input type="checkbox" value="Lector"> Lector</label>
+        <label><input type="checkbox" value="Altar Guild"> Altar Guild</label>
       </div>
       <small style="color:#666;font-size:0.78rem;display:block;margin-top:6px;">This person is always assigned these roles first, bypassing Sunday rotation. If they have a blackout date, the slot is left empty for manual assignment. Set Preferred Sundays to "Any Sunday" for primary roles.</small>
     </div>
@@ -763,7 +765,7 @@ function showAlert(elId, msg, type) {
 // ══════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ══════════════════════════════════════════════════════════════════
-var PER_ROLES    = ['Acolyte', 'PowerPoint', 'Lector'];
+var PER_ROLES    = ['Acolyte', 'PowerPoint', 'Lector', 'Altar Guild'];
 var SHARED_ROLES = [];
 var SHARED_LABELS = {};
 function roleLabel(r) { return SHARED_LABELS[r] || r; }
