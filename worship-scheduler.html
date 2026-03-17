@@ -476,6 +476,7 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
         <button class="btn btn-outline btn-sm" id="btn-send-emails" style="background:var(--blue-mist);border-color:var(--sky-steel);color:var(--mid-steel);">&#9993; Send Reminder Emails</button>
         <button class="btn btn-outline btn-sm" id="btn-sync-confirmations" style="background:var(--pale-sage);border-color:var(--sage);color:var(--on-pale-sage);">&#8635; Sync Confirmations</button>
         <button class="btn btn-outline btn-sm" id="btn-restore-tokens" style="background:#fdf6e8;border-color:#e0a800;color:#7a5500;" title="Re-upload RSVP tokens to Worker KV without re-sending emails">&#128274; Re-store Tokens</button>
+        <button class="btn btn-outline btn-sm" id="btn-notify-volunteers" style="background:var(--pale-gold);border-color:var(--amber);color:var(--on-pale-gold);">&#128276; Notify Volunteers</button>
         <span id="email-send-status" style="font-size:0.82rem;color:var(--warm-gray);"></span>
         <button class="btn btn-outline btn-sm saved" id="btn-save-schedule">Saved &#10003;</button>
         <button class="btn btn-outline btn-sm" id="btn-expand-all">&#9660; Expand All</button>
@@ -789,6 +790,32 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
     </p>
     <div id="events-review-alert"></div>
     <div id="events-list"></div>
+  </div>
+</div>
+
+<!-- ══ NOTIFY VOLUNTEERS PANEL ═════════════════════════════════════════════ -->
+<div id="notify-panel" class="side-panel">
+  <div class="panel-hdr">
+    <h2>&#128276; Notify Volunteers</h2>
+    <button class="panel-close" id="btn-close-notify-panel">&times;</button>
+  </div>
+  <div class="panel-body">
+    <p style="font-size:.85rem;color:var(--warm-gray);margin-bottom:4px;">
+      Send a targeted email to eligible volunteers for each unfilled slot. Only people who can serve that role on that Sunday are included — no mass blasts.
+    </p>
+    <p style="font-size:.82rem;color:var(--warm-gray);margin-bottom:16px;">
+      Requires a Resend API key configured in Settings.
+    </p>
+    <div id="notify-alert" style="margin-bottom:12px;"></div>
+    <div id="notify-slots-list"></div>
+    <div id="notify-actions" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <button class="btn btn-outline btn-sm" id="btn-notify-select-all">Select All</button>
+        <button class="btn btn-outline btn-sm" id="btn-notify-deselect-all">Deselect All</button>
+      </div>
+      <button class="btn btn-primary" id="btn-notify-send">Send Notification Emails</button>
+      <div id="notify-send-status" style="font-size:0.85rem;color:var(--warm-gray);margin-top:10px;min-height:18px;"></div>
+    </div>
   </div>
 </div>
 
@@ -2550,6 +2577,246 @@ function restoreRsvpTokens() {
 }
 
 document.getElementById('btn-restore-tokens').addEventListener('click', restoreRsvpTokens);
+
+// ══════════════════════════════════════════════════════════════════
+// NOTIFY ELIGIBLE VOLUNTEERS — targeted emails for unfilled slots
+// ══════════════════════════════════════════════════════════════════
+function getOpenSlots() {
+  var people = getPeople();
+  var slots = [];
+  currentSchedule.forEach(function(row) {
+    if (row.type !== 'sunday') return;
+    var dateStr = fmtDate(row.date);
+    var dateISO = row.date.toISOString().slice(0, 10);
+    var ordinal = row.ordinal;
+    PER_ROLES.forEach(function(role) {
+      if (!row.assignments[role]) return;
+      ['8am', '10:45am'].forEach(function(svc) {
+        if (row.assignments[role][svc]) return; // already filled
+        var pool = people.filter(function(p) {
+          return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, svc, dateISO, role);
+        });
+        slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: svc, role: role, pool: pool });
+      });
+    });
+    SHARED_ROLES.forEach(function(role) {
+      if (!row.assignments[role] || row.assignments[role].shared) return; // filled
+      var pool = people.filter(function(p) {
+        return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, 'shared', dateISO, role);
+      });
+      slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: 'both services', role: role, pool: pool });
+    });
+  });
+  return slots;
+}
+
+function openNotifyPanel() {
+  if (!currentSchedule.length) {
+    alert('Generate a schedule first.');
+    return;
+  }
+  var slots = getOpenSlots();
+  var listEl = document.getElementById('notify-slots-list');
+  var actionsEl = document.getElementById('notify-actions');
+  var alertEl = document.getElementById('notify-alert');
+  alertEl.innerHTML = '';
+  document.getElementById('notify-send-status').textContent = '';
+
+  if (!slots.length) {
+    listEl.innerHTML = '<p style="color:var(--sage);font-size:.88rem;">&#10003; All slots are filled for this month!</p>';
+    actionsEl.style.display = 'none';
+    openPanel('notify-panel');
+    return;
+  }
+
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:0.84rem;">'
+    + '<thead><tr style="background:var(--blue-mist);">'
+    + '<th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--steel-anchor);width:28px;"></th>'
+    + '<th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--steel-anchor);">Date</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--steel-anchor);">Svc</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--steel-anchor);">Role</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--steel-anchor);">Eligible</th>'
+    + '</tr></thead><tbody>';
+
+  slots.forEach(function(slot, i) {
+    var withEmail = slot.pool.filter(function(p) { return p.email; });
+    var withoutEmail = slot.pool.filter(function(p) { return !p.email; });
+    var eligibleHtml = '';
+    if (!slot.pool.length) {
+      eligibleHtml = '<span style="color:var(--warm-gray);font-style:italic;">None available</span>';
+    } else {
+      eligibleHtml = withEmail.map(function(p) {
+        return '<span style="color:var(--steel-anchor);">' + esc(p.name) + '</span>';
+      }).join(', ');
+      if (withoutEmail.length) {
+        if (withEmail.length) eligibleHtml += ', ';
+        eligibleHtml += withoutEmail.map(function(p) {
+          return '<span style="color:var(--warm-gray);" title="No email address">' + esc(p.name) + ' <span style="font-size:0.72rem;">(no email)</span></span>';
+        }).join(', ');
+      }
+    }
+    var canNotify = withEmail.length > 0;
+    var rowBg = i % 2 === 0 ? '' : 'background:#fafaf8;';
+    html += '<tr style="' + rowBg + 'border-bottom:1px solid var(--border);">'
+      + '<td style="padding:7px 8px;vertical-align:top;">'
+      + (canNotify
+          ? '<input type="checkbox" class="notify-slot-cb" data-slot-idx="' + i + '" checked style="margin:0;">'
+          : '<input type="checkbox" disabled style="margin:0;opacity:0.35;" title="No eligible volunteers with email">')
+      + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.date) + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.svc) + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;font-weight:600;">' + esc(roleLabel(slot.role)) + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;font-size:0.8rem;">' + eligibleHtml + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+
+  listEl.innerHTML = html;
+  actionsEl.style.display = '';
+  openPanel('notify-panel');
+}
+
+function buildVolunteerRequestHtml(person, slot, replyTo) {
+  var svcLabel = slot.svc === 'both services' ? 'Both Services' : slot.svc;
+  var replyLink = replyTo
+    ? '<a href="mailto:' + esc(replyTo) + '" style="color:#3D627C;">' + esc(replyTo) + '</a>'
+    : '';
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>'
+    + '<body style="margin:0;padding:0;background:#EDF5F8;font-family:Arial,Helvetica,sans-serif;color:#3D3530;">'
+    + '<div style="max-width:560px;margin:24px auto;">'
+    + '<div style="background:#0A3C5C;color:white;padding:20px 24px;border-radius:8px 8px 0 0;">'
+    + '<div style="font-size:1.2rem;font-weight:700;">Timothy Lutheran Church</div>'
+    + '<div style="font-size:0.85rem;opacity:0.8;margin-top:3px;">Worship Volunteer Request</div>'
+    + '</div>'
+    + '<div style="background:white;padding:24px;border:1px solid #E8E0D0;border-top:none;border-radius:0 0 8px 8px;">'
+    + '<p style="margin:0 0 14px;">Hello ' + esc(person.name) + ',</p>'
+    + '<p style="margin:0 0 16px;color:#444;">We still need a volunteer for the following worship service role and would love your help:</p>'
+    + '<div style="background:#EDF5F8;border-left:4px solid #D4922A;border-radius:0 6px 6px 0;padding:14px 18px;margin-bottom:20px;">'
+    + '<div style="font-size:1rem;font-weight:700;color:#0A3C5C;">' + esc(roleLabel(slot.role)) + '</div>'
+    + '<div style="font-size:0.9rem;color:#3D3530;margin-top:4px;">' + esc(slot.date) + ' &mdash; ' + esc(svcLabel) + '</div>'
+    + '</div>'
+    + '<p style="margin:0 0 10px;font-size:0.9rem;">If you\'re available and willing to serve, please reply to this email to let us know.</p>'
+    + '<p style="margin:0 0 20px;font-size:0.9rem;">If this date doesn\'t work, no worries \u2014 we appreciate everything you do for our congregation!</p>'
+    + '<p style="font-size:0.9rem;margin:0 0 6px;">Thank you for your faithful service!</p>'
+    + '<p style="font-size:0.78rem;color:#7A6E60;margin:20px 0 0;padding-top:14px;border-top:1px solid #E8E0D0;">'
+    + 'Timothy Lutheran Church'
+    + (replyLink ? ' &mdash; Reply to: ' + replyLink : '')
+    + '</p>'
+    + '</div></div></body></html>';
+}
+
+function sendVolunteerNotifications() {
+  var s = getBreezeSettings();
+  if (!s.resendKey || !s.emailFrom) {
+    alert('Please configure your Resend API key and From address in the Settings tab first.');
+    return;
+  }
+  var slots = getOpenSlots();
+  var checkedIdxs = [];
+  document.querySelectorAll('.notify-slot-cb:checked').forEach(function(cb) {
+    checkedIdxs.push(parseInt(cb.getAttribute('data-slot-idx'), 10));
+  });
+  if (!checkedIdxs.length) {
+    document.getElementById('notify-send-status').textContent = 'No slots selected.';
+    return;
+  }
+
+  // Build list of (person, slot) pairs — deduplicate: one email per person per slot
+  var tasks = [];
+  var seen = {};
+  checkedIdxs.forEach(function(idx) {
+    var slot = slots[idx];
+    slot.pool.filter(function(p) { return p.email; }).forEach(function(p) {
+      var key = p.id + '|' + slot.dateISO + '|' + slot.svc + '|' + slot.role;
+      if (!seen[key]) { seen[key] = true; tasks.push({ person: p, slot: slot }); }
+    });
+  });
+
+  var statusEl = document.getElementById('notify-send-status');
+  if (!tasks.length) {
+    statusEl.textContent = 'No eligible volunteers with email addresses for the selected slots.';
+    return;
+  }
+
+  var total = tasks.length, sent = 0, errors = 0;
+  statusEl.textContent = 'Sending 0 of ' + total + '\u2026';
+  document.getElementById('btn-notify-send').disabled = true;
+
+  var chain = Promise.resolve();
+  tasks.forEach(function(task) {
+    chain = chain.then(function() {
+      var p = task.person, slot = task.slot;
+      var svcLabel = slot.svc === 'both services' ? 'Both Services' : slot.svc;
+      var subject = 'Volunteer needed: ' + roleLabel(slot.role) + ' on ' + slot.date + ' \u2014 Timothy Lutheran';
+      var textBody = [
+        'Hello ' + p.name + ',',
+        '',
+        'We still need a volunteer for:',
+        '  ' + roleLabel(slot.role) + ' \u2014 ' + slot.date + ' (' + svcLabel + ')',
+        '',
+        'If you\'re available, please reply to this email to let us know.',
+        'If this date doesn\'t work, no worries \u2014 thank you for all you do!',
+        '',
+        'Timothy Lutheran Church',
+      ].join('\n');
+
+      return fetch(s.workerUrl + '/email/send', {
+        method: 'POST',
+        headers: Object.assign({
+          'X-Resend-Key':  s.resendKey,
+          'X-Email-From':  s.emailFrom,
+          'Content-Type':  'application/json',
+        }, s.workerSecret ? { 'X-Worker-Secret': s.workerSecret } : {}),
+        body: JSON.stringify({
+          to:       p.email,
+          subject:  subject,
+          text:     textBody,
+          html:     buildVolunteerRequestHtml(p, slot, s.replyTo || ''),
+          reply_to: s.replyTo || '',
+        }),
+      })
+        .then(function(r) {
+          var ok = r.ok, status = r.status;
+          return r.json().then(function(body) { return { ok: ok, status: status, body: body }; });
+        })
+        .then(function(res) {
+          if (res.ok) {
+            sent++;
+            statusEl.textContent = 'Sent ' + sent + ' of ' + total + '\u2026';
+          } else {
+            errors++;
+            var msg = (res.body && (res.body.message || res.body.error || res.body.name))
+              ? (res.body.message || res.body.error || res.body.name)
+              : JSON.stringify(res.body);
+            statusEl.textContent = '\u00d7 ' + esc(p.name) + ' (error ' + res.status + '): ' + esc(msg);
+          }
+        })
+        .catch(function(e) {
+          errors++;
+          statusEl.textContent = '\u00d7 Network error sending to ' + esc(p.name) + ': ' + esc(String(e));
+        });
+    });
+  });
+
+  chain.then(function() {
+    document.getElementById('btn-notify-send').disabled = false;
+    if (errors > 0) {
+      statusEl.textContent += ' (' + sent + ' sent, ' + errors + ' failed)';
+    } else {
+      statusEl.textContent = '\u2713 Done \u2014 ' + sent + ' notification' + (sent !== 1 ? 's' : '') + ' sent.';
+    }
+  });
+}
+
+document.getElementById('btn-notify-volunteers').addEventListener('click', openNotifyPanel);
+document.getElementById('btn-close-notify-panel').addEventListener('click', closeAllPanels);
+document.getElementById('btn-notify-select-all').addEventListener('click', function() {
+  document.querySelectorAll('.notify-slot-cb:not(:disabled)').forEach(function(cb) { cb.checked = true; });
+});
+document.getElementById('btn-notify-deselect-all').addEventListener('click', function() {
+  document.querySelectorAll('.notify-slot-cb:not(:disabled)').forEach(function(cb) { cb.checked = false; });
+});
+document.getElementById('btn-notify-send').addEventListener('click', sendVolunteerNotifications);
 
 // ══════════════════════════════════════════════════════════════════
 // SETTINGS
