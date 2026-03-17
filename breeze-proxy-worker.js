@@ -311,7 +311,7 @@ async function handleBreezeProxy(request, env, url) {
 }
 
 // ── /volunteer/signup ─────────────────────────────────────────────────────
-// Public endpoint — called from volunteer.html when someone submits a form.
+// Public endpoint — called from index.html (formerly volunteer.html) when someone submits a form.
 // Sends an admin notification email; worship signups are also queued in KV.
 async function handleVolunteerSignup(request, env) {
   let body;
