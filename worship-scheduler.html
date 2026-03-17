@@ -3304,7 +3304,8 @@ fbAuth.onAuthStateChanged(function(user) {
 // ══════════════════════════════════════════════════════════════════
 function exportAllData() {
   var keys = ['ws_people','ws_schedule_v2','ws_history','ws_last_served',
-              'ws_schedule_overrides','ws_confirmations','ws_rsvp_tokens','ws_sun_labels'];
+              'ws_schedule_overrides','ws_confirmations','ws_rsvp_tokens','ws_sun_labels',
+              'ws_breeze_settings'];
   var snapshot = {};
   keys.forEach(function(k) {
     try { snapshot[k] = JSON.parse(localStorage.getItem(k)); } catch(e) { snapshot[k] = null; }
@@ -3324,7 +3325,8 @@ function importAllData(file) {
     try {
       var snapshot = JSON.parse(e.target.result);
       var keys = ['ws_people','ws_schedule_v2','ws_history','ws_last_served',
-                  'ws_schedule_overrides','ws_confirmations','ws_rsvp_tokens','ws_sun_labels'];
+                  'ws_schedule_overrides','ws_confirmations','ws_rsvp_tokens','ws_sun_labels',
+                  'ws_breeze_settings'];
       var count = 0;
       keys.forEach(function(k) {
         if (snapshot[k] !== null && snapshot[k] !== undefined) {
@@ -3332,6 +3334,7 @@ function importAllData(file) {
           count++;
         }
       });
+      loadSettingsForm();
       renderPeopleList();
       if (loadSchedule()) {
         renderTable(getPeople(), null);
