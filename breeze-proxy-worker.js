@@ -14,7 +14,7 @@
  *   NOTIFY_EMAIL    — admin email address to receive volunteer signup notifications
  *
  * KV namespace binding (Cloudflare Dashboard → Worker → KV Namespace Bindings):
- *   RSVP_KV         — KV namespace for storing RSVP tokens and responses
+ *   RSVP_STORE         — KV namespace for storing RSVP tokens and responses
  *                     stores volunteer signups by type:
  *                       wv:pending:* — scheduler-eligible (Lector, PowerPoint Operator, Acolyte)
  *                       wv:event:*   — community event volunteers
@@ -328,13 +328,13 @@ async function handleVolunteerSignup(request, env) {
 
   // Route signups by type: scheduler roles → wv:pending, events → wv:event, everything else → wv:general
   const schedulerRoles = (roles || []).filter(r => SCHEDULER_ROLES.has(r));
-  if (env.RSVP_KV) {
+  if (env.RSVP_STORE) {
     if (ministry === 'worship' && schedulerRoles.length > 0) {
-      await env.RSVP_KV.put('wv:pending:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+      await env.RSVP_STORE.put('wv:pending:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
     } else if (ministry === 'events') {
-      await env.RSVP_KV.put('wv:event:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+      await env.RSVP_STORE.put('wv:event:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
     } else {
-      await env.RSVP_KV.put('wv:general:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+      await env.RSVP_STORE.put('wv:general:' + id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
     }
   }
 
@@ -379,11 +379,11 @@ async function handleVolunteerSignup(request, env) {
 // ── /volunteer/pending ────────────────────────────────────────────────────
 // Returns all pending worship volunteer signups from KV (admin-only).
 async function handleVolunteerPending(request, env) {
-  if (!env.RSVP_KV) return json({ volunteers: [] });
-  const list = await env.RSVP_KV.list({ prefix: 'wv:pending:' });
+  if (!env.RSVP_STORE) return json({ volunteers: [] });
+  const list = await env.RSVP_STORE.list({ prefix: 'wv:pending:' });
   const volunteers = await Promise.all(
     list.keys.map(async function(k) {
-      const raw = await env.RSVP_KV.get(k.name);
+      const raw = await env.RSVP_STORE.get(k.name);
       return raw ? JSON.parse(raw) : null;
     })
   );
@@ -397,17 +397,17 @@ async function handleVolunteerClaim(request, env) {
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
   const { id } = body;
   if (!id) return json({ error: 'Missing id' }, 400);
-  if (env.RSVP_KV) await env.RSVP_KV.delete('wv:pending:' + id);
+  if (env.RSVP_STORE) await env.RSVP_STORE.delete('wv:pending:' + id);
   return json({ ok: true });
 }
 
 // ── Shared handlers for volunteer list queues ─────────────────────────────────
 async function handleVolunteerListPending(request, env, prefix) {
-  if (!env.RSVP_KV) return json({ volunteers: [] });
-  const list = await env.RSVP_KV.list({ prefix });
+  if (!env.RSVP_STORE) return json({ volunteers: [] });
+  const list = await env.RSVP_STORE.list({ prefix });
   const volunteers = await Promise.all(
     list.keys.map(async function(k) {
-      const raw = await env.RSVP_KV.get(k.name);
+      const raw = await env.RSVP_STORE.get(k.name);
       return raw ? JSON.parse(raw) : null;
     })
   );
@@ -419,7 +419,7 @@ async function handleVolunteerListClaim(request, env, prefix) {
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
   const { id } = body;
   if (!id) return json({ error: 'Missing id' }, 400);
-  if (env.RSVP_KV) await env.RSVP_KV.delete(prefix + id);
+  if (env.RSVP_STORE) await env.RSVP_STORE.delete(prefix + id);
   return json({ ok: true });
 }
 
@@ -446,15 +446,15 @@ function esc(s) {
 }
 
 async function kvGet(env, key) {
-  if (!env.RSVP_KV) return null;
+  if (!env.RSVP_STORE) return null;
   try {
-    const raw = await env.RSVP_KV.get(key);
+    const raw = await env.RSVP_STORE.get(key);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
 
 async function kvPut(env, key, value) {
-  if (!env.RSVP_KV) return;
+  if (!env.RSVP_STORE) return;
   // Keep tokens for 1 year
-  await env.RSVP_KV.put(key, JSON.stringify(value), { expirationTtl: 31536000 });
+  await env.RSVP_STORE.put(key, JSON.stringify(value), { expirationTtl: 31536000 });
 }
