@@ -74,25 +74,6 @@ function json(data, status = 200) {
 function redirect(url) {
   return new Response('', { status: 302, headers: { Location: url } });
 }
-function toTimeInput(str) {
-  if (!str) return '';
-  var m = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!m) return '';
-  var h = parseInt(m[1], 10), min = m[2], ampm = m[3].toUpperCase();
-  if (ampm === 'AM') { if (h === 12) h = 0; }
-  else { if (h !== 12) h += 12; }
-  return (h < 10 ? '0' : '') + h + ':' + min;
-}
-function fromTimeInput(str) {
-  if (!str) return '';
-  var parts = str.split(':');
-  if (parts.length < 2) return str;
-  var h = parseInt(parts[0], 10), min = parts[1];
-  var ampm = h >= 12 ? 'PM' : 'AM';
-  if (h > 12) h -= 12;
-  if (h === 0) h = 12;
-  return h + ':' + min + ' ' + ampm;
-}
 function escHtml(str) {
   return String(str || '')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1380,12 +1361,12 @@ function loadEvents() {
           + '<h4 style="font-size:.88rem;font-weight:600;color:var(--navy);margin-bottom:.5rem;">Roles</h4>'
           + '<div class="roles-list" id="roles-list-' + ev.id + '">'
           + (ev.roles||[]).map(function(r) {
-              return '<div class="role-admin-row" id="role-row-' + r.id + '"><span style="font-size:.75rem;font-weight:600;color:var(--teal);white-space:nowrap;min-width:40px;text-align:center;">' + (r.filled_count||0) + '/' + (r.slots||'∞') + '</span>'
+              return '<div class="role-admin-row" id="role-row-' + r.id + '" data-sort-order="' + (r.sort_order||0) + '"><span style="font-size:.75rem;font-weight:600;color:var(--teal);white-space:nowrap;min-width:40px;text-align:center;">' + (r.filled_count||0) + '/' + (r.slots||'∞') + '</span>'
                 + '<input type="text" class="form-input" style="flex:1;" id="role-name-' + r.id + '" value="' + escHtml(r.name) + '">'
                 + '<input type="text" class="form-input" style="flex:2;" id="role-desc-' + r.id + '" value="' + escHtml(r.description||'') + '" placeholder="Description...">'
                 + '<input type="date" class="form-input" style="flex:1;min-width:120px;" id="role-date-' + r.id + '" value="' + escHtml(r.role_date||'') + '" title="Date">'
-                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-start-' + r.id + '" value="' + escHtml(r.start_time||'') + '" placeholder="9:00 AM" title="Start time">'
-                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-end-' + r.id + '" value="' + escHtml(r.end_time||'') + '" placeholder="11:00 AM" title="End time">'
+                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-start-' + r.id + '" value="' + toTimeInput(r.start_time||'') + '" data-raw="' + escHtml(r.start_time||'') + '" title="Start time">'
+                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-end-' + r.id + '" value="' + toTimeInput(r.end_time||'') + '" data-raw="' + escHtml(r.end_time||'') + '" title="End time">'
                 + '<input type="number" class="form-input" style="flex:0 0 60px;" id="role-slots-' + r.id + '" value="' + (r.slots||0) + '" min="0" title="Slots">'
                 + '<button class="btn-secondary btn-sm" onclick="saveRole(' + ev.id + ',' + r.id + ')">Save</button>'
                 + '<button class="btn-delete btn-sm" onclick="deleteRole(' + ev.id + ',' + r.id + ')">Del</button>'
@@ -1396,8 +1377,8 @@ function loadEvents() {
           + '<input type="text" id="new-role-name-' + ev.id + '" class="form-input" placeholder="Role name...">'
           + '<input type="text" id="new-role-desc-' + ev.id + '" class="form-input" placeholder="Description...">'
           + '<input type="date" id="new-role-date-' + ev.id + '" class="form-input" style="flex:1;min-width:120px;" title="Date">'
-          + '<input type="time" id="new-role-start-' + ev.id + '" class="form-input" style="flex:0 0 90px;" placeholder="9:00 AM" title="Start time">'
-          + '<input type="time" id="new-role-end-' + ev.id + '" class="form-input" style="flex:0 0 90px;" placeholder="11:00 AM" title="End time">'
+          + '<input type="time" id="new-role-start-' + ev.id + '" class="form-input" style="flex:0 0 90px;" title="Start time">'
+          + '<input type="time" id="new-role-end-' + ev.id + '" class="form-input" style="flex:0 0 90px;" title="End time">'
           + '<input type="number" id="new-role-slots-' + ev.id + '" class="form-input" style="flex:0 0 60px;" value="0" min="0" title="Slots">'
           + '<button class="btn-primary btn-sm" onclick="addRole(' + ev.id + ')">+ Role</button>'
           + '</div>'
@@ -1480,13 +1461,17 @@ function saveRole(evId, roleId) {
   var name  = document.getElementById('role-name-'  + roleId).value;
   var desc  = document.getElementById('role-desc-'  + roleId).value;
   var date  = (document.getElementById('role-date-'  + roleId)||{}).value||'';
-  var start = fromTimeInput((document.getElementById('role-start-' + roleId)||{}).value||'');
-  var end   = fromTimeInput((document.getElementById('role-end-'   + roleId)||{}).value||'');
+  var startEl = document.getElementById('role-start-' + roleId);
+  var endEl   = document.getElementById('role-end-'   + roleId);
+  var start = startEl ? (startEl.value ? fromTimeInput(startEl.value) : (startEl.dataset.raw || '')) : '';
+  var end   = endEl   ? (endEl.value   ? fromTimeInput(endEl.value)   : (endEl.dataset.raw   || '')) : '';
   var slots = parseInt((document.getElementById('role-slots-' + roleId)||{}).value||'0',10);
+  var row = document.getElementById('role-row-' + roleId);
+  var sortOrder = row ? parseInt(row.dataset.sortOrder || '0', 10) : 0;
   fetch('/admin/api/events/' + evId + '/roles/' + roleId, {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ name:name, description:desc, slots:slots, role_date:date, start_time:start, end_time:end, sort_order:0 })
+    body: JSON.stringify({ name:name, description:desc, slots:slots, role_date:date, start_time:start, end_time:end, sort_order:sortOrder })
   }).then(function() { alert('Role saved!'); loadEvents(); });
 }
 
@@ -1515,6 +1500,35 @@ function addRole(evId) {
   });
 }
 
+function toTimeInput(str) {
+  if (!str) return '';
+  // "9:00 AM" / "9:00AM" format
+  var m = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (m) {
+    var h = parseInt(m[1], 10), min = m[2], ampm = m[3].toUpperCase();
+    if (ampm === 'AM') { if (h === 12) h = 0; }
+    else { if (h !== 12) h += 12; }
+    return (h < 10 ? '0' : '') + h + ':' + min;
+  }
+  // Already in "HH:MM" or "H:MM" 24-hour format — pass through normalized
+  if (/^\d{1,2}:\d{2}$/.test(str)) {
+    var p = str.split(':'), h2 = parseInt(p[0], 10);
+    return (h2 < 10 ? '0' : '') + h2 + ':' + p[1];
+  }
+  return '';
+}
+
+function fromTimeInput(str) {
+  if (!str) return '';
+  var parts = str.split(':');
+  if (parts.length < 2) return str;
+  var h = parseInt(parts[0], 10), min = parts[1];
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return h + ':' + min + ' ' + ampm;
+}
+
 function escHtml(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -1525,3 +1539,4 @@ loadEvents();
 </script>
 </body>
 </html>`;
+
