@@ -179,7 +179,7 @@ async function migrateChristmasMarketRoles(db) {
       // Match by sort_order (set to insertion index) to avoid clobbering duplicate-named roles.
       for (let i = 0; i < XMAS_ROLES.length; i++) {
         const r = XMAS_ROLES[i];
-        await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE event_id=? AND sort_order=?')
+        await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE event_id=? AND sort_order=? AND (start_time="" OR start_time IS NULL)')
           .bind(r.role_date||'', r.start_time||'', r.end_time||'', ev.id, i).run();
       }
     }
@@ -1521,6 +1521,7 @@ function saveRole(evId, roleId) {
   }).then(function(resp) {
     if (!resp.ok) { alert('Error saving role. Please try again.'); if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; } return; }
     if (saveBtn) { saveBtn.textContent = 'Saved!'; saveBtn.style.background = 'var(--teal)'; saveBtn.style.color = '#fff'; setTimeout(function() { saveBtn.disabled = false; saveBtn.textContent = 'Save'; saveBtn.style.background = ''; saveBtn.style.color = ''; }, 1500); }
+    loadEvents(evId);
   }).catch(function() {
     alert('Network error saving role. Please try again.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
