@@ -189,11 +189,12 @@ async function migrateChristmasMarketRoles(db) {
     if (needsFix && needsFix.n > 0) {
       // UPDATE in place so existing signups are preserved.
       // Fetch actual roles ordered by sort_order,id and update positionally.
+      // Only fill in roles that still have empty times to preserve user edits.
       const dbRoles = await db.prepare('SELECT id FROM serve_roles WHERE event_id=? ORDER BY sort_order,id').bind(ev.id).all();
       const rows = dbRoles.results || [];
       for (let i = 0; i < rows.length && i < XMAS_MARKET_ROLES.length; i++) {
         const r = XMAS_MARKET_ROLES[i];
-        await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE id=?')
+        await db.prepare('UPDATE serve_roles SET role_date=?, start_time=?, end_time=? WHERE id=? AND (start_time="" OR start_time IS NULL)')
           .bind(r.role_date||'', r.start_time||'', r.end_time||'', rows[i].id).run();
       }
     }
@@ -1460,10 +1461,14 @@ function saveRole(evId, roleId) {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ name:name, description:desc, slots:slots, role_date:date, start_time:start, end_time:end, sort_order:sortOrder })
-  }).then(function(r) {
-    if (!r.ok) { r.text().then(function(t) { alert('Save failed: ' + t); }); return; }
-    alert('Role saved!'); loadEvents();
-  }).catch(function(e) { alert('Save error: ' + e); });
+  }).then(function(resp) {
+    if (!resp.ok) { alert('Error saving role. Please try again.'); if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; } return; }
+    if (saveBtn) { saveBtn.textContent = 'Saved!'; saveBtn.style.background = 'var(--teal)'; saveBtn.style.color = '#fff'; setTimeout(function() { saveBtn.disabled = false; saveBtn.textContent = 'Save'; saveBtn.style.background = ''; saveBtn.style.color = ''; }, 1500); }
+    loadEvents(evId);
+  }).catch(function() {
+    alert('Network error saving role. Please try again.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+  });
 }
 
 function deleteRole(evId, roleId) {
