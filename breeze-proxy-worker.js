@@ -433,6 +433,19 @@ async function handleVolunteerSignup(request, env) {
       body: JSON.stringify({ from: emailFrom, to: notifyEmail,
         subject: 'New volunteer: ' + name + ' (' + ministryLabel + ')', text }),
     }).catch(function() { /* non-fatal */ });
+
+    // Confirmation email to the volunteer
+    const rolesLine = (roles && roles.length) ? '\nRoles/shifts selected: ' + roles.join(', ') : '';
+    const confirmText = 'Hi ' + name + ',\n\nThank you for signing up to volunteer at Timothy Lutheran Church!\n\n'
+      + 'Ministry: ' + ministryLabel + rolesLine + '\n\n'
+      + 'We\'ll be in touch soon with more details. If you have any questions, reply to this email.\n\n'
+      + 'God\'s blessings,\nTimothy Lutheran Church\n6704 Fyler Ave, St. Louis, MO 63139\noffice@timothystl.org';
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: emailFrom, to: email, reply_to: 'office@timothystl.org',
+        subject: 'Thanks for signing up to serve at Timothy!', text: confirmText }),
+    }).catch(function() { /* non-fatal */ });
   }
 
   return json({ ok: true });

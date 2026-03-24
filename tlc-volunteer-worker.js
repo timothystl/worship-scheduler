@@ -393,6 +393,14 @@ async function handleSignup(req, env) {
   const email = (data.email || '').trim();
   if (!name || !email) return json({ ok: false, error: 'Name and email required' }, 400);
 
+  // Duplicate signup check: same email + same event
+  if (data.event_id) {
+    const dup = await env.DB.prepare(
+      'SELECT id FROM signups WHERE email=? AND event_id=? LIMIT 1'
+    ).bind(email, data.event_id).first();
+    if (dup) return json({ ok: false, error: "You've already signed up for this event. Contact us if you need to make changes." }, 409);
+  }
+
   // Validate slot availability for time-slotted signups
   const roleIds = Array.isArray(data.role_ids) ? data.role_ids : [];
   for (const rid of roleIds) {
@@ -418,6 +426,29 @@ async function handleSignup(req, env) {
   for (const rid of roleIds) {
     await env.DB.prepare('INSERT INTO signup_slots (signup_id,role_id) VALUES (?,?)')
       .bind(signupId, rid).run();
+  }
+
+  // Send confirmation email to volunteer (non-fatal if email is not configured)
+  const resendKey = env.RESEND_API_KEY || '';
+  const emailFrom = env.EMAIL_FROM || '';
+  if (resendKey && emailFrom && email) {
+    const ministry = data.ministry || 'general';
+    const ministryLabels = { worship: 'Worship', events: 'Community Events', education: 'Christian Education',
+      acceptance: 'Acceptance Ministry', outreach: 'Outreach', lasm: 'LASM', wol: 'Word of Life',
+      cfna: 'CFNA', general: 'General Interest' };
+    const ministryLabel = ministryLabels[ministry] || ministry;
+    const rolesList = (data.roles && data.roles.length) ? data.roles.join(', ') : '';
+    const rolesLine = rolesList ? `\nRoles/shifts selected: ${rolesList}` : '';
+    const text = `Hi ${name},\n\nThank you for signing up to volunteer at Timothy Lutheran Church!\n\n`
+      + `Ministry: ${ministryLabel}${rolesLine}\n\n`
+      + `We'll be in touch soon with more details. If you have any questions, reply to this email.\n\n`
+      + `God's blessings,\nTimothy Lutheran Church\n6704 Fyler Ave, St. Louis, MO 63139\noffice@timothystl.org`;
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: emailFrom, to: email, reply_to: 'office@timothystl.org',
+        subject: 'Thanks for signing up to serve at Timothy!', text }),
+    }).catch(() => { /* non-fatal */ });
   }
 
   return json({ ok: true, signup_id: signupId });
