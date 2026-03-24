@@ -1,8 +1,7 @@
 // Timothy Lutheran Church — Volunteer Sign-Up Worker
 // Deploy to: volunteer.timothystl.org
 // Admin at: volunteer.timothystl.org/admin
-
-const ADMIN_PASSWORD = '6704fyler';
+// Admin password is set via ADMIN_PASSWORD environment variable in Cloudflare Dashboard.
 
 // ── DATABASE SCHEMA ──────────────────────────────────────────────────
 const DB_INIT = [
@@ -50,12 +49,35 @@ const DB_INIT = [
 ];
 
 // ── AUTH ─────────────────────────────────────────────────────────────
-function isAuthed(req) {
-  return (req.headers.get('cookie') || '').includes('vol_auth=ok');
+// Uses HMAC-SHA256 to sign a timestamp. The cookie value is `<timestamp>.<base64url-sig>`.
+// This prevents the cookie from being forged without knowing env.ADMIN_PASSWORD.
+async function isAuthed(req, env) {
+  const cookie = req.headers.get('cookie') || '';
+  const m = cookie.match(/vol_auth=([^;\s]+)/);
+  if (!m) return false;
+  const [ts, sig] = m[1].split('.');
+  if (!ts || !sig) return false;
+  if (Date.now() - parseInt(ts, 10) > 7 * 24 * 60 * 60 * 1000) return false;
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+    );
+    const sigBytes = Uint8Array.from(atob(sig.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    return await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(ts));
+  } catch { return false; }
 }
-function authCookieHeader() {
+async function authCookieHeader(env) {
+  const ts = Date.now().toString();
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ts));
+  const b64url = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `vol_auth=ok; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
+  return `vol_auth=${ts}.${b64url}; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────
@@ -293,13 +315,13 @@ export default {
     if (path === '/api/events' && method === 'GET') return handleApiEvents(env);
     if (path === '/volunteer/signup' && method === 'POST') return handleSignup(req, env);
     if (path.match(/^\/volunteer\/calendar\/\d+$/) && method === 'GET') return handleCalendar(env, path);
-    if (path === '/admin/login' && method === 'POST') return handleAdminLogin(req);
+    if (path === '/admin/login' && method === 'POST') return handleAdminLogin(req, env);
     if (path === '/admin' && method === 'GET') {
-      if (!isAuthed(req)) return html(LOGIN_HTML);
+      if (!await isAuthed(req, env)) return html(LOGIN_HTML);
       return html(ADMIN_HTML, 200, { 'Cache-Control': 'no-store, no-cache, must-revalidate' });
     }
     if (path.startsWith('/admin/api/')) {
-      if (!isAuthed(req)) return json({ error: 'Unauthorized' }, 401);
+      if (!await isAuthed(req, env)) return json({ error: 'Unauthorized' }, 401);
       return handleAdminApi(req, env, url, method);
     }
     if (path.startsWith('/scheduler')) {
@@ -347,8 +369,24 @@ async function handleApiEvents(env) {
   return json({ events: result });
 }
 
+// ── RATE LIMITING ─────────────────────────────────────────────────────
+// Allows max 10 signups per IP per hour using KV as a counter store.
+async function checkSignupRateLimit(env, req) {
+  if (!env.RSVP_STORE) return true;
+  const ip = req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For') || 'unknown';
+  const key = 'rl:signup:' + ip;
+  const current = await env.RSVP_STORE.get(key);
+  const count = current ? parseInt(current, 10) : 0;
+  if (count >= 10) return false;
+  await env.RSVP_STORE.put(key, String(count + 1), { expirationTtl: 3600 });
+  return true;
+}
+
 // ── PUBLIC API: POST /volunteer/signup ────────────────────────────────
 async function handleSignup(req, env) {
+  if (!await checkSignupRateLimit(env, req)) {
+    return json({ ok: false, error: 'Too many submissions. Please try again later.' }, 429);
+  }
   let data;
   try { data = await req.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
   const name  = (data.name || '').trim();
@@ -451,11 +489,12 @@ function generateIcal(signup, slots) {
 }
 
 // ── ADMIN LOGIN ───────────────────────────────────────────────────────
-async function handleAdminLogin(req) {
+async function handleAdminLogin(req, env) {
   let body; try { body = await req.text(); } catch { body = ''; }
   const params = new URLSearchParams(body);
-  if (params.get('password') === ADMIN_PASSWORD) {
-    return new Response('', { status: 302, headers: { Location: '/admin', 'Set-Cookie': authCookieHeader() } });
+  const adminPassword = env.ADMIN_PASSWORD || '';
+  if (adminPassword && params.get('password') === adminPassword) {
+    return new Response('', { status: 302, headers: { Location: '/admin', 'Set-Cookie': await authCookieHeader(env) } });
   }
   return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Incorrect password.</p>'));
 }

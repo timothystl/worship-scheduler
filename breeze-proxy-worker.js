@@ -366,6 +366,16 @@ async function handleBreezeProxy(request, env, url) {
 // Public endpoint — called from index.html (formerly volunteer.html) when someone submits a form.
 // Sends an admin notification email; worship signups are also queued in KV.
 async function handleVolunteerSignup(request, env) {
+  // Rate limit: max 10 signups per IP per hour
+  if (env.RSVP_STORE) {
+    const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+    const key = 'rl:signup:' + ip;
+    const current = await env.RSVP_STORE.get(key);
+    const count = current ? parseInt(current, 10) : 0;
+    if (count >= 10) return json({ error: 'Too many submissions. Please try again later.' }, 429);
+    await env.RSVP_STORE.put(key, String(count + 1), { expirationTtl: 3600 });
+  }
+
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
