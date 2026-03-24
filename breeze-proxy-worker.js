@@ -379,8 +379,10 @@ async function handleVolunteerSignup(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  const { name, email, phone, ministry, roles, service, sundays, notes, shirtWanted, shirtSize } = body;
+  const { name, phone, ministry, roles, service, sundays, notes, shirtWanted, shirtSize } = body;
+  const email = (body.email || '').trim().toLowerCase();
   if (!name || !email) return json({ error: 'Missing name or email' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Please enter a valid email address.' }, 400);
 
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const submittedAt = new Date().toISOString();

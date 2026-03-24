@@ -390,8 +390,9 @@ async function handleSignup(req, env) {
   let data;
   try { data = await req.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
   const name  = (data.name || '').trim();
-  const email = (data.email || '').trim();
+  const email = (data.email || '').trim().toLowerCase();
   if (!name || !email) return json({ ok: false, error: 'Name and email required' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, error: 'Please enter a valid email address.' }, 400);
 
   // Duplicate signup check: same email + same event
   if (data.event_id) {
@@ -753,14 +754,15 @@ function showThankYou(formEl, signupId) {
 function submitVolunteer(data, formEl, btnEl) {
   if (!data.name || !data.name.trim()) { alert('Please enter your name.'); return; }
   if (!data.email || !data.email.trim()) { alert('Please enter your email address.'); return; }
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(data.email.trim())) { alert('Please enter a valid email address.'); return; }
   var origHtml = btnEl.innerHTML; btnEl.disabled = true; btnEl.textContent = 'Sending\\u2026';
   fetch('/volunteer/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
-    .then(function(r){return r.json();})
-    .then(function(res){
-      if (res.ok) { showThankYou(formEl, res.signup_id); }
-      else { btnEl.disabled=false; btnEl.innerHTML=origHtml; alert(res.error||'Something went wrong. Please try again.'); }
+    .then(function(r){return r.json().then(function(res){return {ok:r.ok,body:res};});})
+    .then(function(r){
+      if (r.body.ok) { showThankYou(formEl, r.body.signup_id); }
+      else { btnEl.disabled=false; btnEl.innerHTML=origHtml; alert(r.body.error||'Something went wrong. Please try again.'); }
     })
-    .catch(function(){ btnEl.disabled=false; btnEl.innerHTML=origHtml; alert('Could not send. Please try again.'); });
+    .catch(function(){ btnEl.disabled=false; btnEl.innerHTML=origHtml; alert('Could not connect to server. Please check your internet connection and try again.'); });
 }
 
 // Worship
