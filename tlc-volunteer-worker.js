@@ -325,8 +325,21 @@ export default {
       return handleAdminApi(req, env, url, method);
     }
     if (path.startsWith('/scheduler')) {
-      const ghUrl = 'https://timothystl.github.io/volunteer' + url.pathname + url.search;
-      return fetch(ghUrl, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' } });
+      // Serve scheduler directly from raw GitHub content (avoids reliance on GitHub Pages being enabled).
+      // The scheduler is a single self-contained HTML file, so /scheduler and /scheduler/ both map
+      // to scheduler/index.html; other sub-paths are served as-is from raw content.
+      let ghPath = url.pathname;
+      if (ghPath === '/scheduler' || ghPath === '/scheduler/') {
+        ghPath = '/scheduler/index.html';
+      } else if (!ghPath.match(/\.\w+$/)) {
+        ghPath = ghPath.replace(/\/$/, '') + '/index.html';
+      }
+      const rawUrl = 'https://raw.githubusercontent.com/timothystl/volunteer/main' + ghPath;
+      const ghRes = await fetch(rawUrl, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' } });
+      if (!ghRes.ok) return new Response('Not Found', { status: 404 });
+      const extMap = { '.html': 'text/html;charset=UTF-8', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+      const ext = (ghPath.match(/(\.\w+)$/) || ['', ''])[1];
+      return new Response(ghRes.body, { status: 200, headers: { 'Content-Type': extMap[ext] || 'text/plain' } });
     }
     return new Response('Not Found', { status: 404 });
   }
