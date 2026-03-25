@@ -115,6 +115,19 @@ async function initDb(db) {
     'ALTER TABLE serve_roles ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE serve_events ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE serve_events ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
+    // signups table columns added over time
+    'ALTER TABLE signups ADD COLUMN event_id INTEGER',
+    'ALTER TABLE signups ADD COLUMN role_id INTEGER',
+    'ALTER TABLE signups ADD COLUMN ministry TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN email TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN phone TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN roles TEXT NOT NULL DEFAULT "[]"',
+    'ALTER TABLE signups ADD COLUMN service TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN sundays TEXT NOT NULL DEFAULT "[]"',
+    'ALTER TABLE signups ADD COLUMN shirt_wanted INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE signups ADD COLUMN shirt_size TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN notes TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE signups ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime(\'now\'))',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -318,7 +331,7 @@ export default {
         return await handleSignup(req, env);
       } catch (e) {
         console.error('Signup error:', e);
-        return json({ ok: false, error: 'Server error: ' + (e && e.message ? e.message : String(e)) }, 500);
+        return json({ ok: false, error: 'Server error. Please try again or contact the church office.' }, 500);
       }
     }
     if (path.match(/^\/volunteer\/calendar\/\d+$/) && method === 'GET') return handleCalendar(env, path);
