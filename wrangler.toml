@@ -2,6 +2,13 @@ name = "breeze-proxy-worker"
 main = "tlc-volunteer-worker.js"
 compatibility_date = "2024-01-01"
 
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 [[routes]]
 pattern = "volunteer.timothystl.org/*"
 zone_name = "timothystl.org"
