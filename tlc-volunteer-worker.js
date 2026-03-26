@@ -7765,6 +7765,18 @@ export default {
       const ext = (ghPath.match(/(\.\w+)$/) || ['', ''])[1];
       return new Response(ghRes.body, { status: 200, headers: { 'Content-Type': extMap[ext] || 'text/plain' } });
     }
+    // ── KV-based short redirects ──────────────────────────────────────────────
+    try {
+      const rawRedirects = await env.RSVP_STORE.get('tlc:redirects');
+      if (rawRedirects) {
+        const redirects = JSON.parse(rawRedirects);
+        if (redirects[path]) {
+          const r = redirects[path];
+          return new Response('', { status: parseInt(r.type || '302'), headers: { Location: r.destination } });
+        }
+      }
+    } catch (e) { /* ignore redirect lookup errors */ }
+
     return new Response('Not Found', { status: 404 });
   }
 };
@@ -8071,6 +8083,36 @@ async function handleAdminApi(req, env, url, method) {
     const parts = seg.split('/'); const rid = parseInt(parts[3]);
     await env.DB.prepare('DELETE FROM signup_slots WHERE role_id=?').bind(rid).run();
     await env.DB.prepare('DELETE FROM serve_roles WHERE id=?').bind(rid).run();
+    return json({ ok: true });
+  }
+
+  // ── Redirects CRUD ───────────────────────────────────────────────
+  if (seg === 'redirects' && method === 'GET') {
+    const raw = await env.RSVP_STORE.get('tlc:redirects');
+    const redirects = raw ? JSON.parse(raw) : {};
+    return json({ redirects });
+  }
+
+  if (seg === 'redirects' && method === 'POST') {
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const fromPath = (b.from || '').trim();
+    const toUrl = (b.to || '').trim();
+    if (!fromPath || !toUrl) return json({ error: 'from and to are required' }, 400);
+    const normalizedPath = fromPath.startsWith('/') ? fromPath : '/' + fromPath;
+    const raw = await env.RSVP_STORE.get('tlc:redirects');
+    const redirects = raw ? JSON.parse(raw) : {};
+    redirects[normalizedPath] = { destination: toUrl, type: b.type || '302' };
+    await env.RSVP_STORE.put('tlc:redirects', JSON.stringify(redirects));
+    return json({ ok: true });
+  }
+
+  if (seg === 'redirects' && method === 'DELETE') {
+    const fromPath = url.searchParams.get('from') || '';
+    if (!fromPath) return json({ error: 'from param required' }, 400);
+    const raw = await env.RSVP_STORE.get('tlc:redirects');
+    const redirects = raw ? JSON.parse(raw) : {};
+    delete redirects[fromPath];
+    await env.RSVP_STORE.put('tlc:redirects', JSON.stringify(redirects));
     return json({ ok: true });
   }
 
