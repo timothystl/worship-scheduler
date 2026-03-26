@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Timothy Lutheran Church – Worship Schedule Builder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -1877,15 +1878,20 @@ function renderTable(people, counts) {
         (svc.roles||[]).forEach(function(role){ total++; if((svc.assignments||{})[role]) filled++; });
       });
       var fillColor = total===0?'#7A6E60':(filled===total?'#6B8F71':(filled>0?'#D4922A':'#B85C3A'));
+      var openCount = total - filled;
+      var openPart = openCount > 0
+        ? '<span class="ss-open">'+openCount+' open</span>'
+        : '<span class="ss-complete">&#10003; Complete</span>';
       bodyHtml += '<tr class="sunday-summary special-summary" data-idx="'+rowIdx+'">'
         +'<td colspan="'+totalCols+'"><div class="ss-inner">'
         +'<span class="ss-toggle">&#9658;</span>'
         +'<span class="ss-date">'+esc(fmtDate(row.date))+'</span>'
-        +'<span class="ss-special-name">'+esc(row.name||'Special Service')+'</span>'
-        +'<span class="special-badge">Special</span>'
-        +'<span class="ss-fill" style="color:'+fillColor+'">'+filled+'/'+total+' filled</span>'
-        +'<button class="btn-edit-special"   data-idx="'+rowIdx+'" title="Edit">&#9998;</button>'
-        +'<button class="btn-delete-special" data-idx="'+rowIdx+'" title="Delete">&#128465;</button>'
+        +'<span class="ss-label-area"><span class="ss-special-name">'+esc(row.name||'Special Service')+'</span>'
+          +'<span class="special-badge">Special</span></span>'
+        +'<span class="ss-stats-area"><span class="ss-fill" style="color:'+fillColor+'">'+filled+' filled</span>'+openPart+'</span>'
+        +'<span class="ss-conf-area"></span>'
+        +'<button class="btn-edit-special"   data-idx="'+rowIdx+'" title="Edit" style="background:none;border:1px solid var(--ice-blue);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:.72rem;color:var(--steel-anchor);font-family:var(--font-body);">&#9998; Edit</button>'
+        +'<button class="btn-delete-special" data-idx="'+rowIdx+'" title="Delete" style="background:none;border:1px solid var(--error-border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:.72rem;color:var(--danger-btn);font-family:var(--font-body);">&#128465;</button>'
         +'</div></td></tr>';
 
       // One detail row per service time, cells aligned to table columns
