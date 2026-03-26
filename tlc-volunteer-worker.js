@@ -7759,11 +7759,12 @@ export default {
         ghPath = ghPath.replace(/\/$/, '') + '/index.html';
       }
       const rawUrl = 'https://raw.githubusercontent.com/timothystl/volunteer/main' + ghPath;
-      const ghRes = await fetch(rawUrl, { headers: { 'User-Agent': req.headers.get('User-Agent') || '' } });
+      const ghRes = await fetch(rawUrl, { cf: { cacheEverything: false }, headers: { 'User-Agent': req.headers.get('User-Agent') || '', 'Cache-Control': 'no-cache' } });
       if (!ghRes.ok) return new Response('Not Found', { status: 404 });
       const extMap = { '.html': 'text/html;charset=UTF-8', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
       const ext = (ghPath.match(/(\.\w+)$/) || ['', ''])[1];
-      return new Response(ghRes.body, { status: 200, headers: { 'Content-Type': extMap[ext] || 'text/plain' } });
+      const cacheHeader = ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=60';
+      return new Response(ghRes.body, { status: 200, headers: { 'Content-Type': extMap[ext] || 'text/plain', 'Cache-Control': cacheHeader } });
     }
     return new Response('Not Found', { status: 404 });
   }
