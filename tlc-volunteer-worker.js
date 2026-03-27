@@ -8872,6 +8872,7 @@ header{background:var(--navy);color:#fff;padding:.75rem 1.5rem;display:flex;alig
 <script>
 function toTimeInput(str) {
   if (!str) return '';
+  str = str.trim();
   var m = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!m) return str;
   var h = parseInt(m[1], 10), min = m[2], ampm = m[3].toUpperCase();
@@ -8921,9 +8922,8 @@ function loadSignups() {
       }
       var data = result.data;
       var items = data.signups || [];
-      document.getElementById('signups-count').textContent = items.length;
       var labels = {all:'All',worship:'Worship',events:'Events',education:'Education',acceptance:'Acceptance',outreach:'Outreach',general:'General'};
-      document.getElementById('signups-title').innerHTML = (labels[currentTab]||currentTab) + ' Volunteers <span class="badge">' + items.length + '</span>';
+      document.getElementById('signups-title').innerHTML = (labels[currentTab]||currentTab) + ' Volunteers <span class="badge" id="signups-count">' + items.length + '</span>';
       if (!items.length) {
         document.getElementById('signups-list').innerHTML = '<p class="empty-msg">No sign-ups yet.</p>';
         return;
