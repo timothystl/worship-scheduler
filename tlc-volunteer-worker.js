@@ -9207,10 +9207,20 @@ function loadEvents(expandEvId) {
           + '</div></div>'
           + '</div>';
       }).join('');
-      // Restore any time/date values the user had entered before the re-render
+      // Explicitly set time input values via JS — setting value= through innerHTML
+      // is unreliable for <input type="time"> in some browsers.
+      events.forEach(function(ev) {
+        (ev.roles || []).forEach(function(r) {
+          var startEl = document.getElementById('role-start-' + r.id);
+          var endEl   = document.getElementById('role-end-'   + r.id);
+          if (startEl) startEl.value = toTimeInput(r.start_time || '');
+          if (endEl)   endEl.value   = toTimeInput(r.end_time   || '');
+        });
+      });
+      // Then restore any in-progress edits the user had before the re-render
       Object.keys(preserved).forEach(function(id) {
         var el = document.getElementById(id);
-        if (el && preserved[id] && !el.value) el.value = preserved[id];
+        if (el && preserved[id]) el.value = preserved[id];
       });
       if (expandEvId) {
         var body = document.getElementById('ev-admin-body-' + expandEvId);
@@ -9252,7 +9262,7 @@ function saveEvent(evId) {
     body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:sortOrder })
   }).then(function(r) {
     if (!r.ok) { r.text().then(function(t) { alert('Save failed: ' + t); }); return; }
-    alert('Saved!'); loadEvents();
+    loadEvents(evId);
   }).catch(function(e) { alert('Save error: ' + e); });
 }
 
