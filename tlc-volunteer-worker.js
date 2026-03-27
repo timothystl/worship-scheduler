@@ -8092,6 +8092,30 @@ async function handleAdminApi(req, env, url, method) {
     return json({ ok: true });
   }
 
+  if (seg.match(/^events\/\d+\/roster$/) && method === 'GET') {
+    const evId = parseInt(seg.split('/')[1]);
+    const ev = await env.DB.prepare('SELECT * FROM serve_events WHERE id=?').bind(evId).first();
+    if (!ev) return json({ error: 'Not found' }, 404);
+    const roles = await env.DB.prepare(
+      'SELECT * FROM serve_roles WHERE event_id=? ORDER BY role_date,sort_order,id'
+    ).bind(evId).all();
+    const roster = [];
+    for (const role of (roles.results || [])) {
+      const vols = await env.DB.prepare(
+        'SELECT s.name, s.email, s.phone FROM signup_slots ss JOIN signups s ON ss.signup_id=s.id WHERE ss.role_id=? ORDER BY s.name'
+      ).bind(role.id).all();
+      roster.push({
+        id: role.id, name: role.name, description: role.description || '',
+        role_date: role.role_date || '', start_time: role.start_time || '',
+        end_time: role.end_time || '', slots: role.slots || 0,
+        volunteers: (vols.results || []).map(function(v) {
+          return { name: v.name, email: v.email, phone: v.phone || '' };
+        }),
+      });
+    }
+    return json({ event: { id: ev.id, name: ev.name, event_date: ev.event_date }, roster });
+  }
+
   if (seg === 'export.csv' && method === 'GET') {
     const ministry = url.searchParams.get('ministry') || '';
     let q = 'SELECT s.*, e.name as event_name FROM signups s LEFT JOIN serve_events e ON s.event_id=e.id';
@@ -8975,6 +8999,94 @@ function printSignups() {
   window.print();
 }
 
+function printEventRoster(evId) {
+  fetch('/admin/api/events/' + evId + '/roster')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var ev = data.event || {};
+      var roster = data.roster || [];
+      var dateStr = ev.event_date ? new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : '';
+      // Group roles by date
+      var byDate = {};
+      var dateOrder = [];
+      roster.forEach(function(role) {
+        var d = role.role_date || ev.event_date || '';
+        if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
+        byDate[d].push(role);
+      });
+      var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        + '<title>' + escHtml(ev.name || 'Event Roster') + '</title>'
+        + '<style>'
+        + 'body{font-family:Georgia,serif;color:#1a1a2a;padding:32px;max-width:900px;margin:0 auto;}'
+        + 'h1{font-size:1.6rem;margin:0 0 4px;}h2{font-size:1.1rem;font-weight:400;color:#555;margin:0 0 24px;border-bottom:2px solid #1E2D4A;padding-bottom:8px;}'
+        + '.day-section{margin-bottom:28px;}'
+        + '.day-heading{font-size:1rem;font-weight:700;color:#1E2D4A;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:12px;}'
+        + '.role-block{margin-bottom:16px;page-break-inside:avoid;}'
+        + '.role-header{display:flex;justify-content:space-between;align-items:baseline;}'
+        + '.role-name{font-weight:700;font-size:.95rem;}'
+        + '.role-time{font-size:.82rem;color:#555;}'
+        + '.role-desc{font-size:.8rem;color:#666;margin-bottom:6px;}'
+        + '.vol-table{width:100%;border-collapse:collapse;margin-top:4px;}'
+        + '.vol-table th{text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#888;border-bottom:1px solid #eee;padding:2px 6px;}'
+        + '.vol-table td{font-size:.85rem;padding:4px 6px;border-bottom:1px solid #f2f2f2;}'
+        + '.empty-slot{font-size:.82rem;color:#B85C3A;font-style:italic;padding:4px 6px;}'
+        + '.slots-badge{font-size:.75rem;color:#888;margin-left:8px;}'
+        + '@media print{body{padding:16px;}}'
+        + '</style></head><body>'
+        + '<h1>' + escHtml(ev.name || 'Event Roster') + '</h1>'
+        + '<h2>' + escHtml(dateStr) + '</h2>';
+      if (!roster.length) {
+        html += '<p style="color:#888;">No roles defined for this event.</p>';
+      } else {
+        dateOrder.forEach(function(d) {
+          var roles = byDate[d];
+          var dayLabel = d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) : 'General';
+          html += '<div class="day-section"><div class="day-heading">' + escHtml(dayLabel) + '</div>';
+          roles.forEach(function(role) {
+            var timeStr = '';
+            if (role.start_time) timeStr = role.start_time + (role.end_time ? ' – ' + role.end_time : '');
+            var slotsLabel = role.slots > 0 ? role.volunteers.length + ' / ' + role.slots + ' filled' : role.volunteers.length + ' signed up';
+            html += '<div class="role-block">'
+              + '<div class="role-header">'
+              + '<span class="role-name">' + escHtml(role.name) + '</span>'
+              + '<span class="role-time">' + (timeStr ? escHtml(timeStr) + '&ensp;&bull;&ensp;' : '') + '<span class="slots-badge">' + escHtml(slotsLabel) + '</span></span>'
+              + '</div>'
+              + (role.description ? '<div class="role-desc">' + escHtml(role.description) + '</div>' : '');
+            if (role.volunteers.length) {
+              html += '<table class="vol-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead><tbody>';
+              role.volunteers.forEach(function(v) {
+                html += '<tr><td>' + escHtml(v.name) + '</td><td>' + escHtml(v.email || '—') + '</td><td>' + escHtml(v.phone || '—') + '</td></tr>';
+              });
+              // Empty slots
+              var empty = role.slots > 0 ? Math.max(0, role.slots - role.volunteers.length) : 0;
+              for (var i = 0; i < empty; i++) {
+                html += '<tr><td class="empty-slot" colspan="3">— open slot —</td></tr>';
+              }
+              html += '</tbody></table>';
+            } else {
+              var totalEmpty = role.slots > 0 ? role.slots : 1;
+              html += '<table class="vol-table"><tbody>';
+              for (var i = 0; i < totalEmpty; i++) {
+                html += '<tr><td class="empty-slot" colspan="3">— open slot —</td></tr>';
+              }
+              html += '</tbody></table>';
+            }
+            html += '</div>';
+          });
+          html += '</div>';
+        });
+      }
+      html += '<p style="font-size:.72rem;color:#aaa;margin-top:32px;">Printed ' + new Date().toLocaleString() + '</p>'
+        + '</body></html>';
+      var w = window.open('', '_blank');
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(function() { w.print(); }, 400);
+    })
+    .catch(function(e) { alert('Could not load roster: ' + e.message); });
+}
+
 var _dupVisible = false;
 function toggleDuplicates() {
   _dupVisible = !_dupVisible;
@@ -9062,6 +9174,7 @@ function loadEvents(expandEvId) {
           + '<input type="hidden" id="ev-sort-' + ev.id + '" value="' + (ev.sort_order||0) + '">'
           + '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">'
           + '<button class="btn-primary btn-sm" onclick="saveEvent(' + ev.id + ')">Save Changes</button>'
+          + '<button class="btn-secondary btn-sm" onclick="printEventRoster(' + ev.id + ')">&#128438; Print Roster</button>'
           + '<button class="btn-secondary btn-sm" onclick="toggleEventVisibility(' + ev.id + ',' + (ev.hidden?0:1) + ')">'
           + (ev.hidden ? 'Make Visible' : 'Hide Event') + '</button>'
           + '<button class="btn-delete btn-sm" onclick="deleteEvent(' + ev.id + ')">Delete Event</button>'
