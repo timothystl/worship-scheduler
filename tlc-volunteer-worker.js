@@ -7992,13 +7992,23 @@ async function handleAdminApi(req, env, url, method) {
     if (ministry && ministry !== 'all') { q += ' WHERE s.ministry=?'; binds.push(ministry); }
     q += ' ORDER BY s.created_at DESC';
     const rows = await env.DB.prepare(q).bind(...binds).all();
-    // Attach slot details
+    // Attach slot details; map to plain objects to ensure JSON serializability
     const signups = [];
     for (const s of (rows.results || [])) {
       const slotRows = await env.DB.prepare(
         `SELECT r.name, r.role_date, r.start_time, r.end_time FROM signup_slots ss JOIN serve_roles r ON ss.role_id=r.id WHERE ss.signup_id=?`
       ).bind(s.id).all();
-      signups.push({ ...s, slot_details: slotRows.results || [] });
+      signups.push({
+        id: s.id, event_id: s.event_id, role_id: s.role_id,
+        ministry: s.ministry || '', name: s.name || '', email: s.email || '',
+        phone: s.phone || '', roles: s.roles || '[]', service: s.service || '',
+        sundays: s.sundays || '[]', shirt_wanted: s.shirt_wanted || 0,
+        shirt_size: s.shirt_size || '', notes: s.notes || '',
+        created_at: s.created_at || '', event_name: s.event_name || null,
+        slot_details: (slotRows.results || []).map(function(sl) {
+          return { name: sl.name || '', role_date: sl.role_date || '', start_time: sl.start_time || '', end_time: sl.end_time || '' };
+        }),
+      });
     }
     return json({ signups });
   }
@@ -8949,8 +8959,9 @@ function loadSignups() {
         return html;
       }).join('');
     })
-    .catch(function() {
-      document.getElementById('signups-list').innerHTML = '<p class="empty-msg">Error loading sign-ups.</p>';
+    .catch(function(err) {
+      console.error('loadSignups error:', err);
+      document.getElementById('signups-list').innerHTML = '<p class="empty-msg">Error loading sign-ups: ' + (err && err.message ? err.message : String(err)) + '</p>';
     });
 }
 
