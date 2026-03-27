@@ -12,6 +12,7 @@ const DB_INIT = [
     event_date TEXT NOT NULL DEFAULT '',
     hidden INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    use_time_slots INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS serve_roles (
@@ -7496,6 +7497,7 @@ async function initDb(db) {
     'ALTER TABLE serve_roles ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE serve_events ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE serve_events ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE serve_events ADD COLUMN use_time_slots INTEGER NOT NULL DEFAULT 1',
     // signups table columns added over time
     'ALTER TABLE signups ADD COLUMN event_id INTEGER',
     'ALTER TABLE signups ADD COLUMN role_id INTEGER',
@@ -8039,18 +8041,20 @@ async function handleAdminApi(req, env, url, method) {
 
   if (seg === 'events' && method === 'POST') {
     let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const useTimeSlots = (b.use_time_slots === undefined || b.use_time_slots === null) ? 1 : (b.use_time_slots ? 1 : 0);
     const r = await env.DB.prepare(
-      'INSERT INTO serve_events (name,description,event_date,sort_order) VALUES (?,?,?,?)'
-    ).bind(b.name||'New Event', b.description||'', b.event_date||'', b.sort_order||0).run();
+      'INSERT INTO serve_events (name,description,event_date,sort_order,use_time_slots) VALUES (?,?,?,?,?)'
+    ).bind(b.name||'New Event', b.description||'', b.event_date||'', b.sort_order||0, useTimeSlots).run();
     return json({ ok: true, id: r.meta?.last_row_id });
   }
 
   if (seg.startsWith('events/') && !seg.includes('/roles') && method === 'PUT') {
     const id = parseInt(seg.split('/')[1]);
     let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const useTimeSlots = (b.use_time_slots === undefined || b.use_time_slots === null) ? 1 : (b.use_time_slots ? 1 : 0);
     await env.DB.prepare(
-      'UPDATE serve_events SET name=?,description=?,event_date=?,hidden=?,sort_order=? WHERE id=?'
-    ).bind(b.name, b.description||'', b.event_date||'', b.hidden?1:0, b.sort_order||0, id).run();
+      'UPDATE serve_events SET name=?,description=?,event_date=?,hidden=?,sort_order=?,use_time_slots=? WHERE id=?'
+    ).bind(b.name, b.description||'', b.event_date||'', b.hidden?1:0, b.sort_order||0, useTimeSlots, id).run();
     return json({ ok: true });
   }
 
@@ -8916,7 +8920,11 @@ header{background:var(--navy);color:#fff;padding:.75rem 1.5rem;display:flex;alig
         <label class="form-label">Description</label>
         <textarea id="new-ev-desc" class="form-textarea" placeholder="Brief description for volunteers..."></textarea>
       </div>
-      <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem;">
+        <input type="checkbox" id="new-ev-time-slots" checked style="width:auto;margin:0;">
+        <label for="new-ev-time-slots" style="font-size:.85rem;color:var(--navy);cursor:pointer;">Roles have scheduled time slots (date &amp; time)</label>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem;">
         <button class="btn-primary" onclick="saveNewEvent()">Save Event</button>
         <button class="btn-secondary" onclick="document.getElementById('add-event-form').style.display='none'">Cancel</button>
       </div>
@@ -9049,66 +9057,70 @@ function printEventRoster(evId) {
       var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
         + '<title>' + escHtml(ev.name || 'Event Roster') + '</title>'
         + '<style>'
-        + 'body{font-family:Georgia,serif;color:#1a1a2a;padding:32px;max-width:900px;margin:0 auto;}'
-        + 'h1{font-size:1.6rem;margin:0 0 4px;}h2{font-size:1.1rem;font-weight:400;color:#555;margin:0 0 24px;border-bottom:2px solid #1E2D4A;padding-bottom:8px;}'
-        + '.day-section{margin-bottom:28px;}'
-        + '.day-heading{font-size:1rem;font-weight:700;color:#1E2D4A;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:12px;}'
-        + '.role-block{margin-bottom:16px;page-break-inside:avoid;}'
-        + '.role-header{display:flex;justify-content:space-between;align-items:baseline;}'
-        + '.role-name{font-weight:700;font-size:.95rem;}'
-        + '.role-time{font-size:.82rem;color:#555;}'
-        + '.role-desc{font-size:.8rem;color:#666;margin-bottom:6px;}'
-        + '.vol-table{width:100%;border-collapse:collapse;margin-top:4px;}'
-        + '.vol-table th{text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#888;border-bottom:1px solid #eee;padding:2px 6px;}'
-        + '.vol-table td{font-size:.85rem;padding:4px 6px;border-bottom:1px solid #f2f2f2;}'
-        + '.empty-slot{font-size:.82rem;color:#B85C3A;font-style:italic;padding:4px 6px;}'
-        + '.slots-badge{font-size:.75rem;color:#888;margin-left:8px;}'
-        + '@media print{body{padding:16px;}}'
+        + '@page{size:landscape;margin:.65in .75in;}'
+        + '*{box-sizing:border-box;margin:0;padding:0;}'
+        + 'body{font-family:Georgia,serif;color:#1a1a2a;font-size:10pt;}'
+        + '.header{border-bottom:2.5pt solid #1E2D4A;padding-bottom:6pt;margin-bottom:14pt;display:flex;justify-content:space-between;align-items:flex-end;}'
+        + '.header-title{font-size:16pt;font-weight:700;color:#1E2D4A;line-height:1.1;}'
+        + '.header-date{font-size:9.5pt;color:#555;}'
+        + '.day-section{margin-bottom:18pt;page-break-inside:avoid;}'
+        + '.day-heading{font-size:10pt;font-weight:700;color:#1E2D4A;background:#e8eef5;padding:3pt 6pt;border-left:3pt solid #1E2D4A;margin-bottom:4pt;}'
+        + 'table{width:100%;border-collapse:collapse;}'
+        + 'thead tr{background:#1E2D4A;color:#fff;}'
+        + 'thead th{text-align:left;font-size:8pt;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:4pt 6pt;border:1pt solid #1E2D4A;}'
+        + 'tbody tr:nth-child(even){background:#f5f7fa;}'
+        + 'tbody tr:nth-child(odd){background:#fff;}'
+        + 'tbody td{font-size:9pt;padding:4pt 6pt;border:0.5pt solid #d0d8e4;vertical-align:top;}'
+        + '.role-cell{font-weight:700;}'
+        + '.time-cell{white-space:nowrap;color:#2E7EA6;}'
+        + '.vol-cell{color:#222;}'
+        + '.empty-cell{color:#B85C3A;font-style:italic;}'
+        + '.fill-cell{font-size:8pt;color:#666;white-space:nowrap;}'
+        + '.footer{margin-top:14pt;font-size:7.5pt;color:#aaa;border-top:0.5pt solid #ddd;padding-top:4pt;display:flex;justify-content:space-between;}'
         + '</style></head><body>'
-        + '<h1>' + escHtml(ev.name || 'Event Roster') + '</h1>'
-        + '<h2>' + escHtml(dateStr) + '</h2>';
+        + '<div class="header">'
+        + '<div class="header-title">' + escHtml(ev.name || 'Event Roster') + '</div>'
+        + '<div class="header-date">' + escHtml(dateStr) + '</div>'
+        + '</div>';
       if (!roster.length) {
         html += '<p style="color:#888;">No roles defined for this event.</p>';
       } else {
         dateOrder.forEach(function(d) {
           var roles = byDate[d];
           var dayLabel = d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) : 'General';
-          html += '<div class="day-section"><div class="day-heading">' + escHtml(dayLabel) + '</div>';
+          html += '<div class="day-section"><div class="day-heading">' + escHtml(dayLabel) + '</div>'
+            + '<table><thead><tr>'
+            + '<th style="width:18%;">Role</th>'
+            + '<th style="width:11%;">Time</th>'
+            + '<th style="width:8%;">Filled</th>'
+            + '<th>Volunteers</th>'
+            + '</tr></thead><tbody>';
           roles.forEach(function(role) {
             var timeStr = '';
             if (role.start_time) timeStr = role.start_time + (role.end_time ? ' – ' + role.end_time : '');
-            var slotsLabel = role.slots > 0 ? role.volunteers.length + ' / ' + role.slots + ' filled' : role.volunteers.length + ' signed up';
-            html += '<div class="role-block">'
-              + '<div class="role-header">'
-              + '<span class="role-name">' + escHtml(role.name) + '</span>'
-              + '<span class="role-time">' + (timeStr ? escHtml(timeStr) + '&ensp;&bull;&ensp;' : '') + '<span class="slots-badge">' + escHtml(slotsLabel) + '</span></span>'
-              + '</div>'
-              + (role.description ? '<div class="role-desc">' + escHtml(role.description) + '</div>' : '');
-            if (role.volunteers.length) {
-              html += '<table class="vol-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead><tbody>';
-              role.volunteers.forEach(function(v) {
-                html += '<tr><td>' + escHtml(v.name) + '</td><td>' + escHtml(v.email || '—') + '</td><td>' + escHtml(v.phone || '—') + '</td></tr>';
-              });
-              // Empty slots
-              var empty = role.slots > 0 ? Math.max(0, role.slots - role.volunteers.length) : 0;
-              for (var i = 0; i < empty; i++) {
-                html += '<tr><td class="empty-slot" colspan="3">— open slot —</td></tr>';
+            var filledCount = role.volunteers.length;
+            var slotsLabel = role.slots > 0 ? filledCount + ' / ' + role.slots : filledCount + ' / ∞';
+            var volNames = role.volunteers.length
+              ? role.volunteers.map(function(v) { return escHtml(v.name); }).join(',&ensp;')
+              : '<span class="empty-cell">— open —</span>';
+            // Add open slot indicators if capacity not met
+            if (role.slots > 0 && role.volunteers.length < role.slots) {
+              var opens = role.slots - role.volunteers.length;
+              for (var i = 0; i < opens; i++) {
+                volNames += (role.volunteers.length || i > 0 ? ',&ensp;' : '') + '<span class="empty-cell">open</span>';
               }
-              html += '</tbody></table>';
-            } else {
-              var totalEmpty = role.slots > 0 ? role.slots : 1;
-              html += '<table class="vol-table"><tbody>';
-              for (var i = 0; i < totalEmpty; i++) {
-                html += '<tr><td class="empty-slot" colspan="3">— open slot —</td></tr>';
-              }
-              html += '</tbody></table>';
             }
-            html += '</div>';
+            html += '<tr>'
+              + '<td class="role-cell">' + escHtml(role.name) + (role.description ? '<br><span style="font-weight:400;font-size:8pt;color:#666;">' + escHtml(role.description) + '</span>' : '') + '</td>'
+              + '<td class="time-cell">' + escHtml(timeStr || '—') + '</td>'
+              + '<td class="fill-cell">' + escHtml(slotsLabel) + '</td>'
+              + '<td class="vol-cell">' + volNames + '</td>'
+              + '</tr>';
           });
-          html += '</div>';
+          html += '</tbody></table></div>';
         });
       }
-      html += '<p style="font-size:.72rem;color:#aaa;margin-top:32px;">Printed ' + new Date().toLocaleString() + '</p>'
+      html += '<div class="footer"><span>Timothy Lutheran Church — Volunteer Roster</span><span>Printed ' + new Date().toLocaleString() + '</span></div>'
         + '</body></html>';
       var w = window.open('', '_blank');
       w.document.write(html);
@@ -9185,7 +9197,9 @@ function loadEvents(expandEvId) {
       document.getElementById('events-list').innerHTML = events.map(function(ev) {
         var statusClass = ev.hidden ? 'hidden' : 'visible';
         var statusLabel = ev.hidden ? 'Hidden' : 'Visible';
-        return '<div class="ev-admin-card" id="ev-admin-' + ev.id + '" data-hidden="' + (ev.hidden?1:0) + '" data-sort-order="' + (ev.sort_order||0) + '">'
+        var useTs = (ev.use_time_slots === undefined || ev.use_time_slots === null) ? 1 : ev.use_time_slots;
+        var tsHide = useTs ? '' : 'display:none;';
+        return '<div class="ev-admin-card" id="ev-admin-' + ev.id + '" data-hidden="' + (ev.hidden?1:0) + '" data-sort-order="' + (ev.sort_order||0) + '" data-use-time-slots="' + useTs + '">'
           + '<button class="ev-admin-header" onclick="toggleEvAdmin(' + ev.id + ')" aria-expanded="false">'
           + '<span class="ev-admin-name">' + escHtml(ev.name) + '</span>'
           + '<span class="ev-admin-date">' + (ev.event_date ? escHtml(ev.event_date) : 'No date') + '</span>'
@@ -9204,6 +9218,10 @@ function loadEvents(expandEvId) {
           + '<textarea id="ev-desc-' + ev.id + '" class="form-textarea">' + escHtml(ev.description||'') + '</textarea></div>'
           + '<input type="hidden" id="ev-hidden-' + ev.id + '" value="' + (ev.hidden?1:0) + '">'
           + '<input type="hidden" id="ev-sort-' + ev.id + '" value="' + (ev.sort_order||0) + '">'
+          + '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;">'
+          + '<input type="checkbox" id="ev-time-slots-' + ev.id + '"' + (useTs ? ' checked' : '') + ' style="width:auto;margin:0;" onchange="toggleTimeSlotFields(' + ev.id + ',this.checked)">'
+          + '<label for="ev-time-slots-' + ev.id + '" style="font-size:.85rem;color:var(--navy);cursor:pointer;">Roles have scheduled time slots (date &amp; time)</label>'
+          + '</div>'
           + '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">'
           + '<button class="btn-primary btn-sm" onclick="saveEvent(' + ev.id + ')">Save Changes</button>'
           + '<button class="btn-secondary btn-sm" onclick="printEventRoster(' + ev.id + ')">&#128438; Print Roster</button>'
@@ -9217,9 +9235,9 @@ function loadEvents(expandEvId) {
               return '<div class="role-admin-row" id="role-row-' + r.id + '" data-sort-order="' + (r.sort_order||0) + '"><span style="font-size:.75rem;font-weight:600;color:var(--teal);white-space:nowrap;min-width:40px;text-align:center;">' + (r.filled_count||0) + '/' + (r.slots||'∞') + '</span>'
                 + '<input type="text" class="form-input" style="flex:1;" id="role-name-' + r.id + '" value="' + escHtml(r.name) + '">'
                 + '<input type="text" class="form-input" style="flex:2;" id="role-desc-' + r.id + '" value="' + escHtml(r.description||'') + '" placeholder="Description...">'
-                + '<input type="date" class="form-input" style="flex:1;min-width:120px;" id="role-date-' + r.id + '" value="' + escHtml(r.role_date||'') + '" title="Date">'
-                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-start-' + r.id + '" value="' + toTimeInput(r.start_time||'') + '" data-raw="' + escHtml(r.start_time||'') + '" title="Start time">'
-                + '<input type="time" class="form-input" style="flex:0 0 90px;" id="role-end-' + r.id + '" value="' + toTimeInput(r.end_time||'') + '" data-raw="' + escHtml(r.end_time||'') + '" title="End time">'
+                + '<input type="date" class="form-input role-time-field" style="flex:1;min-width:120px;' + tsHide + '" id="role-date-' + r.id + '" value="' + escHtml(r.role_date||'') + '" title="Date">'
+                + '<input type="time" class="form-input role-time-field" style="flex:0 0 90px;' + tsHide + '" id="role-start-' + r.id + '" value="' + toTimeInput(r.start_time||'') + '" data-raw="' + escHtml(r.start_time||'') + '" title="Start time">'
+                + '<input type="time" class="form-input role-time-field" style="flex:0 0 90px;' + tsHide + '" id="role-end-' + r.id + '" value="' + toTimeInput(r.end_time||'') + '" data-raw="' + escHtml(r.end_time||'') + '" title="End time">'
                 + '<input type="number" class="form-input" style="flex:0 0 60px;" id="role-slots-' + r.id + '" value="' + (r.slots||0) + '" min="0" title="Slots">'
                 + '<input type="hidden" id="role-sort-' + r.id + '" value="' + (r.sort_order||0) + '">'
                 + '<button class="btn-secondary btn-sm" onclick="saveRole(' + ev.id + ',' + r.id + ')">Save</button>'
@@ -9230,9 +9248,9 @@ function loadEvents(expandEvId) {
           + '<div class="add-role-form">'
           + '<input type="text" id="new-role-name-' + ev.id + '" class="form-input" placeholder="Role name...">'
           + '<input type="text" id="new-role-desc-' + ev.id + '" class="form-input" placeholder="Description...">'
-          + '<input type="date" id="new-role-date-' + ev.id + '" class="form-input" style="flex:1;min-width:120px;" title="Date">'
-          + '<input type="time" id="new-role-start-' + ev.id + '" class="form-input" style="flex:0 0 90px;" title="Start time">'
-          + '<input type="time" id="new-role-end-' + ev.id + '" class="form-input" style="flex:0 0 90px;" title="End time">'
+          + '<input type="date" id="new-role-date-' + ev.id + '" class="form-input role-time-field" style="flex:1;min-width:120px;' + tsHide + '" title="Date">'
+          + '<input type="time" id="new-role-start-' + ev.id + '" class="form-input role-time-field" style="flex:0 0 90px;' + tsHide + '" title="Start time">'
+          + '<input type="time" id="new-role-end-' + ev.id + '" class="form-input role-time-field" style="flex:0 0 90px;' + tsHide + '" title="End time">'
           + '<input type="number" id="new-role-slots-' + ev.id + '" class="form-input" style="flex:0 0 60px;" value="0" min="0" title="Slots">'
           + '<button class="btn-primary btn-sm" onclick="addRole(' + ev.id + ')">+ Role</button>'
           + '</div>'
@@ -9281,6 +9299,14 @@ function toggleEvAdmin(evId) {
   }
 }
 
+function toggleTimeSlotFields(evId, show) {
+  var card = document.getElementById('ev-admin-' + evId);
+  if (!card) return;
+  card.querySelectorAll('.role-time-field').forEach(function(el) {
+    el.style.display = show ? '' : 'none';
+  });
+}
+
 function saveEvent(evId) {
   var name = document.getElementById('ev-name-' + evId).value;
   var date = document.getElementById('ev-date-' + evId).value;
@@ -9288,10 +9314,12 @@ function saveEvent(evId) {
   var card = document.getElementById('ev-admin-' + evId);
   var hidden = card ? parseInt(card.dataset.hidden || '0', 10) : 0;
   var sortOrder = card ? parseInt(card.dataset.sortOrder || '0', 10) : 0;
+  var tsEl = document.getElementById('ev-time-slots-' + evId);
+  var useTimeSlots = tsEl ? (tsEl.checked ? 1 : 0) : 1;
   fetch('/admin/api/events/' + evId, {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:sortOrder })
+    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:sortOrder, use_time_slots:useTimeSlots })
   }).then(function(r) {
     if (!r.ok) { r.text().then(function(t) { alert('Save failed: ' + t); }); return; }
     loadEvents(evId);
@@ -9304,10 +9332,12 @@ function toggleEventVisibility(evId, hidden) {
   var desc = document.getElementById('ev-desc-' + evId).value;
   var card = document.getElementById('ev-admin-' + evId);
   var sortOrder = card ? parseInt(card.dataset.sortOrder || '0', 10) : 0;
+  var tsEl = document.getElementById('ev-time-slots-' + evId);
+  var useTimeSlots = tsEl ? (tsEl.checked ? 1 : 0) : 1;
   fetch('/admin/api/events/' + evId, {
     method: 'PUT',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:sortOrder })
+    body: JSON.stringify({ name:name, event_date:date, description:desc, hidden:hidden, sort_order:sortOrder, use_time_slots:useTimeSlots })
   }).then(function(r) {
     if (!r.ok) { r.text().then(function(t) { alert('Error: ' + t); }); return; }
     loadEvents();
@@ -9330,16 +9360,18 @@ function saveNewEvent() {
   if (!name) { alert('Please enter an event name.'); return; }
   var date = document.getElementById('new-ev-date').value;
   var desc = document.getElementById('new-ev-desc').value;
+  var useTimeSlots = document.getElementById('new-ev-time-slots').checked ? 1 : 0;
   fetch('/admin/api/events', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ name:name, event_date:date, description:desc })
-  }).then(function() {
+    body: JSON.stringify({ name:name, event_date:date, description:desc, use_time_slots:useTimeSlots })
+  }).then(function(r) { return r.json(); }).then(function(data) {
     document.getElementById('new-ev-name').value = '';
     document.getElementById('new-ev-date').value = '';
     document.getElementById('new-ev-desc').value = '';
+    document.getElementById('new-ev-time-slots').checked = true;
     document.getElementById('add-event-form').style.display = 'none';
-    loadEvents();
+    loadEvents(data.id);
   });
 }
 
