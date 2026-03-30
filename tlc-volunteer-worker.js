@@ -13576,7 +13576,10 @@ header{background:var(--navy);color:#fff;padding:.75rem 1.5rem;display:flex;alig
     <div class="header-title">Timothy Lutheran — Volunteer Admin</div>
     <div class="header-sub">volunteer.timothystl.org</div>
   </div>
-  <a href="#" onclick="doLogout()" class="btn-logout">Sign out</a>
+  <div style="display:flex;gap:.5rem;align-items:center;">
+    <a href="/scheduler/" class="btn-logout">Scheduler &#x2197;</a>
+    <a href="#" onclick="doLogout()" class="btn-logout">Sign out</a>
+  </div>
 </header>
 <div class="container">
   <div class="tabs" id="ministry-tabs">
