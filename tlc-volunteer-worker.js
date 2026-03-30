@@ -12732,6 +12732,7 @@ function generateIcal(signup, slots) {
 
 // ── SCHEDULER DATA API ────────────────────────────────────────────────
 // All endpoints require vol_auth cookie (same auth as /admin).
+// v2 — redeploy to ensure worker picks up Phase 1 code
 // GET  /admin/api/scheduler/data          → full snapshot as JSON object
 // POST /admin/api/scheduler/data          → bulk upsert (import / full save)
 // GET  /admin/api/scheduler/data/:key     → single key value
