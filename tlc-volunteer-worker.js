@@ -10373,6 +10373,7 @@ function restoreRsvpTokens() {
 // ══════════════════════════════════════════════════════════════════
 function getOpenSlots() {
   var people = getPeople();
+  var confs = getConfirmations();
   var slots = [];
   currentSchedule.forEach(function(row) {
     if (row.type !== 'sunday') return;
@@ -10382,19 +10383,24 @@ function getOpenSlots() {
     PER_ROLES.forEach(function(role) {
       if (!row.assignments[role]) return;
       ['8am', '10:45am'].forEach(function(svc) {
-        if (row.assignments[role][svc]) return; // already filled
+        var pid = row.assignments[role][svc];
+        var declined = pid && confs[dateISO+'|'+role+'|'+svc] === 'declined';
+        if (pid && !declined) return; // filled and not declined
         var pool = people.filter(function(p) {
           return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, svc, dateISO, role);
         });
-        slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: svc, role: role, pool: pool });
+        slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: svc, role: role, pool: pool, declined: declined });
       });
     });
     SHARED_ROLES.forEach(function(role) {
-      if (!row.assignments[role] || row.assignments[role].shared) return; // filled
+      if (!row.assignments[role]) return;
+      var pid = row.assignments[role].shared;
+      var declined = pid && confs[dateISO+'|'+role+'|shared'] === 'declined';
+      if (pid && !declined) return; // filled and not declined
       var pool = people.filter(function(p) {
         return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, 'shared', dateISO, role);
       });
-      slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: 'both services', role: role, pool: pool });
+      slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: 'both services', role: role, pool: pool, declined: declined });
     });
   });
   return slots;
@@ -10455,7 +10461,9 @@ function openNotifyPanel() {
       + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.date) + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.svc) + '</td>'
-      + '<td style="padding:7px 8px;vertical-align:top;font-weight:600;">' + esc(roleLabel(slot.role)) + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;font-weight:600;">' + esc(roleLabel(slot.role))
+      + (slot.declined ? ' <span style="font-size:0.72rem;font-weight:400;color:var(--on-error-bg);background:var(--error-bg);border:1px solid var(--error-border);border-radius:4px;padding:1px 5px;">\u2717 Declined</span>' : '')
+      + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;font-size:0.8rem;">' + eligibleHtml + '</td>'
       + '</tr>';
   });
