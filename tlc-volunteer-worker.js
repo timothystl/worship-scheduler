@@ -15690,7 +15690,8 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
       <button class="pill" data-mt="inactive" onclick="setPeopleFilter(this,'inactive')">Inactive</button>
     </div>
     <div class="filter-pills" id="p-tag-pills" style="gap:4px;"></div>
-    <button class="btn-primary" onclick="openPersonEdit(null)" style="margin-left:auto;">+ Add Person</button>
+    <button class="btn-secondary" onclick="openTagsManager()" style="margin-left:auto;">&#9881; Tags</button>
+    <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
   </div>
   <div id="p-status" class="status-msg"></div>
   <!-- Desktop grid -->
@@ -16067,8 +16068,12 @@ function setPeopleTag(btn, tid) {
   loadPeople();
 }
 function openTagsManager() {
-  renderTagsList();
   openModal('tags-modal');
+  api('/admin/api/tags').then(function(d) {
+    allTags = d.tags || [];
+    renderTagPills();
+    renderTagsList();
+  });
 }
 function renderTagsList() {
   var c = document.getElementById('tags-list');
@@ -16087,12 +16092,12 @@ function createTag() {
   if (!name) return;
   api('/admin/api/tags', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,color:color})}).then(function() {
     document.getElementById('new-tag-name').value = '';
-    loadTags();
+    openTagsManager();
   });
 }
 function deleteTag(id) {
   if (!confirm('Delete this tag? It will be removed from all people.')) return;
-  api('/admin/api/tags/' + id, {method:'DELETE'}).then(function() { loadTags(); });
+  api('/admin/api/tags/' + id, {method:'DELETE'}).then(function() { openTagsManager(); });
 }
 
 // ── FUNDS ──────────────────────────────────────────────────────────────
