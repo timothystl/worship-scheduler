@@ -13477,21 +13477,29 @@ async function handleChmsApi(req, env, url, method, seg) {
       try {
         const fn = p.first_name || '';
         const ln = p.last_name || '';
-        // Breeze returns arrays for email/phone/address; find the primary or use first
-        const emailArr = Array.isArray(p.details?.email) ? p.details.email : [];
-        const email = ((emailArr.find(e => e.is_primary === '1' || e.is_primary === true) || emailArr[0])?.address || '').trim();
-        const phoneArr = Array.isArray(p.details?.phone) ? p.details.phone : [];
-        const rawPhone = (phoneArr.find(ph => ph.is_primary === '1' || ph.is_primary === true) || phoneArr[0]);
-        const phone = (rawPhone?.phone_number || rawPhone?.number || '').trim();
-        const addrArr = Array.isArray(p.details?.address) ? p.details.address : [];
-        const addrObj = addrArr.find(a => a.is_primary === '1' || a.is_primary === true) || addrArr[0] || {};
-        const addr = { street: addrObj.street_address || addrObj.street || '', city: addrObj.city || '', state: addrObj.state || '', zip: addrObj.zip || '' };
-        const memberType = (() => {
-          const s = (p.details?.status || p.status || '').toLowerCase();
-          if (s.includes('member')) return 'member';
-          if (s.includes('inactive') || s.includes('former')) return 'inactive';
-          return 'visitor';
-        })();
+        // Breeze details uses numeric field IDs as keys; identify fields by field_type inside each array item
+        let email = '', phone = '', memberType = 'visitor';
+        let addr = { street: '', city: '', state: '', zip: '' };
+        for (const val of Object.values(p.details || {})) {
+          if (Array.isArray(val)) {
+            for (const item of val) {
+              if (!item || typeof item !== 'object') continue;
+              const ft = item.field_type || '';
+              if ((ft === 'email_primary' || ft === 'email') && !email)
+                email = (item.address || '').trim();
+              else if ((ft === 'phone' || ft.startsWith('phone')) && !phone)
+                phone = (item.phone_number || '').trim();
+              else if ((ft === 'address_primary' || ft === 'address') && !addr.street)
+                addr = { street: item.street_address || '', city: item.city || '', state: item.state || '', zip: item.zip || '' };
+            }
+          } else if (val && typeof val === 'object' && val.name && !Array.isArray(val)) {
+            // Profile type field e.g. {value:'32', name:'Member'}
+            const n = (val.name || '').toLowerCase();
+            if (n === 'member' || n.includes('communicant')) memberType = 'member';
+            else if (n.includes('inactive') || n.includes('former')) memberType = 'inactive';
+            else if (n.includes('friend') || n.includes('associate')) memberType = 'friend';
+          }
+        }
         const existing = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(String(p.id)).first();
         if (existing) {
           await db.prepare(
