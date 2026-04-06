@@ -13643,32 +13643,33 @@ async function handleChmsApi(req, env, url, method, seg) {
         if (!firstTagId && Array.isArray(parsed) && parsed.length) firstTagId = parsed[0].id;
       } catch(e) { tagResults[ep] = { error: e.message }; }
     }
-    // Test tag member filtering using "Check Signers" (id 4884328) — should have few members
-    // Also test with Mariatu Abreu (breeze id 43826481) to see if her person record has tag data
-    const smallTagId = '4884328'; // Check Signers — known small tag
+    // Fetch full single-person record to see if tags are embedded
     const testPersonId = '43826481'; // Mariatu Abreu
-    const filterTests = [
-      // Different filter_json shapes
-      `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"tag_id":smallTagId}]))}&limit=10`,
-      `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"tag_id":parseInt(smallTagId)}]))}&limit=10`,
-      `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"tag_contains":smallTagId}]))}&limit=10`,
-      `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"field_type":"tag","response":smallTagId}]))}&limit=10`,
-      `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"tag":smallTagId}]))}&limit=10`,
-      // list_people variant
-      `/api/tags/list_people?tag_id=${smallTagId}`,
-      // Fetch one person with tags to see if tag data is embedded
-      `/api/people?details=1&person_id=${testPersonId}`,
-      `/api/people/${testPersonId}?details=1`,
-    ];
-    for (const ep of filterTests) {
-      try {
-        const tr = await fetch(`https://${subdomain}.breezechms.com${ep}`, { headers: hdrs });
-        const txt = await tr.text();
-        let parsed; try { parsed = JSON.parse(txt); } catch {}
-        const pType = parsed == null ? 'parse_err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed);
-        tagResults[ep.slice(0,90)] = { status: tr.status, body_length: txt.length, parsed_type: pType, first300: txt.slice(0,300) };
-      } catch(e) { tagResults[ep.slice(0,90)] = { error: e.message }; }
-    }
+    try {
+      const pr = await fetch(`https://${subdomain}.breezechms.com/api/people/${testPersonId}?details=1`, { headers: hdrs });
+      const ptxt = await pr.text();
+      let pp; try { pp = JSON.parse(ptxt); } catch {}
+      tagResults['single_person_full'] = {
+        body_length: ptxt.length,
+        keys: pp ? Object.keys(pp) : [],
+        details_keys: (pp && pp.details) ? Object.keys(pp.details) : [],
+        has_tags: pp ? ('tags' in pp || 'tag' in pp || 'tag_ids' in pp) : false,
+        tags_value: pp ? (pp.tags || pp.tag || pp.tag_ids || null) : null,
+        full: ptxt  // full response — it's only 2510 bytes
+      };
+    } catch(e) { tagResults['single_person_full'] = { error: e.message }; }
+    // Also try with tags=1 parameter
+    try {
+      const pr2 = await fetch(`https://${subdomain}.breezechms.com/api/people/${testPersonId}?details=1&tags=1`, { headers: hdrs });
+      const ptxt2 = await pr2.text();
+      let pp2; try { pp2 = JSON.parse(ptxt2); } catch {}
+      tagResults['single_person_tags1'] = {
+        body_length: ptxt2.length,
+        has_tags: pp2 ? ('tags' in pp2 || 'tag' in pp2) : false,
+        tags_value: pp2 ? (pp2.tags || pp2.tag || null) : null,
+        full: ptxt2
+      };
+    } catch(e) { tagResults['single_person_tags1'] = { error: e.message }; }
     // Find a member WITH a family (non-empty family array)
     let familyMember = null;
     for (const m of members) {
