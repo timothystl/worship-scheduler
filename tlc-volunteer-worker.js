@@ -12241,6 +12241,8 @@ async function initDb(db) {
     'ALTER TABLE tags ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
     // ChMS households: breeze_id to match Breeze family_id on re-sync
     'ALTER TABLE households ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
+    // worship_services: store Breeze instance_id to enable attendance count sync
+    'ALTER TABLE worship_services ADD COLUMN breeze_instance_id TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -13462,7 +13464,7 @@ async function handleChmsApi(req, env, url, method, seg) {
                 SUM(CASE WHEN service_time='08:00' THEN attendance ELSE 0 END) as att_8,
                 SUM(CASE WHEN service_time='10:45' THEN attendance ELSE 0 END) as att_1045
          FROM worship_services
-         WHERE service_type='sunday' AND substr(service_date,1,4)=?
+         WHERE service_type='sunday' AND attendance > 0 AND substr(service_date,1,4)=?
          GROUP BY month ORDER BY month`
       ).bind(yr).all()).results || [];
       result[yr] = rows;
@@ -13472,7 +13474,7 @@ async function handleChmsApi(req, env, url, method, seg) {
     for (const yr of years) {
       const t = await db.prepare(
         `SELECT SUM(attendance) as total, COUNT(DISTINCT service_date) as sundays
-         FROM worship_services WHERE service_type='sunday' AND substr(service_date,1,4)=?`
+         FROM worship_services WHERE service_type='sunday' AND attendance > 0 AND substr(service_date,1,4)=?`
       ).bind(yr).first();
       totals[yr] = t || { total: 0, sundays: 0 };
     }
@@ -13486,7 +13488,7 @@ async function handleChmsApi(req, env, url, method, seg) {
       `SELECT service_time, COUNT(*) as services, SUM(attendance) as total,
               ROUND(AVG(attendance)) as avg_attendance
        FROM worship_services
-       WHERE service_date BETWEEN ? AND ?
+       WHERE attendance > 0 AND service_date BETWEEN ? AND ?
        GROUP BY service_time ORDER BY service_time`
     ).bind(from, to).all()).results || [];
     // Sunday combined totals per date
@@ -13495,10 +13497,117 @@ async function handleChmsApi(req, env, url, method, seg) {
               MIN(CASE WHEN service_time='08:00' THEN attendance END) as att_8,
               MIN(CASE WHEN service_time='10:45' THEN attendance END) as att_1045
        FROM worship_services
-       WHERE service_type='sunday' AND service_date BETWEEN ? AND ?
+       WHERE service_type='sunday' AND attendance > 0 AND service_date BETWEEN ? AND ?
        GROUP BY service_date ORDER BY service_date DESC`
     ).bind(from, to).all()).results || [];
     return json({ from, to, by_time: rows, sundays });
+  }
+
+  // ── Attendance TSV Import ─────────────────────────────────────────
+  if (seg === 'import/attendance-tsv' && method === 'POST') {
+    let body = ''; try { body = await req.text(); } catch {}
+    if (!body.trim()) return json({ error: 'Empty body' }, 400);
+    const lines = body.split(/\r?\n/);
+    // Skip header row
+    const dataLines = lines.filter((l, i) => i > 0 && l.trim());
+    const today = new Date().toISOString().slice(0, 10);
+    let imported = 0, skipped = 0, skippedFuture = 0;
+    // Name → service_type / service_time mapping
+    function classifyService(name, timeStr) {
+      const n = (name || '').toLowerCase();
+      const h = parseInt((timeStr || '').split(':')[0] || '0');
+      // Vietnamese congregation → skip
+      if (n.includes('vietnamese')) return null;
+      // Sunday services by name patterns
+      if (n.includes('early service') || n.includes('8:00') || n.includes('8am') || (h === 8)) {
+        return { type: 'sunday', time: '08:00' };
+      }
+      if (n.includes('late service') || n.includes('10:45') || n.includes('10am') || (h === 10 && timeStr && timeStr.includes('45'))) {
+        return { type: 'sunday', time: '10:45' };
+      }
+      // Midweek patterns
+      if (n.includes('advent') || n.includes('lent') || n.includes('ash wednesday') ||
+          n.includes('wednesday') || n.includes('midweek') || n.includes('vesper')) {
+        return { type: 'midweek', time: timeStr || '' };
+      }
+      // Special services
+      if (n.includes('funeral') || n.includes('easter vigil') || n.includes('good friday') ||
+          n.includes('christmas eve') || n.includes('thanksgiving') || n.includes('installation') ||
+          n.includes('ordination') || n.includes('wedding') || n.includes('special')) {
+        return { type: 'special', time: timeStr || '' };
+      }
+      // Default: if on Sunday → sunday service; otherwise special
+      return { type: 'special', time: timeStr || '' };
+    }
+    for (const line of dataLines) {
+      const cols = line.split('\t');
+      if (cols.length < 4) continue;
+      const instanceId = (cols[1] || '').trim();  // Instance ID (col 1)
+      const name      = (cols[2] || '').trim();
+      const startRaw  = (cols[3] || '').trim();  // "2021-08-01 10:45:00"
+      if (!startRaw) continue;
+      const datePart = startRaw.slice(0, 10);    // "2021-08-01"
+      const timePart = startRaw.slice(11, 16);   // "10:45"
+      // Skip future dates
+      if (datePart > today) { skippedFuture++; continue; }
+      const cls = classifyService(name, timePart);
+      if (!cls) { skipped++; continue; }  // Vietnamese, etc.
+      // Skip duplicates by date+time
+      const exists = await db.prepare(
+        'SELECT id FROM worship_services WHERE service_date=? AND service_time=?'
+      ).bind(datePart, cls.time).first();
+      if (exists) { skipped++; continue; }
+      await db.prepare(
+        `INSERT INTO worship_services (service_date,service_time,service_name,service_type,attendance,communion,notes,breeze_instance_id)
+         VALUES (?,?,?,?,0,0,?,?)`
+      ).bind(datePart, cls.time, name, cls.type, '', instanceId).run();
+      imported++;
+    }
+    return json({ ok: true, imported, skipped, skippedFuture, total: dataLines.length });
+  }
+
+  // ── Breeze Attendance Count Sync ─────────────────────────────────
+  // Fetches actual headcounts from Breeze for imported service instances
+  if (seg === 'import/breeze-attendance-sync' && method === 'POST') {
+    const subdomain = env.BREEZE_SUBDOMAIN;
+    const apiKey    = env.BREEZE_API_KEY;
+    if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
+    const hdrs = { 'Api-key': apiKey };
+    // Find services that have a breeze_instance_id (all, not just zeros, so re-sync is safe)
+    let b = {}; try { b = await req.json(); } catch {}
+    const onlyEmpty = b.only_empty !== false; // default: only sync where attendance=0
+    let whereClause = "breeze_instance_id != ''";
+    if (onlyEmpty) whereClause += ' AND attendance = 0';
+    const services = (await db.prepare(
+      `SELECT id, breeze_instance_id, service_date, service_time FROM worship_services WHERE ${whereClause} ORDER BY service_date DESC`
+    ).all()).results || [];
+    if (services.length === 0) return json({ ok: true, synced: 0, failed: 0, message: 'No services with Breeze instance IDs found. Re-import the TSV first.' });
+    let synced = 0, failed = 0;
+    for (const svc of services) {
+      try {
+        const res = await fetch(
+          `https://${subdomain}.breezechms.com/api/events/attendance/list?instance_id=${svc.breeze_instance_id}&type=anonymous`,
+          { headers: hdrs }
+        );
+        if (!res.ok) { failed++; continue; }
+        const data = await res.json();
+        // Anonymous response is an array of check-in records; count = length
+        // or may return [{count: N}] - handle both
+        let count = 0;
+        if (Array.isArray(data)) {
+          if (data.length > 0 && typeof data[0] === 'object' && 'count' in data[0]) {
+            count = parseInt(data[0].count) || 0;
+          } else {
+            count = data.length;
+          }
+        }
+        if (count > 0) {
+          await db.prepare('UPDATE worship_services SET attendance=? WHERE id=?').bind(count, svc.id).run();
+          synced++;
+        }
+      } catch { failed++; }
+    }
+    return json({ ok: true, synced, failed, total: services.length });
   }
 
   // ── Breeze Giving Debug ──────────────────────────────────────────
@@ -15954,6 +16063,19 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <button class="btn-primary" onclick="importPeopleCSV()">Import People</button>
     <div class="import-status" id="csv-people-status"></div>
   </div>
+  <div class="import-card">
+    <h3>&#128197; Import Attendance Events (Breeze TSV)</h3>
+    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Service slots will be created with Breeze instance IDs stored. Then use "Sync Counts" below to pull actual attendance numbers from Breeze. Future dates and Vietnamese services are skipped automatically.</p>
+    <input type="file" id="att-tsv-file" accept=".tsv,.txt,.csv" style="display:block;margin-bottom:8px;">
+    <button class="btn-primary" onclick="importAttendanceTSV()">Import Attendance Events</button>
+    <div class="import-status" id="att-tsv-status"></div>
+  </div>
+  <div class="import-card">
+    <h3>&#9729; Sync Attendance Counts from Breeze</h3>
+    <p>After importing the TSV, fetch actual headcounts from the Breeze Events API for each imported service. Only services still at 0 are updated (safe to re-run).</p>
+    <button class="btn-primary" onclick="syncBreezeAttendanceCounts()">Sync Counts from Breeze</button>
+    <div class="import-status" id="att-sync-status"></div>
+  </div>
 </div>
 
 <!-- ═══ MODALS ═══ -->
@@ -16838,6 +16960,35 @@ function importPeopleCSV() {
       status.textContent = 'Done. ' + (d.imported||0) + ' imported, ' + (d.updated||0) + ' updated.';
       status.className = 'import-status ok';
       loadPeople();
+    }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+  };
+  reader.readAsText(file);
+}
+
+function syncBreezeAttendanceCounts() {
+  var status = document.getElementById('att-sync-status');
+  status.textContent = 'Syncing from Breeze…'; status.className = 'import-status';
+  api('/admin/api/import/breeze-attendance-sync', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({only_empty:true})}).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    if (d.message) { status.textContent = d.message; status.className = 'import-status err'; return; }
+    status.textContent = 'Done. ' + d.synced + ' services updated with attendance counts' + (d.failed ? ', ' + d.failed + ' failed.' : '.');
+    status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+}
+
+function importAttendanceTSV() {
+  var file = document.getElementById('att-tsv-file').files[0];
+  var status = document.getElementById('att-tsv-status');
+  if (!file) { status.textContent = 'Please choose a TSV file.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Uploading…'; status.className = 'import-status';
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    fetch('/admin/api/import/attendance-tsv', {method:'POST', headers:{'Content-Type':'text/plain'}, body:e.target.result}).then(function(r) {
+      return r.json();
+    }).then(function(d) {
+      if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+      status.textContent = 'Done. ' + d.imported + ' services imported, ' + d.skipped + ' skipped (duplicates/Vietnamese), ' + d.skippedFuture + ' future dates skipped.';
+      status.className = 'import-status ok';
     }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
   };
   reader.readAsText(file);
