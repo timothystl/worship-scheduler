@@ -13462,7 +13462,7 @@ async function handleChmsApi(req, env, url, method, seg) {
                 SUM(CASE WHEN service_time='08:00' THEN attendance ELSE 0 END) as att_8,
                 SUM(CASE WHEN service_time='10:45' THEN attendance ELSE 0 END) as att_1045
          FROM worship_services
-         WHERE service_type='sunday' AND substr(service_date,1,4)=?
+         WHERE service_type='sunday' AND attendance > 0 AND substr(service_date,1,4)=?
          GROUP BY month ORDER BY month`
       ).bind(yr).all()).results || [];
       result[yr] = rows;
@@ -13472,7 +13472,7 @@ async function handleChmsApi(req, env, url, method, seg) {
     for (const yr of years) {
       const t = await db.prepare(
         `SELECT SUM(attendance) as total, COUNT(DISTINCT service_date) as sundays
-         FROM worship_services WHERE service_type='sunday' AND substr(service_date,1,4)=?`
+         FROM worship_services WHERE service_type='sunday' AND attendance > 0 AND substr(service_date,1,4)=?`
       ).bind(yr).first();
       totals[yr] = t || { total: 0, sundays: 0 };
     }
@@ -13486,7 +13486,7 @@ async function handleChmsApi(req, env, url, method, seg) {
       `SELECT service_time, COUNT(*) as services, SUM(attendance) as total,
               ROUND(AVG(attendance)) as avg_attendance
        FROM worship_services
-       WHERE service_date BETWEEN ? AND ?
+       WHERE attendance > 0 AND service_date BETWEEN ? AND ?
        GROUP BY service_time ORDER BY service_time`
     ).bind(from, to).all()).results || [];
     // Sunday combined totals per date
@@ -13495,7 +13495,7 @@ async function handleChmsApi(req, env, url, method, seg) {
               MIN(CASE WHEN service_time='08:00' THEN attendance END) as att_8,
               MIN(CASE WHEN service_time='10:45' THEN attendance END) as att_1045
        FROM worship_services
-       WHERE service_type='sunday' AND service_date BETWEEN ? AND ?
+       WHERE service_type='sunday' AND attendance > 0 AND service_date BETWEEN ? AND ?
        GROUP BY service_date ORDER BY service_date DESC`
     ).bind(from, to).all()).results || [];
     return json({ from, to, by_time: rows, sundays });
