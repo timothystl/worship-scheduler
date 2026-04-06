@@ -13490,20 +13490,18 @@ async function handleChmsApi(req, env, url, method, seg) {
     const end   = b.end   || new Date().toISOString().slice(0, 10);
     const bStart = toBreeze(start);
     const bEnd   = toBreeze(end);
-    const res = await fetch(
-      `https://${subdomain}.breezechms.com/api/giving?start=${encodeURIComponent(bStart)}&end=${encodeURIComponent(bEnd)}&details=1`,
-      { headers: { 'Api-key': apiKey } }
-    );
-    if (!res.ok) return json({ error: `Breeze giving API error: ${res.status}` }, 502);
+    const givingUrl = `https://${subdomain}.breezechms.com/api/giving?start=${encodeURIComponent(bStart)}&end=${encodeURIComponent(bEnd)}&details=1`;
+    const res = await fetch(givingUrl, { headers: { 'Api-key': apiKey } });
+    if (!res.ok) return json({ error: `Breeze giving API error: ${res.status}`, url_used: givingUrl }, 502);
     const rawText = await res.text();
-    if (!rawText || !rawText.trim()) return json({ ok: true, imported: 0, skipped: 0, errors: [], note: 'empty_response' });
+    if (!rawText || !rawText.trim()) return json({ ok: true, imported: 0, skipped: 0, errors: [], note: 'empty_response', url_used: givingUrl, dates_sent: { bStart, bEnd } });
     let contribs;
     try { contribs = JSON.parse(rawText); } catch {
-      return json({ error: 'Invalid JSON from Breeze', preview: rawText.slice(0, 500) }, 502);
+      return json({ error: 'Invalid JSON from Breeze', preview: rawText.slice(0, 500), url_used: givingUrl }, 502);
     }
     // Breeze sometimes wraps results
     if (contribs && !Array.isArray(contribs) && Array.isArray(contribs.contributions)) contribs = contribs.contributions;
-    if (!Array.isArray(contribs)) return json({ ok: true, imported: 0, skipped: 0, errors: [], note: 'unexpected_format', raw_type: typeof contribs });
+    if (!Array.isArray(contribs)) return json({ ok: true, imported: 0, skipped: 0, errors: [], note: 'unexpected_format', raw_type: typeof contribs, raw_keys: contribs ? Object.keys(contribs).slice(0,10) : null, url_used: givingUrl });
 
     // Cache fund IDs by name (lower-case key)
     const fundCache = {};
@@ -13582,7 +13580,7 @@ async function handleChmsApi(req, env, url, method, seg) {
         imported++;
       } catch (e) { errors.push({ id: c.id, error: e.message }); }
     }
-    return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: contribs.length });
+    return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: contribs.length, url_used: givingUrl, dates_sent: { bStart, bEnd }, first_item: contribs[0] || null });
   }
 
   // ── Breeze Debug ─────────────────────────────────────────────────
@@ -13623,12 +13621,19 @@ async function handleChmsApi(req, env, url, method, seg) {
     }
     // Try several tag endpoints
     const tagResults = {};
-    for (const ep of ['/api/tags', '/api/tag_folders', '/api/tags?details=1']) {
+    for (const ep of [
+      '/api/tags',
+      '/api/tags?details=1',
+      '/api/tags?folder_id=0',
+      '/api/tags/list_tags',
+      '/api/tag_groups',
+      '/api/people?details=1&tags=1&limit=2',  // tags embedded in person response
+    ]) {
       try {
         const tr = await fetch(`https://${subdomain}.breezechms.com${ep}`, { headers: hdrs });
         const txt = await tr.text();
         let parsed; try { parsed = JSON.parse(txt); } catch {}
-        tagResults[ep] = { status: tr.status, body_length: txt.length, first200: txt.slice(0,200), parsed_type: parsed == null ? 'err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed), sample: Array.isArray(parsed) ? parsed.slice(0,2) : parsed };
+        tagResults[ep] = { status: tr.status, body_length: txt.length, first400: txt.slice(0,400), parsed_type: parsed == null ? 'parse_err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed), sample: Array.isArray(parsed) ? parsed.slice(0,2) : (parsed && typeof parsed === 'object' ? parsed : undefined) };
       } catch(e) { tagResults[ep] = { error: e.message }; }
     }
     // Find a member WITH a family (non-empty family array)
@@ -15924,7 +15929,7 @@ function api(path, opts) {
   });
 }
 function fmtMoney(cents) {
-  return '$' + (cents / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return '$' + (cents / 100).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');
 }
 function fmtDate(iso) {
   if (!iso) return '';
@@ -16015,9 +16020,9 @@ function loadTags() {
 }
 function renderTagPills() {
   var c = document.getElementById('p-tag-pills');
-  c.innerHTML = '<button class="pill pill-tag active" data-tid="" onclick="setPeopleTag(this,\\\'\\\')" >All Tags</button>'
+  c.innerHTML = '<button class="pill pill-tag active" data-tid="" onclick="setPeopleTag(this,\\\\\\'\\\\\\')" >All Tags</button>'
     + allTags.map(function(t) {
-      return '<button class="pill pill-tag" data-tid="' + t.id + '" onclick="setPeopleTag(this,\\\'' + t.id + '\\\')">'
+      return '<button class="pill pill-tag" data-tid="' + t.id + '" onclick="setPeopleTag(this,\\\\\\'' + t.id + '\\\\\\')">'
         + '<span class="tag-dot" style="background:' + esc(t.color) + '"></span>' + esc(t.name) + '</button>';
     }).join('');
   // Add manage link
@@ -16126,7 +16131,7 @@ function renderPeopleMobile(people) {
       + '<div class="c-avatar">' + (p.photo_url ? '<img src="' + esc(p.photo_url) + '" alt="">' : initials(p.first_name, p.last_name)) + '</div>'
       + '<div class="c-info"><div class="c-name">' + esc(p.first_name) + ' ' + esc(p.last_name) + '</div>'
       + '<div class="c-type">' + esc(p.member_type||'visitor') + '</div>'
-      + (p.phone ? '<a href="tel:' + esc(p.phone.replace(/\D/g,'')) + '" class="c-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.37 1.18 2 2 0 012.34 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.72 6.72l1.28-.78a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>' + esc(p.phone) + '</a>' : '')
+      + (p.phone ? '<a href="tel:' + esc(p.phone.replace(/\\D/g,'')) + '" class="c-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.37 1.18 2 2 0 012.34 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.72 6.72l1.28-.78a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>' + esc(p.phone) + '</a>' : '')
       + (addr && mapUrl ? '<a href="' + esc(mapUrl) + '" class="c-link" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>' + esc(addr) + '</a>' : '')
       + '</div></div>';
   }).join('');
@@ -16274,7 +16279,7 @@ function openHouseholdEdit(h) {
     mc.innerHTML = '<div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);margin-bottom:6px;">Members</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
       + h.members.map(function(m) {
-        return '<span class="h-member-pill" style="cursor:pointer;" onclick="closeModal(\\'hh-modal\\');openPersonDetail(' + m.id + ')">'
+        return '<span class="h-member-pill" style="cursor:pointer;" onclick="closeModal(\\\\'hh-modal\\\\');openPersonDetail(' + m.id + ')">'
           + esc(m.first_name) + ' ' + esc(m.last_name) + ' (' + esc(m.family_role||'—') + ')</span>';
       }).join('') + '</div>';
   } else { mc.innerHTML = ''; }
@@ -16316,7 +16321,7 @@ function acHouseholdSearch() {
   api('/admin/api/households?q=' + encodeURIComponent(q)).then(function(d) {
     var rows = d.households || [];
     ac.innerHTML = rows.slice(0,8).map(function(h) {
-      return '<div class="ac-item" onclick="selectHousehold(' + h.id + ',\\'' + esc(h.name) + '\\')">' + esc(h.name) + '</div>';
+      return '<div class="ac-item" onclick="selectHousehold(' + h.id + ',\\\\'' + esc(h.name) + '\\\\')">' + esc(h.name) + '</div>';
     }).join('') + '<div class="ac-item" style="color:var(--sage);" onclick="createHouseholdFromPerson()">+ Create new household…</div>';
     ac.classList.toggle('open', rows.length > 0 || true);
   });
@@ -16344,7 +16349,7 @@ function acSearch(input, dropId, hidId) {
     var rows = (d.people||[]).slice(0,10);
     ac.innerHTML = rows.map(function(p) {
       var n = esc(p.last_name) + ', ' + esc(p.first_name);
-      return '<div class="ac-item" onclick="selectPerson(this,\\'' + hidId + '\\',\\'' + dropId + '\\',' + p.id + ',\\'' + n.replace(/'/g,"\\\\'") + '\\')">' + n + '</div>';
+      return '<div class="ac-item" onclick="selectPerson(this,\\\\'' + hidId + '\\\\',\\\\'' + dropId + '\\\\',' + p.id + ',\\\\'' + n.replace(/'/g,"\\\\\\\\'") + '\\\\')">' + n + '</div>';
     }).join('');
     ac.classList.toggle('open', rows.length > 0);
   });
@@ -16414,7 +16419,7 @@ function renderBatchDetail(b) {
     + '<div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);margin-bottom:8px;">Add Entry</div>'
     + '<div class="form-row">'
     + '<div class="field field-person"><label>Person</label>'
-    + '<div class="ac-wrap"><input type="text" id="e-person-search" placeholder="Search or leave blank for anonymous…" oninput="acSearch(this,\\'e-person-ac\\',\\'e-person-id\\')" style="width:100%;"><div class="ac-dropdown" id="e-person-ac"></div></div>'
+    + '<div class="ac-wrap"><input type="text" id="e-person-search" placeholder="Search or leave blank for anonymous…" oninput="acSearch(this,\\\\'e-person-ac\\\\',\\\\'e-person-id\\\\')" style="width:100%;"><div class="ac-dropdown" id="e-person-ac"></div></div>'
     + '<input type="hidden" id="e-person-id"></div>'
     + '<div class="field field-fund"><label>Fund</label><select id="e-fund"><option value="">—Select—</option>' + fundOpts + '</select></div>'
     + '<div class="field field-amount"><label>Amount ($)</label><input type="number" id="e-amount" step="0.01" min="0" placeholder="0.00"></div>'
@@ -16793,7 +16798,7 @@ function showSingleServiceForm(s) {
     + '<div class="field" style="margin-bottom:14px;"><label>Notes</label><input type="text" id="sf-notes" value="' + esc(s.notes||'') + '" placeholder="Optional notes" style="width:100%;"></div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
     + '<button class="btn-primary" onclick="saveService(' + (s.id||'null') + ')">Save</button>'
-    + '<button class="btn-secondary" onclick="document.getElementById(\\'att-detail\\').innerHTML=\\'\\'"  >Cancel</button>'
+    + '<button class="btn-secondary" onclick="document.getElementById(\\\\'att-detail\\\\').innerHTML=\\\\'\\\\'"  >Cancel</button>'
     + (isEdit ? '<button class="btn-danger" onclick="deleteService(' + s.id + ')">Delete</button>' : '')
     + '</div></div>';
 }
@@ -16929,4 +16934,5 @@ function runAttendanceByTime() {
 </script>
 </body>
 </html>
+
 `;
