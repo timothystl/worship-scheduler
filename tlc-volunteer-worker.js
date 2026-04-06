@@ -12241,6 +12241,8 @@ async function initDb(db) {
     'ALTER TABLE tags ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
     // ChMS households: breeze_id to match Breeze family_id on re-sync
     'ALTER TABLE households ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
+    // worship_services: store Breeze instance_id to enable attendance count sync
+    'ALTER TABLE worship_services ADD COLUMN breeze_instance_id TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -13540,6 +13542,7 @@ async function handleChmsApi(req, env, url, method, seg) {
     for (const line of dataLines) {
       const cols = line.split('\t');
       if (cols.length < 4) continue;
+      const instanceId = (cols[1] || '').trim();  // Instance ID (col 1)
       const name      = (cols[2] || '').trim();
       const startRaw  = (cols[3] || '').trim();  // "2021-08-01 10:45:00"
       if (!startRaw) continue;
@@ -13555,12 +13558,56 @@ async function handleChmsApi(req, env, url, method, seg) {
       ).bind(datePart, cls.time).first();
       if (exists) { skipped++; continue; }
       await db.prepare(
-        `INSERT INTO worship_services (service_date,service_time,service_name,service_type,attendance,communion,notes)
-         VALUES (?,?,?,?,0,0,?)`
-      ).bind(datePart, cls.time, name, cls.type, '').run();
+        `INSERT INTO worship_services (service_date,service_time,service_name,service_type,attendance,communion,notes,breeze_instance_id)
+         VALUES (?,?,?,?,0,0,?,?)`
+      ).bind(datePart, cls.time, name, cls.type, '', instanceId).run();
       imported++;
     }
     return json({ ok: true, imported, skipped, skippedFuture, total: dataLines.length });
+  }
+
+  // ── Breeze Attendance Count Sync ─────────────────────────────────
+  // Fetches actual headcounts from Breeze for imported service instances
+  if (seg === 'import/breeze-attendance-sync' && method === 'POST') {
+    const subdomain = env.BREEZE_SUBDOMAIN;
+    const apiKey    = env.BREEZE_API_KEY;
+    if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
+    const hdrs = { 'Api-key': apiKey };
+    // Find services that have a breeze_instance_id (all, not just zeros, so re-sync is safe)
+    let b = {}; try { b = await req.json(); } catch {}
+    const onlyEmpty = b.only_empty !== false; // default: only sync where attendance=0
+    let whereClause = "breeze_instance_id != ''";
+    if (onlyEmpty) whereClause += ' AND attendance = 0';
+    const services = (await db.prepare(
+      `SELECT id, breeze_instance_id, service_date, service_time FROM worship_services WHERE ${whereClause} ORDER BY service_date DESC`
+    ).all()).results || [];
+    if (services.length === 0) return json({ ok: true, synced: 0, failed: 0, message: 'No services with Breeze instance IDs found. Re-import the TSV first.' });
+    let synced = 0, failed = 0;
+    for (const svc of services) {
+      try {
+        const res = await fetch(
+          `https://${subdomain}.breezechms.com/api/events/attendance/list?instance_id=${svc.breeze_instance_id}&type=anonymous`,
+          { headers: hdrs }
+        );
+        if (!res.ok) { failed++; continue; }
+        const data = await res.json();
+        // Anonymous response is an array of check-in records; count = length
+        // or may return [{count: N}] - handle both
+        let count = 0;
+        if (Array.isArray(data)) {
+          if (data.length > 0 && typeof data[0] === 'object' && 'count' in data[0]) {
+            count = parseInt(data[0].count) || 0;
+          } else {
+            count = data.length;
+          }
+        }
+        if (count > 0) {
+          await db.prepare('UPDATE worship_services SET attendance=? WHERE id=?').bind(count, svc.id).run();
+          synced++;
+        }
+      } catch { failed++; }
+    }
+    return json({ ok: true, synced, failed, total: services.length });
   }
 
   // ── Breeze Giving Debug ──────────────────────────────────────────
@@ -16018,10 +16065,16 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   </div>
   <div class="import-card">
     <h3>&#128197; Import Attendance Events (Breeze TSV)</h3>
-    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Attendance counts are not in this file — service slots will be created with count 0 for you to fill in. Future dates and Vietnamese services are skipped automatically.</p>
+    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Service slots will be created with Breeze instance IDs stored. Then use "Sync Counts" below to pull actual attendance numbers from Breeze. Future dates and Vietnamese services are skipped automatically.</p>
     <input type="file" id="att-tsv-file" accept=".tsv,.txt,.csv" style="display:block;margin-bottom:8px;">
     <button class="btn-primary" onclick="importAttendanceTSV()">Import Attendance Events</button>
     <div class="import-status" id="att-tsv-status"></div>
+  </div>
+  <div class="import-card">
+    <h3>&#9729; Sync Attendance Counts from Breeze</h3>
+    <p>After importing the TSV, fetch actual headcounts from the Breeze Events API for each imported service. Only services still at 0 are updated (safe to re-run).</p>
+    <button class="btn-primary" onclick="syncBreezeAttendanceCounts()">Sync Counts from Breeze</button>
+    <div class="import-status" id="att-sync-status"></div>
   </div>
 </div>
 
@@ -16910,6 +16963,17 @@ function importPeopleCSV() {
     }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
   };
   reader.readAsText(file);
+}
+
+function syncBreezeAttendanceCounts() {
+  var status = document.getElementById('att-sync-status');
+  status.textContent = 'Syncing from Breeze…'; status.className = 'import-status';
+  api('/admin/api/import/breeze-attendance-sync', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({only_empty:true})}).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    if (d.message) { status.textContent = d.message; status.className = 'import-status err'; return; }
+    status.textContent = 'Done. ' + d.synced + ' services updated with attendance counts' + (d.failed ? ', ' + d.failed + ' failed.' : '.');
+    status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
 function importAttendanceTSV() {

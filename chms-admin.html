@@ -402,10 +402,16 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   </div>
   <div class="import-card">
     <h3>&#128197; Import Attendance Events (Breeze TSV)</h3>
-    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Attendance counts are not in this file — service slots will be created with count 0 for you to fill in. Future dates and Vietnamese services are skipped automatically.</p>
+    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Service slots will be created with Breeze instance IDs stored. Then use "Sync Counts" below to pull actual attendance numbers from Breeze. Future dates and Vietnamese services are skipped automatically.</p>
     <input type="file" id="att-tsv-file" accept=".tsv,.txt,.csv" style="display:block;margin-bottom:8px;">
     <button class="btn-primary" onclick="importAttendanceTSV()">Import Attendance Events</button>
     <div class="import-status" id="att-tsv-status"></div>
+  </div>
+  <div class="import-card">
+    <h3>&#9729; Sync Attendance Counts from Breeze</h3>
+    <p>After importing the TSV, fetch actual headcounts from the Breeze Events API for each imported service. Only services still at 0 are updated (safe to re-run).</p>
+    <button class="btn-primary" onclick="syncBreezeAttendanceCounts()">Sync Counts from Breeze</button>
+    <div class="import-status" id="att-sync-status"></div>
   </div>
 </div>
 
@@ -1294,6 +1300,17 @@ function importPeopleCSV() {
     }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
   };
   reader.readAsText(file);
+}
+
+function syncBreezeAttendanceCounts() {
+  var status = document.getElementById('att-sync-status');
+  status.textContent = 'Syncing from Breeze…'; status.className = 'import-status';
+  api('/admin/api/import/breeze-attendance-sync', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({only_empty:true})}).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    if (d.message) { status.textContent = d.message; status.className = 'import-status err'; return; }
+    status.textContent = 'Done. ' + d.synced + ' services updated with attendance counts' + (d.failed ? ', ' + d.failed + ' failed.' : '.');
+    status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
 function importAttendanceTSV() {
