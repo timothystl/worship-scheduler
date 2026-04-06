@@ -12235,6 +12235,8 @@ async function initDb(db) {
     'ALTER TABLE signups ADD COLUMN shirt_size TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE signups ADD COLUMN notes TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE signups ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime(\'now\'))',
+    // ChMS giving: breeze_id for deduplication on import
+    'ALTER TABLE giving_entries ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -13440,6 +13442,102 @@ async function handleChmsApi(req, env, url, method, seg) {
        GROUP BY service_date ORDER BY service_date DESC`
     ).bind(from, to).all()).results || [];
     return json({ from, to, by_time: rows, sundays });
+  }
+
+  // ── Breeze Giving Sync ───────────────────────────────────────────
+  if (seg === 'import/breeze-giving' && method === 'POST') {
+    const subdomain = env.BREEZE_SUBDOMAIN;
+    const apiKey    = env.BREEZE_API_KEY;
+    if (!subdomain || !apiKey) return json({ error: 'Breeze not configured (BREEZE_SUBDOMAIN / BREEZE_API_KEY missing)' }, 503);
+    let b = {}; try { b = await req.json(); } catch {}
+    const start = b.start || (new Date().getFullYear() + '-01-01');
+    const end   = b.end   || new Date().toISOString().slice(0, 10);
+    const res = await fetch(
+      `https://${subdomain}.breezechms.com/api/giving?start=${start}&end=${end}&details=1`,
+      { headers: { 'Api-key': apiKey } }
+    );
+    if (!res.ok) return json({ error: `Breeze giving API error: ${res.status}` }, 502);
+    let contribs; try { contribs = await res.json(); } catch { return json({ error: 'Invalid JSON from Breeze' }, 502); }
+    if (!Array.isArray(contribs)) return json({ ok: true, imported: 0, skipped: 0, errors: [] });
+
+    // Cache fund IDs by name (lower-case key)
+    const fundCache = {};
+    for (const f of (await db.prepare('SELECT id, name FROM funds WHERE active=1').all()).results || []) {
+      fundCache[f.name.toLowerCase()] = f.id;
+    }
+    // Cache batch IDs by date (one "Breeze Import" batch per date)
+    const batchCache = {};
+    const payMethod = t => {
+      const s = (t || '').toLowerCase();
+      if (s === 'cash') return 'cash';
+      if (s === 'check') return 'check';
+      if (s.includes('credit') || s.includes('card') || s.includes('online')) return 'card';
+      if (s === 'ach' || s.includes('bank') || s.includes('eft')) return 'ach';
+      return 'other';
+    };
+
+    let imported = 0, skipped = 0;
+    const errors = [];
+    for (const c of contribs) {
+      try {
+        const breezeId = String(c.id);
+        // Skip if any entry already exists for this contribution
+        const dup = await db.prepare('SELECT id FROM giving_entries WHERE breeze_id=?').bind(breezeId).first();
+        if (dup) { skipped++; continue; }
+
+        // Resolve person
+        let personId = null;
+        if (c.person_id) {
+          const per = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(String(c.person_id)).first();
+          if (per) personId = per.id;
+        }
+
+        const date   = (c.date || start).slice(0, 10);
+        const method = payMethod(c.payment_type);
+        const checkNum = c.check_number || '';
+        const notes    = c.note || '';
+
+        // Fund breakdown: c.funds array; fall back to single entry with total
+        const fundLines = Array.isArray(c.funds) && c.funds.length > 0
+          ? c.funds
+          : [{ fund_name: 'General Fund', amount: c.amount || '0' }];
+
+        // Get or create batch for this date
+        if (!batchCache[date]) {
+          const existing = await db.prepare(
+            "SELECT id FROM giving_batches WHERE batch_date=? AND description LIKE 'Breeze Import%'"
+          ).bind(date).first();
+          if (existing) {
+            batchCache[date] = existing.id;
+          } else {
+            const r = await db.prepare(
+              'INSERT INTO giving_batches (batch_date, description, closed) VALUES (?,?,1)'
+            ).bind(date, 'Breeze Import ' + date).run();
+            batchCache[date] = r.meta?.last_row_id;
+          }
+        }
+        const batchId = batchCache[date];
+
+        for (const fl of fundLines) {
+          const fname = (fl.fund_name || 'General Fund').trim();
+          const cents = Math.round(parseFloat(fl.amount || '0') * 100);
+          // Get or create fund
+          if (!fundCache[fname.toLowerCase()]) {
+            const r = await db.prepare(
+              'INSERT INTO funds (name, active, sort_order) VALUES (?,1,99)'
+            ).bind(fname).run();
+            fundCache[fname.toLowerCase()] = r.meta?.last_row_id;
+          }
+          const fundId = fundCache[fname.toLowerCase()];
+          await db.prepare(
+            `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,breeze_id)
+             VALUES (?,?,?,?,?,?,?,?)`
+          ).bind(batchId, personId, fundId, cents, method, checkNum, notes, breezeId).run();
+        }
+        imported++;
+      } catch (e) { errors.push({ id: c.id, error: e.message }); }
+    }
+    return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: contribs.length });
   }
 
   // ── Breeze Debug ─────────────────────────────────────────────────
@@ -15617,6 +15715,16 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <div class="import-status" id="breeze-status"></div>
   </div>
   <div class="import-card">
+    <h3>&#128181; Sync Giving from Breeze</h3>
+    <p>Pull contribution records from the Breeze API. Already-imported contributions are skipped (safe to re-sync). Creates one closed batch per day.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+      <div class="field" style="margin:0;"><label>From</label><input type="date" id="giving-sync-from" style="font-size:.85rem;padding:4px 8px;"></div>
+      <div class="field" style="margin:0;"><label>To</label><input type="date" id="giving-sync-to" style="font-size:.85rem;padding:4px 8px;"></div>
+    </div>
+    <button class="btn-primary" onclick="runBreezeGivingSync()">Sync Giving from Breeze</button>
+    <div class="import-status" id="giving-sync-status"></div>
+  </div>
+  <div class="import-card">
     <h3>&#128194; Import People (CSV)</h3>
     <p>Upload a CSV file exported from Breeze. Columns expected: first_name, last_name, email, phone, street_address, city, state, zip</p>
     <input type="file" id="csv-people-file" accept=".csv" style="display:block;margin-bottom:8px;">
@@ -15799,6 +15907,9 @@ window.addEventListener('load', function() {
   // Attendance date range defaults
   document.getElementById('att-from').value = y + '-01-01';
   document.getElementById('att-to').value = y + '-12-31';
+  // Giving sync defaults
+  document.getElementById('giving-sync-from').value = y + '-01-01';
+  document.getElementById('giving-sync-to').value = now.toISOString().slice(0, 10);
   document.getElementById('rpt-att-from').value = y + '-01-01';
   document.getElementById('rpt-att-to').value = y + '-12-31';
   // Year-over-year checkboxes (last 5 years)
@@ -16421,6 +16532,24 @@ function downloadStatement() {
 }
 
 // ── IMPORT ──────────────────────────────────────────────────────────────
+function runBreezeGivingSync() {
+  var from = document.getElementById('giving-sync-from').value;
+  var to = document.getElementById('giving-sync-to').value;
+  var status = document.getElementById('giving-sync-status');
+  if (!from || !to) { status.textContent = 'Please select a date range.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Syncing ' + from + ' to ' + to + '…'; status.className = 'import-status';
+  fetch('/admin/api/import/breeze-giving', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({start: from, end: to})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    var msg = 'Done. ' + (d.imported||0) + ' contributions imported, ' + (d.skipped||0) + ' already existed.';
+    if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' error(s).';
+    status.textContent = msg; status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+}
+
 function runBreezeImport() {
   var bar = document.getElementById('breeze-bar');
   var fill = document.getElementById('breeze-fill');

@@ -380,6 +380,16 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <div class="import-status" id="breeze-status"></div>
   </div>
   <div class="import-card">
+    <h3>&#128181; Sync Giving from Breeze</h3>
+    <p>Pull contribution records from the Breeze API. Already-imported contributions are skipped (safe to re-sync). Creates one closed batch per day.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+      <div class="field" style="margin:0;"><label>From</label><input type="date" id="giving-sync-from" style="font-size:.85rem;padding:4px 8px;"></div>
+      <div class="field" style="margin:0;"><label>To</label><input type="date" id="giving-sync-to" style="font-size:.85rem;padding:4px 8px;"></div>
+    </div>
+    <button class="btn-primary" onclick="runBreezeGivingSync()">Sync Giving from Breeze</button>
+    <div class="import-status" id="giving-sync-status"></div>
+  </div>
+  <div class="import-card">
     <h3>&#128194; Import People (CSV)</h3>
     <p>Upload a CSV file exported from Breeze. Columns expected: first_name, last_name, email, phone, street_address, city, state, zip</p>
     <input type="file" id="csv-people-file" accept=".csv" style="display:block;margin-bottom:8px;">
@@ -562,6 +572,9 @@ window.addEventListener('load', function() {
   // Attendance date range defaults
   document.getElementById('att-from').value = y + '-01-01';
   document.getElementById('att-to').value = y + '-12-31';
+  // Giving sync defaults
+  document.getElementById('giving-sync-from').value = y + '-01-01';
+  document.getElementById('giving-sync-to').value = now.toISOString().slice(0, 10);
   document.getElementById('rpt-att-from').value = y + '-01-01';
   document.getElementById('rpt-att-to').value = y + '-12-31';
   // Year-over-year checkboxes (last 5 years)
@@ -1184,6 +1197,24 @@ function downloadStatement() {
 }
 
 // ── IMPORT ──────────────────────────────────────────────────────────────
+function runBreezeGivingSync() {
+  var from = document.getElementById('giving-sync-from').value;
+  var to = document.getElementById('giving-sync-to').value;
+  var status = document.getElementById('giving-sync-status');
+  if (!from || !to) { status.textContent = 'Please select a date range.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Syncing ' + from + ' to ' + to + '…'; status.className = 'import-status';
+  fetch('/admin/api/import/breeze-giving', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({start: from, end: to})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    var msg = 'Done. ' + (d.imported||0) + ' contributions imported, ' + (d.skipped||0) + ' already existed.';
+    if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' error(s).';
+    status.textContent = msg; status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+}
+
 function runBreezeImport() {
   var bar = document.getElementById('breeze-bar');
   var fill = document.getElementById('breeze-fill');
