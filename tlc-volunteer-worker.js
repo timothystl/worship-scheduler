@@ -13585,6 +13585,12 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: contribs.length, url_used: givingUrl, dates_sent: { bStart, bEnd }, first_item: contribs[0] || null });
   }
 
+  // ── Clear Bad Tag Assignments ─────────────────────────────────────
+  if (seg === 'import/clear-person-tags' && method === 'POST') {
+    const r = await db.prepare('DELETE FROM person_tags').run();
+    return json({ ok: true, deleted: r.meta?.changes ?? 0 });
+  }
+
   // ── Breeze Debug ─────────────────────────────────────────────────
   if (seg === 'import/breeze-debug' && method === 'GET') {
     const subdomain = env.BREEZE_SUBDOMAIN;
@@ -13637,20 +13643,26 @@ async function handleChmsApi(req, env, url, method, seg) {
         if (!firstTagId && Array.isArray(parsed) && parsed.length) firstTagId = parsed[0].id;
       } catch(e) { tagResults[ep] = { error: e.message }; }
     }
-    // Test tag member endpoints using the first tag we found
+    // Test tag member filtering — use a KNOWN non-empty tag (pick one with a real member)
+    // We'll try multiple filter approaches using the first tag found
     if (firstTagId) {
-      for (const ep of [
+      // filter_json variants (Breeze uses this for complex people queries)
+      const filterTests = [
+        `/api/people?filter_json=${encodeURIComponent(JSON.stringify({"tag_id":firstTagId}))}&limit=5`,
+        `/api/people?filter_json=${encodeURIComponent(JSON.stringify([{"tag_id":firstTagId}]))}&limit=5`,
+        `/api/people?filter_json=${encodeURIComponent(JSON.stringify({"tag_ids":[firstTagId]}))}&limit=5`,
+        `/api/people?filter_json=${encodeURIComponent(JSON.stringify({"tag_id":parseInt(firstTagId)}))}&limit=5`,
+        `/api/tags/list_members?tag_id=${firstTagId}&details=0`,
         `/api/tags/list_members?tag_id=${firstTagId}`,
-        `/api/tags/list_members?id=${firstTagId}`,
-        `/api/people?tag_id=${firstTagId}&limit=5`,
-        `/api/people?tag_id=${firstTagId}&details=0&limit=5`,
-      ]) {
+      ];
+      for (const ep of filterTests) {
         try {
           const tr = await fetch(`https://${subdomain}.breezechms.com${ep}`, { headers: hdrs });
           const txt = await tr.text();
           let parsed; try { parsed = JSON.parse(txt); } catch {}
-          tagResults[ep] = { status: tr.status, body_length: txt.length, first400: txt.slice(0,400), parsed_type: parsed == null ? 'parse_err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed), sample: Array.isArray(parsed) ? parsed.slice(0,2) : (parsed && typeof parsed === 'object' ? parsed : undefined) };
-        } catch(e) { tagResults[ep] = { error: e.message }; }
+          const pType = parsed == null ? 'parse_err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed);
+          tagResults[ep.slice(0,80)] = { status: tr.status, body_length: txt.length, parsed_type: pType, first200: txt.slice(0,200) };
+        } catch(e) { tagResults[ep.slice(0,80)] = { error: e.message }; }
       }
     }
     // Find a member WITH a family (non-empty family array)
@@ -13803,39 +13815,9 @@ async function handleChmsApi(req, env, url, method, seg) {
             }
             tagsSynced++;
           }
-          // 2. For each tag, fetch members via /api/people?tag_id=X and sync person_tags
-          for (const t of allTags) {
-            const bTagId = String(t.id);
-            const tagRow = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bTagId).first();
-            if (!tagRow) continue;
-            const localTagId = tagRow.id;
-            let tagOffset = 0;
-            const tagLimit = 500;
-            while (true) {
-              const memRes = await fetch(
-                `https://${subdomain}.breezechms.com/api/people?tag_id=${bTagId}&limit=${tagLimit}&offset=${tagOffset}`,
-                { headers: { 'Api-key': apiKey } }
-              );
-              const memText = await memRes.text();
-              if (!memText || !memText.trim()) break;
-              let tagMembers = [];
-              try { tagMembers = JSON.parse(memText); } catch { break; }
-              if (!Array.isArray(tagMembers) || tagMembers.length === 0) break;
-              for (const m of tagMembers) {
-                if (!m.last_name || !m.last_name.trim()) continue; // skip organizations
-                const bPersonId = String(m.id || '');
-                if (!bPersonId) continue;
-                const personRow = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(bPersonId).first();
-                if (!personRow) continue;
-                try {
-                  await db.prepare('INSERT OR IGNORE INTO person_tags (person_id, tag_id) VALUES (?,?)').bind(personRow.id, localTagId).run();
-                  tagAssignments++;
-                } catch {}
-              }
-              if (tagMembers.length < tagLimit) break;
-              tagOffset += tagLimit;
-            }
-          }
+          // 2. Tag-to-person assignment — DISABLED until correct filter API is confirmed
+          // /api/people?tag_id=X does NOT filter; it returns all people. Skipping.
+          tagAssignments = -1; // sentinel: means "not yet implemented"
         }
       } catch (e) { errors.push({ tag_sync_error: e.message }); }
     }
