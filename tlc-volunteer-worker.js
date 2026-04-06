@@ -12239,6 +12239,8 @@ async function initDb(db) {
     'ALTER TABLE giving_entries ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
     // ChMS tags: breeze_id to match Breeze tags on re-sync
     'ALTER TABLE tags ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
+    // ChMS households: breeze_id to match Breeze family_id on re-sync
+    'ALTER TABLE households ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -13627,49 +13629,14 @@ async function handleChmsApi(req, env, url, method, seg) {
         }
       }
     }
-    // Try several tag endpoints
+    // Confirm tag list endpoint
     const tagResults = {};
-    let firstTagId = null;
-    for (const ep of [
-      '/api/tags/list_tags',
-      '/api/tags',
-      '/api/tags?details=1',
-    ]) {
-      try {
-        const tr = await fetch(`https://${subdomain}.breezechms.com${ep}`, { headers: hdrs });
-        const txt = await tr.text();
-        let parsed; try { parsed = JSON.parse(txt); } catch {}
-        tagResults[ep] = { status: tr.status, body_length: txt.length, first400: txt.slice(0,400), parsed_type: parsed == null ? 'parse_err' : (Array.isArray(parsed) ? 'array:'+parsed.length : typeof parsed), sample: Array.isArray(parsed) ? parsed.slice(0,2) : (parsed && typeof parsed === 'object' ? parsed : undefined) };
-        if (!firstTagId && Array.isArray(parsed) && parsed.length) firstTagId = parsed[0].id;
-      } catch(e) { tagResults[ep] = { error: e.message }; }
-    }
-    // Fetch full single-person record to see if tags are embedded
-    const testPersonId = '43826481'; // Mariatu Abreu
     try {
-      const pr = await fetch(`https://${subdomain}.breezechms.com/api/people/${testPersonId}?details=1`, { headers: hdrs });
-      const ptxt = await pr.text();
-      let pp; try { pp = JSON.parse(ptxt); } catch {}
-      tagResults['single_person_full'] = {
-        body_length: ptxt.length,
-        keys: pp ? Object.keys(pp) : [],
-        details_keys: (pp && pp.details) ? Object.keys(pp.details) : [],
-        has_tags: pp ? ('tags' in pp || 'tag' in pp || 'tag_ids' in pp) : false,
-        tags_value: pp ? (pp.tags || pp.tag || pp.tag_ids || null) : null,
-        full: ptxt  // full response — it's only 2510 bytes
-      };
-    } catch(e) { tagResults['single_person_full'] = { error: e.message }; }
-    // Also try with tags=1 parameter
-    try {
-      const pr2 = await fetch(`https://${subdomain}.breezechms.com/api/people/${testPersonId}?details=1&tags=1`, { headers: hdrs });
-      const ptxt2 = await pr2.text();
-      let pp2; try { pp2 = JSON.parse(ptxt2); } catch {}
-      tagResults['single_person_tags1'] = {
-        body_length: ptxt2.length,
-        has_tags: pp2 ? ('tags' in pp2 || 'tag' in pp2) : false,
-        tags_value: pp2 ? (pp2.tags || pp2.tag || null) : null,
-        full: ptxt2
-      };
-    } catch(e) { tagResults['single_person_tags1'] = { error: e.message }; }
+      const tr = await fetch(`https://${subdomain}.breezechms.com/api/tags/list_tags`, { headers: hdrs });
+      const txt = await tr.text();
+      let parsed; try { parsed = JSON.parse(txt); } catch {}
+      tagResults['list_tags'] = { status: tr.status, count: Array.isArray(parsed) ? parsed.length : 0, sample: Array.isArray(parsed) ? parsed.slice(0,3) : null, note: 'tag-to-person assignments not available in Breeze REST API' };
+    } catch(e) { tagResults['list_tags'] = { error: e.message }; }
     // Find a member WITH a family (non-empty family array)
     let familyMember = null;
     for (const m of members) {
@@ -13757,8 +13724,8 @@ async function handleChmsApi(req, env, url, method, seg) {
               addr = { street: (item.street_address||'').trim(), city: (item.city||'').trim(), state: (item.state||'').trim(), zip: (item.zip||'').trim() };
           }
         }
-        // Family role from p.family array — Breeze uses role_name field
-        let familyRole = '';
+        // Family role + household from p.family array
+        let familyRole = '', householdId = null;
         if (Array.isArray(p.family) && p.family.length > 0) {
           const self = p.family.find(m => String(m.person_id) === String(p.id));
           if (self) {
@@ -13768,25 +13735,41 @@ async function handleChmsApi(req, env, url, method, seg) {
             else if (rn.includes('child') || rn.includes('son') || rn.includes('daughter')) familyRole = 'child';
             else if (rn) familyRole = 'other';
           }
+          // Household: keyed by Breeze family_id
+          const bFamilyId = String(p.family[0].family_id || '');
+          if (bFamilyId) {
+            const hhRow = await db.prepare('SELECT id FROM households WHERE breeze_id=?').bind(bFamilyId).first();
+            if (hhRow) {
+              householdId = hhRow.id;
+            } else {
+              // Name from head of household's last name, fallback to this person's last name
+              const head = p.family.find(m => (m.role_name||'').toLowerCase().includes('head'));
+              const hhName = (head ? (head.details?.last_name || ln) : ln) + ' Family';
+              const r = await db.prepare(
+                'INSERT INTO households (name, address1, city, state, zip, breeze_id) VALUES (?,?,?,?,?,?)'
+              ).bind(hhName, addr.street, addr.city, addr.state, addr.zip, bFamilyId).run();
+              householdId = r.meta?.last_row_id;
+            }
+          }
         }
         const existing = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(String(p.id)).first();
         if (existing) {
           await db.prepare(
             `UPDATE people SET first_name=?,last_name=?,email=?,phone=?,
-             address1=?,city=?,state=?,zip=?,member_type=?,
+             address1=?,city=?,state=?,zip=?,member_type=?,household_id=?,
              dob=?,baptism_date=?,confirmation_date=?,anniversary_date=?,family_role=?
              WHERE breeze_id=?`
-          ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,memberType,
+          ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,memberType,householdId,
                  dob,baptismDate,confirmDate,anniversaryDate,familyRole,String(p.id)).run();
           updated++;
         } else {
           await db.prepare(
             `INSERT INTO people
              (first_name,last_name,email,phone,address1,city,state,zip,breeze_id,member_type,
-              dob,baptism_date,confirmation_date,anniversary_date,family_role)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+              household_id,dob,baptism_date,confirmation_date,anniversary_date,family_role)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
           ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,String(p.id),memberType,
-                 dob,baptismDate,confirmDate,anniversaryDate,familyRole).run();
+                 householdId,dob,baptismDate,confirmDate,anniversaryDate,familyRole).run();
           imported++;
         }
       } catch (e) { errors.push({ breeze_id: p.id, error: e.message }); }
@@ -13820,9 +13803,8 @@ async function handleChmsApi(req, env, url, method, seg) {
             }
             tagsSynced++;
           }
-          // 2. Tag-to-person assignment — DISABLED until correct filter API is confirmed
-          // /api/people?tag_id=X does NOT filter; it returns all people. Skipping.
-          tagAssignments = -1; // sentinel: means "not yet implemented"
+          // Tag-to-person assignments not available via Breeze REST API.
+          // Tags are synced as a list only; assignments are managed manually in the ChMS.
         }
       } catch (e) { errors.push({ tag_sync_error: e.message }); }
     }
@@ -15726,7 +15708,8 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
       <button class="pill" data-mt="inactive" onclick="setPeopleFilter(this,'inactive')">Inactive</button>
     </div>
     <div class="filter-pills" id="p-tag-pills" style="gap:4px;"></div>
-    <button class="btn-primary" onclick="openPersonEdit(null)" style="margin-left:auto;">+ Add Person</button>
+    <button class="btn-secondary" onclick="openTagsManager()" style="margin-left:auto;">&#9881; Tags</button>
+    <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
   </div>
   <div id="p-status" class="status-msg"></div>
   <!-- Desktop grid -->
@@ -16103,8 +16086,12 @@ function setPeopleTag(btn, tid) {
   loadPeople();
 }
 function openTagsManager() {
-  renderTagsList();
   openModal('tags-modal');
+  api('/admin/api/tags').then(function(d) {
+    allTags = d.tags || [];
+    renderTagPills();
+    renderTagsList();
+  });
 }
 function renderTagsList() {
   var c = document.getElementById('tags-list');
@@ -16123,12 +16110,12 @@ function createTag() {
   if (!name) return;
   api('/admin/api/tags', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,color:color})}).then(function() {
     document.getElementById('new-tag-name').value = '';
-    loadTags();
+    openTagsManager();
   });
 }
 function deleteTag(id) {
   if (!confirm('Delete this tag? It will be removed from all people.')) return;
-  api('/admin/api/tags/' + id, {method:'DELETE'}).then(function() { loadTags(); });
+  api('/admin/api/tags/' + id, {method:'DELETE'}).then(function() { openTagsManager(); });
 }
 
 // ── FUNDS ──────────────────────────────────────────────────────────────
