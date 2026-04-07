@@ -13840,6 +13840,127 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: entries.length, date_range: { start, end } });
   }
 
+  // ── Breeze Giving CSV Import ─────────────────────────────────────
+  // Accepts the TSV export from Breeze (Contributions > Export)
+  // Fund(s) format: "40085 General Fund" or "40085 General Fund (160.00), 49094 Tuition Aid (40.00)"
+  if (seg === 'import/breeze-giving-csv' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const csvText = (b.csv || '').trim();
+    if (!csvText) return json({ error: 'No CSV data provided' }, 400);
+
+    const lines = csvText.split('\n').map(l => l.trimEnd()).filter(l => l.trim());
+    if (lines.length < 2) return json({ error: 'No data rows found' }, 400);
+
+    // Detect delimiter (tab vs comma) from header line
+    const delim = lines[0].includes('\t') ? '\t' : ',';
+    const header = lines[0].split(delim).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    const col = name => header.findIndex(h => h === name.toLowerCase());
+    const iDate = col('date'), iPaymentId = col('payment id');
+    const iPersonId = col('person id'), iAmount = col('amount'), iFunds = col('fund(s)');
+    // "Batch Number" in newer exports, "Batch" in older ones
+    const iBatch = col('batch number') >= 0 ? col('batch number') : col('batch');
+    // Optional columns present in newer exports
+    const iMethod = col('method'), iCheckNum = col('check number'), iNote = col('note');
+    if ([iDate, iBatch, iPaymentId, iAmount, iFunds].some(i => i < 0))
+      return json({ error: 'Missing columns. Expected: Date, Batch/Batch Number, Payment ID, Amount, Fund(s)' }, 400);
+
+    const parseMethod = t => {
+      const s = (t || '').toLowerCase();
+      if (s === 'cash') return 'cash';
+      if (s.startsWith('check')) return 'check';
+      if (s.includes('ach') || s.includes('bank') || s.includes('eft')) return 'ach';
+      if (s.includes('card') || s.includes('credit') || s.includes('online')) return 'card';
+      return 'other';
+    };
+
+    // Parse "40085 General Fund" or "40085 General Fund (160.00), 49094 Tuition Aid (40.00)"
+    const parseFunds = (fundsStr, totalStr) => {
+      // Split on commas only when followed by a digit (next fund ID)
+      const parts = fundsStr.split(/,\s*(?=\d)/);
+      const results = [];
+      for (const part of parts) {
+        const m = part.trim().match(/^(\d+)\s+(.+?)(?:\s+\(([0-9.]+)\))?\s*$/);
+        if (!m) continue;
+        results.push({ breezeFundId: m[1], fundName: m[2].trim(), amount: m[3] || null });
+      }
+      if (results.length === 0) return [{ breezeFundId: 'default', fundName: 'General Fund', amount: totalStr }];
+      if (results.length === 1 && !results[0].amount) results[0].amount = totalStr;
+      return results;
+    };
+
+    // Pre-load caches
+    const existingIds = new Set(
+      ((await db.prepare("SELECT breeze_id FROM giving_entries WHERE breeze_id != ''").all()).results || [])
+        .map(r => r.breeze_id)
+    );
+    const personByBreezeId = {};
+    for (const p of (await db.prepare('SELECT id, breeze_id FROM people WHERE breeze_id != ""').all()).results || [])
+      personByBreezeId[p.breeze_id] = p.id;
+    const batchByDesc = {};
+    for (const bt of (await db.prepare('SELECT id, description FROM giving_batches').all()).results || [])
+      batchByDesc[bt.description] = bt.id;
+    const fundByBreezeId = {};
+    for (const f of (await db.prepare('SELECT id, breeze_id FROM funds WHERE breeze_id != ""').all()).results || [])
+      fundByBreezeId[f.breeze_id] = f.id;
+
+    let imported = 0, skipped = 0;
+    const errors = [];
+    const entryInserts = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const cols = delim === '\t' ? lines[i].split('\t') : lines[i].split(',');
+        const paymentId = (cols[iPaymentId] || '').replace(/['"]/g, '').trim();
+        if (!paymentId) continue;
+        if (existingIds.has(paymentId)) { skipped++; continue; }
+
+        const date = (cols[iDate] || '').replace(/['"]/g, '').trim();
+        const batchNum = (cols[iBatch] || '').replace(/['"]/g, '').trim();
+        const personBreezeId = iPersonId >= 0 ? (cols[iPersonId] || '').replace(/['"]/g, '').trim() : '';
+        const amountStr = (cols[iAmount] || '').replace(/[$\s'"]/g, '');
+        const fundsStr = (cols[iFunds] || '').replace(/^["']|["']$/g, '').trim();
+        const methodRaw = iMethod >= 0 ? (cols[iMethod] || '').replace(/['"]/g, '').trim() : '';
+        const checkNum = iCheckNum >= 0 ? (cols[iCheckNum] || '').replace(/['"]/g, '').trim() : '';
+        const note = iNote >= 0 ? (cols[iNote] || '').replace(/['"]/g, '').trim() : '';
+
+        const totalAmount = parseFloat(amountStr) || 0;
+        const method = parseMethod(methodRaw);
+        const personId = personBreezeId ? (personByBreezeId[personBreezeId] ?? null) : null;
+        const batchKey = batchNum ? `Breeze Batch #${batchNum}` : `Breeze Import ${date}`;
+
+        if (!batchByDesc[batchKey]) {
+          const r = await db.prepare('INSERT INTO giving_batches (batch_date, description, closed) VALUES (?,?,1)')
+            .bind(date, batchKey).run();
+          batchByDesc[batchKey] = r.meta?.last_row_id;
+        }
+        const batchId = batchByDesc[batchKey];
+
+        for (const fl of parseFunds(fundsStr, String(totalAmount))) {
+          const cents = Math.round(parseFloat(fl.amount || '0') * 100);
+          if (!fundByBreezeId[fl.breezeFundId]) {
+            // Use the real fund name from the CSV, not a generic placeholder
+            const fname = fl.fundName || `Breeze Fund ${fl.breezeFundId}`;
+            const r = await db.prepare('INSERT INTO funds (name, breeze_id, active, sort_order) VALUES (?,?,1,99)')
+              .bind(fname, fl.breezeFundId).run();
+            fundByBreezeId[fl.breezeFundId] = r.meta?.last_row_id;
+          }
+          entryInserts.push(
+            db.prepare(
+              `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,breeze_id,contribution_date)
+               VALUES (?,?,?,?,?,?,?,?,?)`
+            ).bind(batchId, personId, fundByBreezeId[fl.breezeFundId], cents, method, checkNum, note, paymentId, date)
+          );
+        }
+        imported++;
+      } catch(e) { errors.push({ row: i, error: e.message }); }
+    }
+
+    for (let i = 0; i < entryInserts.length; i += 100) {
+      await db.batch(entryInserts.slice(i, i + 100));
+    }
+    return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: lines.length - 1 });
+  }
+
   // ── Clear Bad Tag Assignments ─────────────────────────────────────
   if (seg === 'import/clear-person-tags' && method === 'POST') {
     const r = await db.prepare('DELETE FROM person_tags').run();
@@ -16157,6 +16278,13 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <div class="import-status" id="giving-all-status"></div>
   </div>
   <div class="import-card">
+    <h3>&#128181; Import Giving from Breeze CSV Export</h3>
+    <p>Upload the contribution export from Breeze (Contributions &rarr; Export to CSV). Handles split gifts correctly. Already-imported contributions are skipped (safe to re-run). Payment method is not in the export so defaults to "other" — edit batches afterward if needed.</p>
+    <input type="file" id="giving-csv-file" accept=".csv,.tsv,.txt" style="display:block;margin-bottom:8px;">
+    <button class="btn-primary" onclick="importGivingCSV()">Import Giving CSV</button>
+    <div class="import-status" id="giving-csv-status"></div>
+  </div>
+  <div class="import-card">
     <h3>&#128260; Map Breeze Funds to Real Fund Names</h3>
     <p>After the giving sync, imported funds show as "Breeze Fund XXXXXXX". Use this tool to reassign all their contributions to your real fund names, then remove the placeholders.</p>
     <button class="btn-secondary" onclick="loadFundMapping()" style="margin-bottom:10px;">Load Fund Mapping</button>
@@ -17170,6 +17298,28 @@ function runBreezeImport() {
     }).catch(function(e) { status.textContent = 'Network error: ' + e.message; status.className = 'import-status err'; });
   }
   doPage(0);
+}
+function importGivingCSV() {
+  var file = document.getElementById('giving-csv-file').files[0];
+  var status = document.getElementById('giving-csv-status');
+  if (!file) { status.textContent = 'Please select a file.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Reading file…'; status.className = 'import-status';
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var csv = e.target.result;
+    status.textContent = 'Uploading…'; status.className = 'import-status';
+    api('/admin/api/import/breeze-giving-csv', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({csv: csv})
+    }).then(function(d) {
+      if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+      var msg = 'Done. ' + (d.imported||0) + ' contributions imported, ' + (d.skipped||0) + ' already existed (out of ' + (d.total||0) + ' rows).';
+      if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' row error(s).';
+      status.textContent = msg; status.className = 'import-status ok';
+    }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+  };
+  reader.readAsText(file);
 }
 function importPeopleCSV() {
   var file = document.getElementById('csv-people-file').files[0];
