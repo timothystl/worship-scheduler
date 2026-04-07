@@ -7854,23 +7854,27 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
   .tab-content { display: block !important; padding: 0; }
   #tab-schedule { display: block !important; }
   .card { box-shadow: none; padding: 8px 0; }
-  table { font-size: 0.75rem; }
-  td, th { padding: 4px 6px; }
+  table { font-size: 0.75rem; border-collapse: collapse !important; }
+  td, th { padding: 4px 6px; border: 1px solid #999 !important; }
   .cell-select { display: none !important; }
   .conf-pill { display: none !important; }
   .cell-badge { display: none !important; }
   .print-name { display: inline !important; font-size: 0.78rem; }
-  .label-input { border: none !important; font-size: 0.7rem; color: var(--charcoal) !important; padding: 0; }
-  td.empty-cell { background: #fff !important; }
+  .label-input { border: none !important; font-size: 0.7rem; color: #000 !important; padding: 0; }
+  /* Force all cells to white/black — no color printing */
+  td, td.empty-cell, td.filled-cell, td.shared-cell, td.svc-8am, td.svc-1045 {
+    background: #fff !important; color: #000 !important; box-shadow: none !important;
+  }
+  .sunday-summary td { background: #f0f0f0 !important; color: #000 !important; }
   #tab-stats { display: none !important; }
   /* Hide fixed-position side panels and overlay (they ignore translateX in print) */
   .side-panel, .panel-overlay { display: none !important; }
   .btn-edit-readings { display: none !important; }
-  /* Remove dark band on right: lighten table headers and release overflow */
+  /* Release overflow and fix sticky columns */
   .table-wrapper { overflow: visible !important; }
-  thead th { background: var(--linen) !important; color: var(--charcoal) !important; border-color: var(--border) !important; }
+  thead th { background: #e0e0e0 !important; color: #000 !important; border: 1px solid #999 !important; }
   thead th.date-col, thead th.svc-col { position: static !important; }
-  td.date-cell { position: static !important; background: var(--linen) !important; }
+  td.date-cell { position: static !important; background: #f0f0f0 !important; color: #000 !important; }
 }
 
 /* ── Confirmation tracking ─────────────────── */
@@ -9769,6 +9773,12 @@ document.getElementById('btn-export-csv').addEventListener('click', function() {
   SHARED_ROLES.forEach(function(r){ headers.push('Both - '+roleLabel(r)); });
   var lines = [headers.map(function(h){ return '"'+h.replace(/"/g,'""')+'"'; }).join(',')];
   currentSchedule.forEach(function(row) {
+    if (row.type === 'special') {
+      var emptyCells = headers.slice(2).map(function() { return '""'; }).join(',');
+      lines.push('"'+fmtDate(row.date)+'","'+String(row.name||'Special Service').replace(/"/g,'""')+'",'+emptyCells);
+      return;
+    }
+    if (row.type !== 'sunday') return;
     var cells = [fmtDate(row.date), row.ordinal+ordSuffix(row.ordinal)+' Sunday'];
     PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['8am'];    cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
     PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['10:45am'];cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
@@ -9978,12 +9988,13 @@ function buildHtmlEmail(person, assignments, replyTo, rsvpToken, workerUrl) {
     var changesAllUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&status=needs_changes';
     var portalUrl     = workerUrl + '/rsvp/portal?token=' + encodeURIComponent(rsvpToken);
 
-    // Per-assignment rows in a 2-column table: "Date — Role (svc)" | [✓ Yes] [⚠ Change]
+    // Per-assignment rows in a 2-column table: "Date — Role (svc)" | [✓ Yes] [⚠ Change] [✗ Decline]
     // Two columns is easy on any phone; no 4-col overflow
     var confirmRows = assignments.map(function(a, idx) {
       var svcLabel = a.svc === 'both services' ? 'Both Svcs' : a.svc;
       var cfUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&idx=' + idx + '&status=confirmed';
       var ncUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&idx=' + idx + '&status=needs_changes';
+      var dcUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&idx=' + idx + '&status=declined';
       return '<tr>'
         + '<td style="padding:10px 12px;border-bottom:1px solid #eef;font-size:0.86rem;vertical-align:middle;">'
         + '<strong>' + esc(a.date) + '</strong>'
@@ -9992,10 +10003,13 @@ function buildHtmlEmail(person, assignments, replyTo, rsvpToken, workerUrl) {
         + '</td>'
         + '<td style="padding:10px 12px;border-bottom:1px solid #eef;vertical-align:middle;text-align:right;width:1%;white-space:nowrap;">'
         + '<a href="' + esc(cfUrl) + '" style="display:inline-block;background:#6B8F71;color:white;text-decoration:none;padding:7px 14px;border-radius:5px;font-size:0.8rem;font-weight:700;margin-right:5px;">\\u2713 Yes</a>'
-        + '<a href="' + esc(ncUrl) + '" style="display:inline-block;background:#D4922A;color:white;text-decoration:none;padding:7px 14px;border-radius:5px;font-size:0.8rem;font-weight:700;">\\u26a0 Change</a>'
+        + '<a href="' + esc(ncUrl) + '" style="display:inline-block;background:#D4922A;color:white;text-decoration:none;padding:7px 14px;border-radius:5px;font-size:0.8rem;font-weight:700;margin-right:5px;">\\u26a0 Change</a>'
+        + '<a href="' + esc(dcUrl) + '" style="display:inline-block;background:#A93226;color:white;text-decoration:none;padding:7px 14px;border-radius:5px;font-size:0.8rem;font-weight:700;">\\u2717 Decline</a>'
         + '</td>'
         + '</tr>';
     }).join('');
+
+    var declineAllUrl = workerUrl + '/rsvp?token=' + encodeURIComponent(rsvpToken) + '&status=declined';
 
     rsvpSection = ''
       + '<div style="background:#f6f9ff;border:1px solid #c8d8f0;border-radius:8px;margin-bottom:20px;overflow:hidden;">'
@@ -10009,6 +10023,7 @@ function buildHtmlEmail(person, assignments, replyTo, rsvpToken, workerUrl) {
       + '<p style="margin:0 0 8px;font-size:0.78rem;color:#7A6E60;">Or respond to all at once:</p>'
       + '<a href="' + esc(confirmAllUrl) + '" style="display:inline-block;background:#6B8F71;color:white;text-decoration:none;padding:8px 16px;border-radius:5px;font-weight:700;font-size:0.82rem;margin:0 6px 4px 0;">\\u2713 Confirm All</a>'
       + '<a href="' + esc(changesAllUrl) + '" style="display:inline-block;background:#D4922A;color:white;text-decoration:none;padding:8px 16px;border-radius:5px;font-weight:700;font-size:0.82rem;margin:0 6px 4px 0;">\\u26a0 Change All</a>'
+      + '<a href="' + esc(declineAllUrl) + '" style="display:inline-block;background:#A93226;color:white;text-decoration:none;padding:8px 16px;border-radius:5px;font-weight:700;font-size:0.82rem;margin:0 6px 4px 0;">\\u2717 Decline All</a>'
       + '<a href="' + esc(portalUrl) + '" style="display:inline-block;background:white;color:#0A3C5C;text-decoration:none;padding:8px 16px;border-radius:5px;font-weight:600;font-size:0.82rem;border:1px solid #C4DDE8;margin:0 0 4px 0;">\\uD83D\\uDCC5 My Full Schedule</a>'
       + '</div>'
       + '</div>';
@@ -10464,6 +10479,7 @@ function restoreRsvpTokens() {
 // ══════════════════════════════════════════════════════════════════
 function getOpenSlots() {
   var people = getPeople();
+  var confs = getConfirmations();
   var slots = [];
   currentSchedule.forEach(function(row) {
     if (row.type !== 'sunday') return;
@@ -10473,19 +10489,24 @@ function getOpenSlots() {
     PER_ROLES.forEach(function(role) {
       if (!row.assignments[role]) return;
       ['8am', '10:45am'].forEach(function(svc) {
-        if (row.assignments[role][svc]) return; // already filled
+        var pid = row.assignments[role][svc];
+        var declined = pid && confs[dateISO+'|'+role+'|'+svc] === 'declined';
+        if (pid && !declined) return; // filled and not declined
         var pool = people.filter(function(p) {
           return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, svc, dateISO, role);
         });
-        slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: svc, role: role, pool: pool });
+        slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: svc, role: role, pool: pool, declined: declined });
       });
     });
     SHARED_ROLES.forEach(function(role) {
-      if (!row.assignments[role] || row.assignments[role].shared) return; // filled
+      if (!row.assignments[role]) return;
+      var pid = row.assignments[role].shared;
+      var declined = pid && confs[dateISO+'|'+role+'|shared'] === 'declined';
+      if (pid && !declined) return; // filled and not declined
       var pool = people.filter(function(p) {
         return p.roles && p.roles.indexOf(role) !== -1 && eligible(p, ordinal, 'shared', dateISO, role);
       });
-      slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: 'both services', role: role, pool: pool });
+      slots.push({ date: dateStr, dateISO: dateISO, ordinal: ordinal, svc: 'both services', role: role, pool: pool, declined: declined });
     });
   });
   return slots;
@@ -10546,7 +10567,9 @@ function openNotifyPanel() {
       + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.date) + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;white-space:nowrap;">' + esc(slot.svc) + '</td>'
-      + '<td style="padding:7px 8px;vertical-align:top;font-weight:600;">' + esc(roleLabel(slot.role)) + '</td>'
+      + '<td style="padding:7px 8px;vertical-align:top;font-weight:600;">' + esc(roleLabel(slot.role))
+      + (slot.declined ? ' <span style="font-size:0.72rem;font-weight:400;color:var(--on-error-bg);background:var(--error-bg);border:1px solid var(--error-border);border-radius:4px;padding:1px 5px;">\u2717 Declined</span>' : '')
+      + '</td>'
       + '<td style="padding:7px 8px;vertical-align:top;font-size:0.8rem;">' + eligibleHtml + '</td>'
       + '</tr>';
   });
@@ -15750,8 +15773,9 @@ async function handleSchedRsvpPortal(req, env, url) {
     const svcLabel = a.svc==='8am'?'8:00 AM':a.svc==='10:45am'?'10:45 AM':a.svc;
     const cfUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=confirmed';
     const ncUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=needs_changes';
+    const dcUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=declined';
     const st = a.status||'pending';
-    const stLabel = st==='confirmed'?'✓ Confirmed':st==='needs_changes'?'⚠ Needs Changes':'';
+    const stLabel = st==='confirmed'?'✓ Confirmed':st==='needs_changes'?'⚠ Needs Changes':st==='declined'?'✗ Declined':'';
     return '<tr>'
       +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'+e(a.date)+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'+e(svcLabel)+'</td>'
@@ -15759,7 +15783,8 @@ async function handleSchedRsvpPortal(req, env, url) {
       +'<td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555;">'+e(stLabel)+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'
       +'<a href="'+e(cfUrl)+'" style="margin-right:8px;color:#27ae60;">✓ Confirm</a>'
-      +'<a href="'+e(ncUrl)+'" style="color:#e67e22;">⚠ Change</a>'
+      +'<a href="'+e(ncUrl)+'" style="margin-right:8px;color:#e67e22;">⚠ Change</a>'
+      +'<a href="'+e(dcUrl)+'" style="color:#c0392b;">✗ Decline</a>'
       +'</td></tr>';
   }).join('');
   const body = '<h2 style="margin-bottom:4px;">Hello, '+e(record.name)+'</h2>'
