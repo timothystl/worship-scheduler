@@ -13527,10 +13527,10 @@ async function handleChmsApi(req, env, url, method, seg) {
       // Vietnamese congregation → skip
       if (n.includes('vietnamese')) return null;
       // Sunday services by name patterns
-      if (n.includes('early service') || n.includes('8:00') || n.includes('8am') || (h === 8)) {
+      if (n.includes('early service') || n.includes('8:00') || n.includes('8am') || n.includes('8 am') || (h === 8)) {
         return { type: 'sunday', time: '08:00' };
       }
-      if (n.includes('late service') || n.includes('10:45') || n.includes('10am') || (h === 10 && timeStr && timeStr.includes('45'))) {
+      if (n.includes('late service') || n.includes('10:45') || n.includes('10am') || n.includes('10 am') || (h === 10 && timeStr && timeStr.includes('45'))) {
         return { type: 'sunday', time: '10:45' };
       }
       // Midweek patterns
@@ -13547,8 +13547,9 @@ async function handleChmsApi(req, env, url, method, seg) {
       // Default: if on Sunday → sunday service; otherwise special
       return { type: 'special', time: timeStr || '' };
     }
+    const attDelim = lines[0] && lines[0].includes('\t') ? '\t' : ',';
     for (const line of dataLines) {
-      const cols = line.split('\t');
+      const cols = line.split(attDelim);
       if (cols.length < 4) continue;
       const instanceId = (cols[1] || '').trim();  // Instance ID (col 1)
       const name      = (cols[2] || '').trim();
@@ -16304,8 +16305,8 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <div class="import-status" id="csv-people-status"></div>
   </div>
   <div class="import-card">
-    <h3>&#128197; Import Attendance Events (Breeze TSV)</h3>
-    <p>Upload the tab-separated export from Breeze Events (Event ID, Instance ID, Name, Start Date, End Date). Service slots will be created with Breeze instance IDs stored. Then use "Sync Counts" below to pull actual attendance numbers from Breeze. Future dates and Vietnamese services are skipped automatically.</p>
+    <h3>&#128197; Import Attendance Events (Breeze Export)</h3>
+    <p>Upload the export from Breeze Events — tab-separated or CSV (Event ID, Instance ID, Name, Start Date, End Date). Service slots will be created with Breeze instance IDs stored. Then use "Sync Counts" below to pull actual attendance numbers from Breeze. Future dates and Vietnamese services are skipped automatically. "Early Service", "8 am", "Late Service", "10:45 am" and similar names are all recognized.</p>
     <input type="file" id="att-tsv-file" accept=".tsv,.txt,.csv" style="display:block;margin-bottom:8px;">
     <button class="btn-primary" onclick="importAttendanceTSV()">Import Attendance Events</button>
     <div class="import-status" id="att-tsv-status"></div>
