@@ -13519,61 +13519,62 @@ async function handleChmsApi(req, env, url, method, seg) {
     let body = ''; try { body = await req.text(); } catch {}
     if (!body.trim()) return json({ error: 'Empty body' }, 400);
     const lines = body.split(/\r?\n/);
-    // Skip header row
     const dataLines = lines.filter((l, i) => i > 0 && l.trim());
     const today = new Date().toISOString().slice(0, 10);
-    let imported = 0, skipped = 0, skippedFuture = 0;
-    // Name → service_type / service_time mapping
-    function classifyService(name, timeStr) {
+
+    // Pre-load all existing date+time keys to avoid per-row SELECT queries
+    const existing = new Set(
+      ((await db.prepare('SELECT service_date, service_time FROM worship_services').all()).results || [])
+        .map(r => r.service_date + '|' + r.service_time)
+    );
+
+    const classifyService = (name, timeStr) => {
       const n = (name || '').toLowerCase();
       const h = parseInt((timeStr || '').split(':')[0] || '0');
-      // Vietnamese congregation → skip
       if (n.includes('vietnamese')) return null;
-      // Sunday services by name patterns
-      if (n.includes('early service') || n.includes('8:00') || n.includes('8am') || n.includes('8 am') || (h === 8)) {
+      if (n.includes('early service') || n.includes('8:00') || n.includes('8am') || n.includes('8 am') || (h === 8))
         return { type: 'sunday', time: '08:00' };
-      }
-      if (n.includes('late service') || n.includes('10:45') || n.includes('10am') || n.includes('10 am') || (h === 10 && timeStr && timeStr.includes('45'))) {
+      if (n.includes('late service') || n.includes('10:45') || n.includes('10am') || n.includes('10 am') || (h === 10 && timeStr && timeStr.includes('45')))
         return { type: 'sunday', time: '10:45' };
-      }
-      // Midweek patterns
       if (n.includes('advent') || n.includes('lent') || n.includes('ash wednesday') ||
-          n.includes('wednesday') || n.includes('midweek') || n.includes('vesper')) {
+          n.includes('wednesday') || n.includes('midweek') || n.includes('vesper'))
         return { type: 'midweek', time: timeStr || '' };
-      }
-      // Special services
       if (n.includes('funeral') || n.includes('easter vigil') || n.includes('good friday') ||
           n.includes('christmas eve') || n.includes('thanksgiving') || n.includes('installation') ||
-          n.includes('ordination') || n.includes('wedding') || n.includes('special')) {
+          n.includes('ordination') || n.includes('wedding') || n.includes('special'))
         return { type: 'special', time: timeStr || '' };
-      }
-      // Default: if on Sunday → sunday service; otherwise special
       return { type: 'special', time: timeStr || '' };
-    }
+    };
+
+    let imported = 0, skipped = 0, skippedFuture = 0;
+    const inserts = [];
     const attDelim = lines[0] && lines[0].includes('\t') ? '\t' : ',';
+
     for (const line of dataLines) {
       const cols = line.split(attDelim);
       if (cols.length < 4) continue;
-      const instanceId = (cols[1] || '').trim();  // Instance ID (col 1)
-      const name      = (cols[2] || '').trim();
-      const startRaw  = (cols[3] || '').trim();  // "2021-08-01 10:45:00"
+      const instanceId = (cols[1] || '').trim();
+      const name       = (cols[2] || '').trim();
+      const startRaw   = (cols[3] || '').trim();
       if (!startRaw) continue;
-      const datePart = startRaw.slice(0, 10);    // "2021-08-01"
-      const timePart = startRaw.slice(11, 16);   // "10:45"
-      // Skip future dates
+      const datePart = startRaw.slice(0, 10);
+      const timePart = startRaw.slice(11, 16);
       if (datePart > today) { skippedFuture++; continue; }
       const cls = classifyService(name, timePart);
-      if (!cls) { skipped++; continue; }  // Vietnamese, etc.
-      // Skip duplicates by date+time
-      const exists = await db.prepare(
-        'SELECT id FROM worship_services WHERE service_date=? AND service_time=?'
-      ).bind(datePart, cls.time).first();
-      if (exists) { skipped++; continue; }
-      await db.prepare(
+      if (!cls) { skipped++; continue; }
+      const key = datePart + '|' + cls.time;
+      if (existing.has(key)) { skipped++; continue; }
+      existing.add(key); // prevent duplicates within the same file
+      inserts.push(db.prepare(
         `INSERT INTO worship_services (service_date,service_time,service_name,service_type,attendance,communion,notes,breeze_instance_id)
          VALUES (?,?,?,?,0,0,?,?)`
-      ).bind(datePart, cls.time, name, cls.type, '', instanceId).run();
+      ).bind(datePart, cls.time, name, cls.type, '', instanceId));
       imported++;
+    }
+
+    // Batch inserts in groups of 100 to stay within query limits
+    for (let i = 0; i < inserts.length; i += 100) {
+      await db.batch(inserts.slice(i, i + 100));
     }
     return json({ ok: true, imported, skipped, skippedFuture, total: dataLines.length });
   }
