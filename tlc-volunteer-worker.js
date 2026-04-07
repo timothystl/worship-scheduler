@@ -7758,23 +7758,27 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
   .tab-content { display: block !important; padding: 0; }
   #tab-schedule { display: block !important; }
   .card { box-shadow: none; padding: 8px 0; }
-  table { font-size: 0.75rem; }
-  td, th { padding: 4px 6px; }
+  table { font-size: 0.75rem; border-collapse: collapse !important; }
+  td, th { padding: 4px 6px; border: 1px solid #999 !important; }
   .cell-select { display: none !important; }
   .conf-pill { display: none !important; }
   .cell-badge { display: none !important; }
   .print-name { display: inline !important; font-size: 0.78rem; }
-  .label-input { border: none !important; font-size: 0.7rem; color: var(--charcoal) !important; padding: 0; }
-  td.empty-cell { background: #fff !important; }
+  .label-input { border: none !important; font-size: 0.7rem; color: #000 !important; padding: 0; }
+  /* Force all cells to white/black — no color printing */
+  td, td.empty-cell, td.filled-cell, td.shared-cell, td.svc-8am, td.svc-1045 {
+    background: #fff !important; color: #000 !important; box-shadow: none !important;
+  }
+  .sunday-summary td { background: #f0f0f0 !important; color: #000 !important; }
   #tab-stats { display: none !important; }
   /* Hide fixed-position side panels and overlay (they ignore translateX in print) */
   .side-panel, .panel-overlay { display: none !important; }
   .btn-edit-readings { display: none !important; }
-  /* Remove dark band on right: lighten table headers and release overflow */
+  /* Release overflow and fix sticky columns */
   .table-wrapper { overflow: visible !important; }
-  thead th { background: var(--linen) !important; color: var(--charcoal) !important; border-color: var(--border) !important; }
+  thead th { background: #e0e0e0 !important; color: #000 !important; border: 1px solid #999 !important; }
   thead th.date-col, thead th.svc-col { position: static !important; }
-  td.date-cell { position: static !important; background: var(--linen) !important; }
+  td.date-cell { position: static !important; background: #f0f0f0 !important; color: #000 !important; }
 }
 
 /* ── Confirmation tracking ─────────────────── */
@@ -9673,6 +9677,12 @@ document.getElementById('btn-export-csv').addEventListener('click', function() {
   SHARED_ROLES.forEach(function(r){ headers.push('Both - '+roleLabel(r)); });
   var lines = [headers.map(function(h){ return '"'+h.replace(/"/g,'""')+'"'; }).join(',')];
   currentSchedule.forEach(function(row) {
+    if (row.type === 'special') {
+      var emptyCells = headers.slice(2).map(function() { return '""'; }).join(',');
+      lines.push('"'+fmtDate(row.date)+'","'+String(row.name||'Special Service').replace(/"/g,'""')+'",'+emptyCells);
+      return;
+    }
+    if (row.type !== 'sunday') return;
     var cells = [fmtDate(row.date), row.ordinal+ordSuffix(row.ordinal)+' Sunday'];
     PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['8am'];    cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
     PER_ROLES.forEach(function(role){ var pid=row.assignments[role]['10:45am'];cells.push(pid&&pMap[pid]?pMap[pid].name:''); });
