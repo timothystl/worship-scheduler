@@ -13103,13 +13103,19 @@ async function handleChmsApi(req, env, url, method, seg) {
   // ── Households ──────────────────────────────────────────────────
   if (seg === 'households' && method === 'GET') {
     const q = '%' + (url.searchParams.get('q') || '') + '%';
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    const countRow = await db.prepare(
+      `SELECT COUNT(*) as n FROM households h WHERE h.name LIKE ? OR h.address1 LIKE ? OR h.city LIKE ?`
+    ).bind(q,q,q).first();
+    const total = countRow?.n || 0;
     const rows = (await db.prepare(
       `SELECT h.*, COUNT(p.id) as member_count FROM households h
        LEFT JOIN people p ON p.household_id=h.id AND p.active=1
        WHERE h.name LIKE ? OR h.address1 LIKE ? OR h.city LIKE ?
-       GROUP BY h.id ORDER BY h.name LIMIT 100`
-    ).bind(q,q,q).all()).results || [];
-    return json({ households: rows });
+       GROUP BY h.id ORDER BY h.name LIMIT ? OFFSET ?`
+    ).bind(q,q,q,limit,offset).all()).results || [];
+    return json({ households: rows, total, offset, limit });
   }
 
   if (seg === 'households' && method === 'POST') {
@@ -13295,9 +13301,25 @@ async function handleChmsApi(req, env, url, method, seg) {
 
   // ── Reports ──────────────────────────────────────────────────────
   if (seg === 'reports/membership' && method === 'GET') {
-    const counts = (await db.prepare(
+    const dbCounts = (await db.prepare(
       `SELECT member_type, COUNT(*) as n FROM people WHERE active=1 GROUP BY member_type ORDER BY n DESC`
     ).all()).results || [];
+    // Merge with configured types so all types appear (even those with 0 members)
+    const cfgRow = await db.prepare("SELECT value FROM chms_config WHERE key='member_types'").first();
+    const DEFAULT_MEMBER_TYPES = ['Member','Associate','Friend','Visitor','Inactive','Organization'];
+    const configuredTypes = cfgRow ? JSON.parse(cfgRow.value) : DEFAULT_MEMBER_TYPES;
+    const countMap = {};
+    for (const r of dbCounts) countMap[(r.member_type||'').toLowerCase()] = { raw: r.member_type, n: r.n };
+    const counts = configuredTypes.map(t => {
+      const key = t.toLowerCase().replace(/\s+/g,'-');
+      const found = countMap[key] || countMap[t.toLowerCase()] || {};
+      return { member_type: t, n: found.n || 0 };
+    });
+    // Also include any DB types not in config
+    for (const r of dbCounts) {
+      const alreadyIn = configuredTypes.some(t => t.toLowerCase().replace(/\s+/g,'-') === (r.member_type||'').toLowerCase() || t.toLowerCase() === (r.member_type||'').toLowerCase());
+      if (!alreadyIn) counts.push({ member_type: r.member_type, n: r.n });
+    }
     const total = counts.reduce((s,r) => s + r.n, 0);
     const tagCounts = (await db.prepare(
       `SELECT t.name, COUNT(DISTINCT pt.person_id) as n FROM tags t
@@ -13319,6 +13341,21 @@ async function handleChmsApi(req, env, url, method, seg) {
     ).bind(from,to).all()).results || [];
     const grand = rows.reduce((s,r) => s + r.total_cents, 0);
     return json({ from, to, rows, grand_total_cents: grand });
+  }
+
+  if (seg === 'reports/giving-statement' && method === 'GET' && url.searchParams.get('list_givers') === '1') {
+    const year = url.searchParams.get('year') || new Date().getFullYear();
+    const givers = (await db.prepare(
+      `SELECT p.id, p.first_name, p.last_name, p.email,
+              SUM(ge.amount) as total_cents
+       FROM people p
+       JOIN giving_entries ge ON ge.person_id=p.id
+       JOIN giving_batches gb ON ge.batch_id=gb.id
+       WHERE p.active=1 AND p.email != ''
+         AND substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4)=?
+       GROUP BY p.id ORDER BY p.last_name, p.first_name`
+    ).bind(String(year)).all()).results || [];
+    return json({ givers });
   }
 
   if (seg === 'reports/giving-statement' && method === 'GET') {
@@ -13353,15 +13390,41 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ person, year, entries, total_cents: total });
   }
 
+  if (seg === 'reports/giving-statement-household' && method === 'GET') {
+    const householdId = url.searchParams.get('household_id');
+    const year = url.searchParams.get('year') || new Date().getFullYear();
+    if (!householdId) return json({ error: 'household_id required' }, 400);
+    const household = await db.prepare('SELECT * FROM households WHERE id=?').bind(householdId).first();
+    if (!household) return json({ error: 'Household not found' }, 404);
+    const members = (await db.prepare(
+      `SELECT id, first_name, last_name, email FROM people WHERE household_id=? AND active=1 ORDER BY family_role, last_name`
+    ).bind(householdId).all()).results || [];
+    const entries = (await db.prepare(
+      `SELECT ge.amount, ge.method, f.name as fund_name,
+              COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as gift_date,
+              p.first_name, p.last_name
+       FROM giving_entries ge
+       JOIN funds f ON ge.fund_id=f.id
+       JOIN giving_batches gb ON ge.batch_id=gb.id
+       JOIN people p ON ge.person_id=p.id
+       WHERE p.household_id=?
+         AND substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4)=?
+       ORDER BY gift_date, p.last_name, ge.id`
+    ).bind(householdId, String(year)).all()).results || [];
+    const total = entries.reduce((s,e) => s + e.amount, 0);
+    return json({ household, members, year, entries, total_cents: total });
+  }
+
   // ── Attendance ───────────────────────────────────────────────────
   if (seg === 'attendance' && method === 'GET') {
     const from = url.searchParams.get('from') || (new Date().getFullYear() + '-01-01');
     const to   = url.searchParams.get('to')   || (new Date().getFullYear() + '-12-31');
     const type = url.searchParams.get('type') || '';
+    const order = (url.searchParams.get('order') || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
     let sql = 'SELECT * FROM worship_services WHERE service_date BETWEEN ? AND ?';
     const binds = [from, to];
     if (type) { sql += ' AND service_type=?'; binds.push(type); }
-    sql += ' ORDER BY service_date DESC, service_time ASC';
+    sql += ` ORDER BY service_date ${order}, service_time ASC`;
     const rows = (await db.prepare(sql).bind(...binds).all()).results || [];
     const totalRow = await db.prepare('SELECT COUNT(*) as n FROM worship_services').first();
     return json({ services: rows, total_in_db: totalRow?.n ?? 0 });
@@ -13501,11 +13564,13 @@ async function handleChmsApi(req, env, url, method, seg) {
     const from = url.searchParams.get('from') || (new Date().getFullYear() + '-01-01');
     const to   = url.searchParams.get('to')   || (new Date().getFullYear() + '-12-31');
     const rows = (await db.prepare(
-      `SELECT service_time, COUNT(*) as services, SUM(attendance) as total,
+      `SELECT service_time, service_type,
+              MAX(service_name) as service_name,
+              COUNT(*) as services, SUM(attendance) as total,
               ROUND(AVG(attendance)) as avg_attendance
        FROM worship_services
        WHERE attendance > 0 AND service_date BETWEEN ? AND ?
-       GROUP BY service_time ORDER BY service_time`
+       GROUP BY service_type, service_time ORDER BY service_type, service_time`
     ).bind(from, to).all()).results || [];
     // Sunday combined totals per date
     const sundays = (await db.prepare(
@@ -13628,13 +13693,18 @@ async function handleChmsApi(req, env, url, method, seg) {
     ).all()).results || [];
     if (services.length === 0) return json({ ok: true, synced: 0, failed: 0, message: 'No services with Breeze instance IDs found. Re-import the TSV first.' });
     let synced = 0, failed = 0;
+    const errors = [];
     for (const svc of services) {
       try {
         const res = await fetch(
           `https://${subdomain}.breezechms.com/api/events/attendance/list?instance_id=${svc.breeze_instance_id}&type=anonymous`,
           { headers: hdrs }
         );
-        if (!res.ok) { failed++; continue; }
+        if (!res.ok) {
+          const errText = await res.text().catch(() => res.status);
+          errors.push({ instance_id: svc.breeze_instance_id, date: svc.service_date, time: svc.service_time, error: `HTTP ${res.status}: ${errText}`.slice(0,120) });
+          failed++; continue;
+        }
         const data = await res.json();
         // Anonymous response is an array of check-in records; count = length
         // or may return [{count: N}] - handle both
@@ -13650,9 +13720,12 @@ async function handleChmsApi(req, env, url, method, seg) {
           await db.prepare('UPDATE worship_services SET attendance=? WHERE id=?').bind(count, svc.id).run();
           synced++;
         }
-      } catch { failed++; }
+      } catch(e) {
+        errors.push({ instance_id: svc.breeze_instance_id, date: svc.service_date, time: svc.service_time, error: String(e).slice(0,120) });
+        failed++;
+      }
     }
-    return json({ ok: true, synced, failed, total: services.length });
+    return json({ ok: true, synced, failed, errors: errors.slice(0, 20), total: services.length });
   }
 
   // ── Breeze Giving Debug ──────────────────────────────────────────
@@ -13726,6 +13799,55 @@ async function handleChmsApi(req, env, url, method, seg) {
     await db.prepare("INSERT INTO chms_config(key,value) VALUES('member_types',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .bind(JSON.stringify(types)).run();
     return json({ ok: true, types });
+  }
+
+  if (seg === 'config/church' && method === 'GET') {
+    const keys = ['church_ein','church_from_name','church_from_email','giving_letter_template','church_name'];
+    const rows = (await db.prepare(`SELECT key, value FROM chms_config WHERE key IN (${keys.map(()=>'?').join(',')})`).bind(...keys).all()).results || [];
+    const config = {};
+    for (const r of rows) config[r.key] = r.value;
+    return json(config);
+  }
+  if (seg === 'config/church' && method === 'PUT') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const allowed = ['church_ein','church_from_name','church_from_email','giving_letter_template','church_name'];
+    for (const k of allowed) {
+      if (b[k] !== undefined) {
+        await db.prepare("INSERT INTO chms_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(k, String(b[k])).run();
+      }
+    }
+    return json({ ok: true });
+  }
+
+  // ── Giving Reset ──────────────────────────────────────────────────
+  if (seg === 'giving/all' && method === 'DELETE') {
+    await db.batch([
+      db.prepare('DELETE FROM giving_entries'),
+      db.prepare('DELETE FROM giving_batches'),
+    ]);
+    return json({ ok: true });
+  }
+
+  // ── Send Giving Statement via Resend ─────────────────────────────
+  if (seg === 'giving/send-statement' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const { to_email, to_name, subject, html_body } = b;
+    if (!to_email || !html_body) return json({ error: 'to_email and html_body required' }, 400);
+    const fromNameRow = await db.prepare("SELECT value FROM chms_config WHERE key='church_from_name'").first();
+    const fromEmailRow = await db.prepare("SELECT value FROM chms_config WHERE key='church_from_email'").first();
+    const fromName = fromNameRow?.value || 'Timothy Lutheran Church';
+    const fromEmail = fromEmailRow?.value || '';
+    if (!fromEmail) return json({ error: 'church_from_email not configured in Settings' }, 400);
+    const apiKey = env.RESEND_API_KEY;
+    if (!apiKey) return json({ error: 'RESEND_API_KEY not set in Worker environment' }, 500);
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to_email], subject: subject || 'Your Giving Statement', html: html_body })
+    });
+    const rd = await res.json();
+    if (!res.ok) return json({ error: rd.message || 'Resend error' }, 500);
+    return json({ ok: true, id: rd.id });
   }
 
   // ── Breeze Fund List (with giving totals for mapping UI) ─────────
@@ -13958,6 +14080,13 @@ async function handleChmsApi(req, env, url, method, seg) {
     let imported = 0, skipped = 0;
     const errors = [];
     const entryInserts = [];
+    // Normalize M/D/YYYY or MM/DD/YYYY → YYYY-MM-DD for correct year filtering
+    const normDate = d => {
+      if (!d) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : d;
+    };
 
     for (let i = 1; i < lines.length; i++) {
       try {
@@ -13966,7 +14095,7 @@ async function handleChmsApi(req, env, url, method, seg) {
         if (!paymentId) continue;
         if (existingIds.has(paymentId)) { skipped++; continue; }
 
-        const date = (cols[iDate] || '').replace(/['"]/g, '').trim();
+        const date = normDate((cols[iDate] || '').replace(/['"]/g, '').trim());
         const batchNum = (cols[iBatch] || '').replace(/['"]/g, '').trim();
         const personBreezeId = iPersonId >= 0 ? (cols[iPersonId] || '').replace(/['"]/g, '').trim() : '';
         const amountStr = (cols[iAmount] || '').replace(/[$\s'"]/g, '');
@@ -16130,6 +16259,14 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   .c-link svg{width:14px;height:14px;flex-shrink:0;}
   header .hdr-sub{display:none;}
 }
+/* ── MULTI-SELECT ── */
+.p-card.selectable{cursor:pointer;position:relative;}
+.p-card.selectable:hover{box-shadow:0 0 0 2px var(--steel-anchor);}
+.p-card.selected{box-shadow:0 0 0 3px var(--steel-anchor);background:var(--blue-mist);}
+.p-select-cb{position:absolute;top:8px;left:8px;width:18px;height:18px;border:2px solid var(--border);border-radius:4px;background:var(--white);display:flex;align-items:center;justify-content:center;z-index:2;}
+.p-card.selected .p-select-cb{background:var(--steel-anchor);border-color:var(--steel-anchor);color:#fff;}
+/* ── SETTINGS ── */
+code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;font-family:monospace;}
 /* ── PRINT ── */
 @media print{
   header,.tab-bar,.toolbar,.modal-overlay,.hdr-actions,#offline-banner{display:none!important;}
@@ -16164,6 +16301,7 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   <button class="tab-btn" data-tab="reports" onclick="showTab('reports')">Reports</button>
   <button class="tab-btn" data-tab="attendance" onclick="showTab('attendance')">Attendance</button>
   <button class="tab-btn" data-tab="import" onclick="showTab('import')">Import</button>
+  <button class="tab-btn" data-tab="settings" onclick="showTab('settings')">Settings</button>
 </nav>
 
 <!-- ═══ PEOPLE TAB ═══ -->
@@ -16179,9 +16317,29 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
       <button class="pill" data-mt="inactive" onclick="setPeopleFilter(this,'inactive')">Inactive</button>
     </div>
     <div class="filter-pills" id="p-tag-pills" style="gap:4px;"></div>
-    <button class="btn-secondary" onclick="openTagsManager()">&#9881; Tags</button>
-    <button class="btn-secondary" onclick="openMemberTypesManager()" style="margin-left:auto;">&#9965; Member Types</button>
+    <button class="btn-secondary" id="p-select-btn" onclick="toggleSelectMode()" style="margin-left:auto;">&#9745; Select</button>
     <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
+  </div>
+  <!-- Bulk action bar (visible when Select mode is active) -->
+  <div id="p-bulk-bar" style="display:none;position:sticky;bottom:0;z-index:500;background:var(--steel-anchor);color:#fff;padding:10px 16px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span id="p-bulk-count" style="font-size:.9rem;font-weight:700;">0 selected</span>
+    <div style="flex:1;"></div>
+    <select id="p-bulk-mt" style="padding:5px 8px;border-radius:6px;border:none;font-size:.85rem;background:#fff;color:var(--charcoal);">
+      <option value="">Change Member Type…</option>
+    </select>
+    <button class="btn-sm" onclick="applyBulkMemberType()" style="background:#fff;color:var(--steel-anchor);">Apply</button>
+    <button class="btn-sm" onclick="openBulkTagsPanel()" style="background:#fff;color:var(--steel-anchor);">&#9881; Tags</button>
+    <button class="btn-sm" onclick="clearSelection()" style="background:rgba(255,255,255,.2);color:#fff;">Cancel</button>
+  </div>
+  <!-- Bulk tags mini-panel -->
+  <div id="p-bulk-tags-panel" style="display:none;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:4px 0 8px;">
+    <div style="font-size:.78rem;font-weight:700;color:var(--warm-gray);text-transform:uppercase;margin-bottom:8px;">Bulk Tag Management</div>
+    <div id="p-bulk-tags-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+    <div style="font-size:.75rem;color:var(--warm-gray);margin-bottom:6px;">&#9679; = add to all &nbsp; &#9675; = remove from all &nbsp; (empty = no change)</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="font-size:.82rem;padding:5px 12px;" onclick="applyBulkTags()">Apply Tags</button>
+      <button class="btn-secondary" style="font-size:.82rem;padding:5px 12px;" onclick="document.getElementById(&#39;p-bulk-tags-panel&#39;).style.display=&#39;none&#39;">Cancel</button>
+    </div>
   </div>
   <div id="p-status" class="status-msg"></div>
   <!-- Desktop grid -->
@@ -16200,6 +16358,7 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   </div>
   <div id="h-status" class="status-msg"></div>
   <div class="card-grid" id="h-grid"></div>
+  <div id="h-pager" style="display:flex;align-items:center;justify-content:center;padding:16px 0;gap:8px;"></div>
 </div>
 
 <!-- ═══ GIVING TAB ═══ -->
@@ -16249,16 +16408,37 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
       <div class="tile-icon">&#128196;</div>
       <div class="tile-title">Giving Statement</div>
       <div class="tile-desc">
-        <div class="field" style="margin:8px 0 4px;"><label>Person</label>
-          <div class="ac-wrap"><input type="text" id="rpt-person-search" placeholder="Search…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearch(this,'rpt-person-ac','rpt-person-id')"><div class="ac-dropdown" id="rpt-person-ac"></div></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;"><input type="radio" name="rpt-stmt-mode" value="person" checked onchange="toggleStmtMode()"> Person</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;"><input type="radio" name="rpt-stmt-mode" value="household" onchange="toggleStmtMode()"> Household</label>
+        </div>
+        <div id="rpt-stmt-person-row" class="field" style="margin:4px 0;">
+          <div class="ac-wrap"><input type="text" id="rpt-person-search" placeholder="Search person…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearch(this,&#39;rpt-person-ac&#39;,&#39;rpt-person-id&#39;)"><div class="ac-dropdown" id="rpt-person-ac"></div></div>
           <input type="hidden" id="rpt-person-id">
+        </div>
+        <div id="rpt-stmt-hh-row" class="field" style="margin:4px 0;display:none;">
+          <div class="ac-wrap"><input type="text" id="rpt-hh-search" placeholder="Search household…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearchHH(this)"><div class="ac-dropdown" id="rpt-hh-ac"></div></div>
+          <input type="hidden" id="rpt-hh-id">
         </div>
         <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="rpt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-          <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingStatement()">View</button>
+          <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingStatement()">View Statement</button>
+          <button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingStatementLetter()">View Letter</button>
           <button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="downloadStatement()">CSV</button>
-          <button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="window.print()">Print</button>
         </div>
+      </div>
+    </div>
+  </div>
+  <div class="report-tiles" style="margin-top:0;padding-top:0;">
+    <div class="report-tile">
+      <div class="tile-icon">&#128140;</div>
+      <div class="tile-title">Batch Send Statements</div>
+      <div class="tile-desc">
+        <div style="font-size:.82rem;color:var(--warm-gray);margin-bottom:8px;">Send year-end giving letters via email to all givers for a year.</div>
+        <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="batch-stmt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
+        <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;margin-top:6px;" onclick="loadBatchStatementGivers()">Load Givers</button>
+        <div id="batch-stmt-status" class="import-status" style="margin-top:6px;"></div>
+        <div id="batch-stmt-list" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
       </div>
     </div>
   </div>
@@ -16302,6 +16482,11 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
       <span style="font-size:.8rem;color:var(--warm-gray);">to</span>
       <input type="date" id="att-to" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
       <button class="btn-sm" onclick="loadAttendance()" style="padding:4px 8px;font-size:.75rem;">Filter</button>
+      <button class="btn-sm" id="att-order-btn" onclick="toggleAttOrder()" style="padding:4px 8px;font-size:.75rem;min-width:56px;" title="Toggle sort order">&#8595; Desc</button>
+      <select id="att-group-by" onchange="renderAttendanceListFromLoaded()" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
+        <option value="none">No grouping</option>
+        <option value="month">By Month</option>
+      </select>
     </div>
     <!-- "Add Sunday" inline form slot -->
     <div id="att-add-form" style="display:none;background:var(--white);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px;"></div>
@@ -16375,6 +16560,64 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
     <p>After importing the TSV, fetch actual headcounts from the Breeze Events API for each imported service. Only services still at 0 are updated (safe to re-run).</p>
     <button class="btn-primary" onclick="syncBreezeAttendanceCounts()">Sync Counts from Breeze</button>
     <div class="import-status" id="att-sync-status"></div>
+  </div>
+  <div class="import-card" style="border-color:#e74c3c;">
+    <h3 style="color:#e74c3c;">&#9888; Clear All Giving Data</h3>
+    <p>Permanently deletes all giving entries and batches from the database. Use this to start fresh before re-importing correct data. <strong>This cannot be undone.</strong></p>
+    <button style="background:#e74c3c;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;" onclick="clearAllGiving()">&#9888; Clear All Giving Data</button>
+    <div class="import-status" id="clear-giving-status"></div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS TAB ═══ -->
+<div id="tab-settings" class="tab-panel">
+  <div style="padding:16px 20px 24px;max-width:900px;">
+    <div id="st-status" class="status-msg" style="margin-bottom:8px;"></div>
+    <!-- Church Info Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#9962; Church Information</h3>
+      <p>Used in giving letters, email headers, and reports.</p>
+      <div class="modal-2col" style="margin-bottom:10px;">
+        <div class="field"><label>Church Name</label><input type="text" id="st-church-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>EIN (Tax ID)</label><input type="text" id="st-ein" placeholder="XX-XXXXXXX" style="width:100%;"></div>
+      </div>
+      <div class="modal-2col" style="margin-bottom:12px;">
+        <div class="field"><label>From Name (for emails)</label><input type="text" id="st-from-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>From Email</label><input type="email" id="st-from-email" placeholder="giving@yourdomain.org" style="width:100%;"></div>
+      </div>
+      <button class="btn-primary" onclick="saveSettings()">Save Church Info</button>
+    </div>
+    <!-- Letter Template Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#128140; Year-End Giving Letter Template</h3>
+      <p>Used when generating giving letters. Available placeholders: <code>{{name}}</code>, <code>{{year}}</code>, <code>{{total}}</code>, <code>{{ein}}</code>, <code>{{date}}</code>, <code>{{gift_table}}</code></p>
+      <textarea id="st-letter-tpl" rows="10" style="width:100%;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
+      <div style="margin-top:8px;">
+        <button class="btn-primary" onclick="saveSettings()">Save Template</button>
+        <button class="btn-secondary" onclick="resetLetterTemplate()" style="margin-left:8px;">Reset to Default</button>
+      </div>
+    </div>
+    <!-- Tags Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#9881; Tags</h3>
+      <p>Tags are used to categorize people. You can filter by tag in the People tab.</p>
+      <div id="settings-tags-list" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="st-new-tag-name" placeholder="New tag name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:160px;">
+        <input type="color" id="st-new-tag-color" value="#2E7EA6" style="width:40px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">
+        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="createTagSettings()">Add Tag</button>
+      </div>
+    </div>
+    <!-- Member Types Card -->
+    <div class="import-card">
+      <h3>&#9965; Member Types</h3>
+      <p>Define the member types available for people records.</p>
+      <div id="settings-member-types-list" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="st-new-type-name" placeholder="New type name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:180px;">
+        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="addMemberTypeSettings()">Add Type</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -16507,7 +16750,7 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-07-v5';
+var DEPLOY_VERSION = '2026-04-07-v6';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -16521,6 +16764,11 @@ var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:
 var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
+var _hhOffset = 0, _hhTotal = 0;
+var _attOrder = 'desc', _attGroupBy = 'none';
+var _selectMode = false, _selectedPeople = new Set();
+var _churchConfig = {};
+var DEFAULT_LETTER_TEMPLATE = 'Dear {{name}},\n\nThank you for your generous contributions to Timothy Lutheran Church during {{year}}. Your gifts make a difference in our ministry and community.\n\nBelow is a summary of your giving for {{year}}:\n\n{{gift_table}}\n\nTotal Contributions: {{total}}\n\n{{#if_ein}}Our EIN/Tax ID is {{ein}}. No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.{{/if_ein}}\n\nWith gratitude,\n\nTimothy Lutheran Church\n\nDate: {{date}}';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
 function api(path, opts) {
@@ -16576,6 +16824,7 @@ function showTab(name) {
   if (name === 'giving') loadBatches();
   if (name === 'reports') initReports();
   if (name === 'attendance') loadAttendance();
+  if (name === 'settings') loadSettings();
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
@@ -16609,6 +16858,8 @@ window.addEventListener('load', function() {
   }
   var dv = document.getElementById('deploy-ver');
   if (dv) dv.textContent = 'v' + DEPLOY_VERSION;
+  var bsy = document.getElementById('batch-stmt-year');
+  if (bsy) bsy.value = y;
   loadTags();
   loadFunds();
   loadMemberTypes();
@@ -16723,6 +16974,100 @@ function saveMemberTypes() {
   });
 }
 
+// ── SETTINGS ──────────────────────────────────────────────────────────
+function loadSettings() {
+  api('/admin/api/config/church').then(function(d) {
+    _churchConfig = d || {};
+    var el = document.getElementById('st-church-name');
+    if (el) el.value = d.church_name || 'Timothy Lutheran Church';
+    el = document.getElementById('st-ein');
+    if (el) el.value = d.church_ein || '';
+    el = document.getElementById('st-from-name');
+    if (el) el.value = d.church_from_name || '';
+    el = document.getElementById('st-from-email');
+    if (el) el.value = d.church_from_email || '';
+    el = document.getElementById('st-letter-tpl');
+    if (el) el.value = d.giving_letter_template || DEFAULT_LETTER_TEMPLATE;
+  });
+  api('/admin/api/tags').then(function(d) {
+    allTags = d.tags || [];
+    renderTagPills();
+    renderSettingsTagsList();
+  });
+  renderSettingsMemberTypesList();
+}
+function saveSettings() {
+  var data = {
+    church_name: (document.getElementById('st-church-name') || {}).value || '',
+    church_ein: (document.getElementById('st-ein') || {}).value || '',
+    church_from_name: (document.getElementById('st-from-name') || {}).value || '',
+    church_from_email: (document.getElementById('st-from-email') || {}).value || '',
+    giving_letter_template: (document.getElementById('st-letter-tpl') || {}).value || DEFAULT_LETTER_TEMPLATE
+  };
+  api('/admin/api/config/church', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(d) {
+    if (d.ok) { _churchConfig = data; setStatus('st-status', 'Saved!', 'ok'); setTimeout(function(){setStatus('st-status','');}, 2500); }
+    else setStatus('st-status', 'Error: ' + (d.error||'unknown'), 'err');
+  });
+}
+function resetLetterTemplate() {
+  var el = document.getElementById('st-letter-tpl');
+  if (el) el.value = DEFAULT_LETTER_TEMPLATE;
+}
+function renderSettingsTagsList() {
+  var c = document.getElementById('settings-tags-list');
+  if (!c) return;
+  if (!allTags.length) { c.innerHTML = '<p style="color:var(--warm-gray);font-size:.85rem;">No tags yet.</p>'; return; }
+  c.innerHTML = allTags.map(function(t) {
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--linen);">'
+      + '<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
+      + '<span style="flex:1;font-size:.9rem;">' + esc(t.name) + ' <span style="color:var(--warm-gray);font-size:.78rem;">(' + (t.person_count||0) + ')</span></span>'
+      + '<button onclick="deleteTagSettings(' + t.id + ')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.85rem;">&#10005;</button>'
+      + '</div>';
+  }).join('');
+}
+function createTagSettings() {
+  var name = (document.getElementById('st-new-tag-name') || {}).value || '';
+  var color = (document.getElementById('st-new-tag-color') || {}).value || '#2E7EA6';
+  name = name.trim();
+  if (!name) return;
+  api('/admin/api/tags', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,color:color})}).then(function() {
+    document.getElementById('st-new-tag-name').value = '';
+    loadSettings();
+    loadTags();
+  });
+}
+function deleteTagSettings(id) {
+  if (!confirm('Delete this tag? It will be removed from all people.')) return;
+  api('/admin/api/tags/' + id, {method:'DELETE'}).then(function() { loadSettings(); loadTags(); });
+}
+function renderSettingsMemberTypesList() {
+  var c = document.getElementById('settings-member-types-list');
+  if (!c) return;
+  c.innerHTML = _memberTypes.map(function(t, i) {
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--linen);">'
+      + '<span style="flex:1;font-size:.9rem;">' + esc(t) + '</span>'
+      + '<button onclick="deleteMemberTypeSettings(' + i + ')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.85rem;">&#10005;</button>'
+      + '</div>';
+  }).join('');
+}
+function addMemberTypeSettings() {
+  var name = ((document.getElementById('st-new-type-name') || {}).value || '').trim();
+  if (!name) return;
+  if (_memberTypes.some(function(t){return t.toLowerCase()===name.toLowerCase();})) {
+    alert('That type already exists.'); return;
+  }
+  _memberTypes = _memberTypes.concat([name]);
+  document.getElementById('st-new-type-name').value = '';
+  saveMemberTypes();
+  renderSettingsMemberTypesList();
+}
+function deleteMemberTypeSettings(idx) {
+  if (_memberTypes.length <= 1) { alert('Must have at least one member type.'); return; }
+  _memberTypes = _memberTypes.filter(function(_,i){return i!==idx;});
+  saveMemberTypes();
+  renderSettingsMemberTypesList();
+}
+
 // ── FUNDS ──────────────────────────────────────────────────────────────
 function loadFunds() {
   api('/admin/api/funds').then(function(d) { allFunds = d.funds || []; });
@@ -16778,14 +17123,20 @@ function peoplePage(dir) {
   loadPeople();
 }
 function renderPeopleDesktop(people) {
+  _loadedPeople = people;
   var c = document.getElementById('p-grid');
   if (!people.length) { c.innerHTML = '<div class="empty"><div class="empty-icon">&#128100;</div>No people found</div>'; return; }
   c.innerHTML = people.map(function(p) {
-    var cls = 'p-card' + (p.member_type === 'member' ? ' member' : '');
+    var isSelected = _selectedPeople.has(p.id);
+    var cls = 'p-card' + (p.member_type === 'member' ? ' member' : '') + (_selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    var clickHandler = _selectMode
+      ? 'onclick="togglePersonSelect(' + p.id + ', this)"'
+      : 'onclick="openPersonDetail(' + p.id + ')"';
     var tags = (p.tags||[]).map(function(t) {
       return '<span class="tag-chip" style="background:' + esc(t.color) + '20;border-color:' + esc(t.color) + ';color:' + esc(t.color) + '">' + esc(t.name) + '</span>';
     }).join('');
-    return '<div class="' + cls + '" onclick="openPersonDetail(' + p.id + ')">'
+    return '<div class="' + cls + '" ' + clickHandler + '>'
+      + (_selectMode ? '<div class="p-select-cb">' + (isSelected ? '&#10003;' : '') + '</div>' : '')
       + '<div class="p-card-top">'
       + '<div class="avatar">' + (p.photo_url ? '<img src="' + esc(p.photo_url) + '" alt="">' : initials(p.first_name, p.last_name)) + '</div>'
       + '<div><div class="p-name">' + esc(p.last_name) + ', ' + esc(p.first_name) + '</div>'
@@ -16798,6 +17149,120 @@ function renderPeopleDesktop(people) {
       + (tags ? '<div class="p-tags">' + tags + '</div>' : '')
       + '</div>';
   }).join('');
+}
+// ── MULTI-SELECT ──────────────────────────────────────────────────────
+function toggleSelectMode() {
+  _selectMode = !_selectMode;
+  _selectedPeople.clear();
+  var btn = document.getElementById('p-select-btn');
+  if (btn) btn.textContent = _selectMode ? '&#10005; Cancel Select' : '&#9745; Select';
+  var bar = document.getElementById('p-bulk-bar');
+  if (bar) bar.style.display = _selectMode ? 'flex' : 'none';
+  if (_selectMode) {
+    // Populate member type dropdown
+    var sel = document.getElementById('p-bulk-mt');
+    if (sel) {
+      sel.innerHTML = '<option value="">Change Member Type…</option>'
+        + _memberTypes.map(function(t) {
+          var v = t.toLowerCase().replace(/\s+/g,'-');
+          return '<option value="' + v + '">' + esc(t) + '</option>';
+        }).join('');
+    }
+    // Populate tags
+    renderBulkTagsPanel();
+  }
+  renderPeopleDesktop(_loadedPeople || []);
+}
+var _loadedPeople = [];
+function clearSelection() {
+  _selectMode = false;
+  _selectedPeople.clear();
+  var btn = document.getElementById('p-select-btn');
+  if (btn) btn.textContent = '&#9745; Select';
+  var bar = document.getElementById('p-bulk-bar');
+  if (bar) bar.style.display = 'none';
+  var panel = document.getElementById('p-bulk-tags-panel');
+  if (panel) panel.style.display = 'none';
+  renderPeopleDesktop(_loadedPeople || []);
+}
+function togglePersonSelect(id, el) {
+  if (_selectedPeople.has(id)) {
+    _selectedPeople.delete(id);
+    el.classList.remove('selected');
+  } else {
+    _selectedPeople.add(id);
+    el.classList.add('selected');
+  }
+  var cb = el.querySelector('.p-select-cb');
+  if (cb) cb.innerHTML = _selectedPeople.has(id) ? '&#10003;' : '';
+  var countEl = document.getElementById('p-bulk-count');
+  if (countEl) countEl.textContent = _selectedPeople.size + ' selected';
+}
+function applyBulkMemberType() {
+  var mt = document.getElementById('p-bulk-mt').value;
+  if (!mt) { alert('Please choose a member type.'); return; }
+  if (!_selectedPeople.size) { alert('No people selected.'); return; }
+  if (!confirm('Change member type to "' + mt + '" for ' + _selectedPeople.size + ' people?')) return;
+  var ids = Array.from(_selectedPeople);
+  var done = 0;
+  ids.forEach(function(id) {
+    api('/admin/api/people/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({member_type:mt})}).then(function() {
+      done++;
+      if (done === ids.length) { clearSelection(); loadPeople(); }
+    });
+  });
+}
+function renderBulkTagsPanel() {
+  var c = document.getElementById('p-bulk-tags-list');
+  if (!c) return;
+  c.innerHTML = allTags.map(function(t) {
+    return '<span data-btid="' + t.id + '" data-btstate="0" onclick="cycleBulkTag(this)" style="cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:100px;font-size:.8rem;background:var(--linen);color:var(--warm-gray);user-select:none;">'
+      + '<span class="tag-dot" style="background:' + esc(t.color) + '"></span>' + esc(t.name) + '</span>';
+  }).join('');
+}
+function cycleBulkTag(el) {
+  var state = parseInt(el.dataset.btstate || '0');
+  state = (state + 1) % 3; // 0=no change, 1=add, 2=remove
+  el.dataset.btstate = state;
+  if (state === 0) { el.style.background='var(--linen)'; el.style.color='var(--warm-gray)'; el.style.borderColor='var(--border)'; el.title=''; }
+  if (state === 1) { el.style.background='#d5f5e3'; el.style.color='#196f3d'; el.style.borderColor='#196f3d'; el.title='Will ADD to all selected'; }
+  if (state === 2) { el.style.background='#fadbd8'; el.style.color='#922b21'; el.style.borderColor='#922b21'; el.title='Will REMOVE from all selected'; }
+}
+function openBulkTagsPanel() {
+  if (!_selectedPeople.size) { alert('No people selected.'); return; }
+  renderBulkTagsPanel();
+  var panel = document.getElementById('p-bulk-tags-panel');
+  if (panel) panel.style.display = '';
+}
+function applyBulkTags() {
+  if (!_selectedPeople.size) { alert('No people selected.'); return; }
+  var adds = [], removes = [];
+  document.querySelectorAll('#p-bulk-tags-list [data-btid]').forEach(function(el) {
+    var state = parseInt(el.dataset.btstate || '0');
+    var tid = parseInt(el.dataset.btid);
+    if (state === 1) adds.push(tid);
+    if (state === 2) removes.push(tid);
+  });
+  if (!adds.length && !removes.length) {
+    document.getElementById('p-bulk-tags-panel').style.display = 'none'; return;
+  }
+  var ids = Array.from(_selectedPeople);
+  var done = 0;
+  ids.forEach(function(personId) {
+    // Fetch current tags, then add/remove
+    api('/admin/api/people/' + personId).then(function(p) {
+      var curTagIds = (p.tags || []).map(function(t){return t.id;});
+      var newTagIds = curTagIds.filter(function(id){return removes.indexOf(id)<0;});
+      adds.forEach(function(id){ if (newTagIds.indexOf(id)<0) newTagIds.push(id); });
+      return api('/admin/api/people/' + personId, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tag_ids:newTagIds})});
+    }).then(function() {
+      done++;
+      if (done === ids.length) {
+        document.getElementById('p-bulk-tags-panel').style.display = 'none';
+        clearSelection(); loadPeople();
+      }
+    });
+  });
 }
 function renderPeopleMobile(people) {
   var c = document.getElementById('p-contact-list');
@@ -16935,15 +17400,32 @@ function deletePerson() {
 // ── HOUSEHOLDS ────────────────────────────────────────────────────────
 function debounceHouseholds() {
   clearTimeout(_hDebounce);
-  _hDebounce = setTimeout(function() { loadHouseholds(); }, 300);
+  _hDebounce = setTimeout(function() { loadHouseholds(true); }, 300);
 }
-function loadHouseholds() {
+function loadHouseholds(resetPage) {
+  if (resetPage) _hhOffset = 0;
   var q = document.getElementById('h-search').value;
   setStatus('h-status', 'Loading…');
-  api('/admin/api/households?q=' + encodeURIComponent(q)).then(function(d) {
+  api('/admin/api/households?q=' + encodeURIComponent(q) + '&limit=50&offset=' + _hhOffset).then(function(d) {
     setStatus('h-status', '');
+    _hhTotal = d.total || 0;
     renderHouseholds(d.households || []);
+    renderHouseholdPager();
   });
+}
+function renderHouseholdPager() {
+  var el = document.getElementById('h-pager');
+  if (!el) return;
+  var limit = 50, offset = _hhOffset, total = _hhTotal;
+  if (total <= limit) { el.innerHTML = '<span style="color:var(--warm-gray);font-size:.82rem;">' + total + ' household' + (total !== 1 ? 's' : '') + '</span>'; return; }
+  var from = offset + 1, to = Math.min(offset + limit, total);
+  el.innerHTML = '<button class="btn-secondary" style="padding:4px 10px;font-size:.8rem;" onclick="hhPage(-1)" ' + (offset===0?'disabled':'') + '>&#8592; Prev</button>'
+    + '<span style="font-size:.82rem;color:var(--warm-gray);margin:0 10px;">' + from + '–' + to + ' of ' + total + '</span>'
+    + '<button class="btn-secondary" style="padding:4px 10px;font-size:.8rem;" onclick="hhPage(1)" ' + (to>=total?'disabled':'') + '>Next &#8594;</button>';
+}
+function hhPage(dir) {
+  _hhOffset = Math.max(0, _hhOffset + dir * 50);
+  loadHouseholds();
 }
 function renderHouseholds(rows) {
   var c = document.getElementById('h-grid');
@@ -17270,23 +17752,77 @@ function runGivingSummary() {
     );
   });
 }
+var _stmtData = null;
+function toggleStmtMode() {
+  var mode = document.querySelector('input[name="rpt-stmt-mode"]:checked').value;
+  document.getElementById('rpt-stmt-person-row').style.display = mode === 'person' ? '' : 'none';
+  document.getElementById('rpt-stmt-hh-row').style.display = mode === 'household' ? '' : 'none';
+}
+function acSearchHH(inp) {
+  var q = inp.value.trim();
+  var drop = document.getElementById('rpt-hh-ac');
+  if (!q) { drop.classList.remove('open'); return; }
+  api('/admin/api/households?q=' + encodeURIComponent(q) + '&limit=10').then(function(d) {
+    var items = (d.households || []);
+    if (!items.length) { drop.classList.remove('open'); return; }
+    drop.innerHTML = items.map(function(h) {
+      return '<div class="ac-item" onclick="selectHHAc(' + h.id + ',&#39;' + esc(h.name) + '&#39;)">' + esc(h.name) + '</div>';
+    }).join('');
+    drop.classList.add('open');
+  });
+}
+function selectHHAc(id, name) {
+  document.getElementById('rpt-hh-id').value = id;
+  document.getElementById('rpt-hh-search').value = name;
+  document.getElementById('rpt-hh-ac').classList.remove('open');
+}
 function runGivingStatement() {
-  var pid = document.getElementById('rpt-person-id').value;
+  var mode = (document.querySelector('input[name="rpt-stmt-mode"]:checked') || {}).value || 'person';
   var yr = document.getElementById('rpt-year').value;
-  if (!pid) { alert('Please select a person.'); return; }
   if (!yr) { alert('Please enter a year.'); return; }
+  if (mode === 'household') {
+    var hhid = document.getElementById('rpt-hh-id').value;
+    if (!hhid) { alert('Please select a household.'); return; }
+    api('/admin/api/reports/giving-statement-household?household_id=' + hhid + '&year=' + yr).then(function(d) {
+      if (d.error) { alert(d.error); return; }
+      _stmtData = d; _stmtData._mode = 'household';
+      var hh = d.household || {};
+      var rows = (d.entries||[]).map(function(e) {
+        return '<tr><td>' + esc(fmtDate(e.gift_date)) + '</td><td>' + esc(e.first_name + ' ' + e.last_name) + '</td><td>' + esc(e.fund_name) + '</td><td style="text-align:right;">' + fmtMoney(e.amount) + '</td></tr>';
+      }).join('');
+      showRptOutput(
+        '<div style="max-width:620px;margin:0 auto;">'
+        + '<div style="text-align:center;margin-bottom:16px;"><div style="font-family:var(--font-head);font-size:1.2rem;color:var(--steel-anchor);">' + esc(_churchConfig.church_name || 'Timothy Lutheran Church') + '</div>'
+        + '<div style="font-size:.9rem;color:var(--warm-gray);">Household Giving Statement — ' + esc(String(yr)) + '</div></div>'
+        + '<div style="margin-bottom:14px;font-size:.9rem;"><div><strong>Household:</strong> ' + esc(hh.name) + '</div></div>'
+        + '<table class="rpt-table"><thead><tr><th>Date</th><th>Person</th><th>Fund</th><th style="text-align:right;">Amount</th></tr></thead><tbody>'
+        + rows
+        + '<tr class="rpt-total"><td colspan="3">Total ' + esc(String(yr)) + '</td><td style="text-align:right;">' + fmtMoney(d.total_cents||0) + '</td></tr>'
+        + '</tbody></table>'
+        + '<div style="font-size:.78rem;color:var(--warm-gray);margin-top:16px;font-style:italic;">No goods or services were provided in exchange for these contributions. Please retain for your tax records.</div>'
+        + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">'
+        + '<button class="btn-secondary" style="font-size:.8rem;" onclick="window.print()">Print</button>'
+        + '<button class="btn-secondary" style="font-size:.8rem;" onclick="runGivingStatementLetter()">View Letter</button>'
+        + '</div></div>'
+      );
+    });
+    return;
+  }
+  var pid = document.getElementById('rpt-person-id').value;
+  if (!pid) { alert('Please select a person.'); return; }
   api('/admin/api/reports/giving-statement?person_id=' + pid + '&year=' + yr).then(function(d) {
     if (d.error) { alert(d.error); return; }
+    _stmtData = d; _stmtData._mode = 'person';
     var p = d.person || {};
     var addr = [p.address1, p.city, p.state, p.zip].filter(Boolean).join(', ');
     var rows = (d.entries||[]).map(function(e) {
-      return '<tr><td>' + esc(fmtDate(e.batch_date)) + '</td><td>' + esc(e.fund_name) + '</td><td style="text-align:right;">' + fmtMoney(e.amount) + '</td><td>' + esc(e.method) + '</td></tr>';
+      return '<tr><td>' + esc(fmtDate(e.gift_date)) + '</td><td>' + esc(e.fund_name) + '</td><td style="text-align:right;">' + fmtMoney(e.amount) + '</td><td>' + esc(e.method) + '</td></tr>';
     }).join('');
     showRptOutput(
       '<div style="max-width:600px;margin:0 auto;">'
       + '<div style="text-align:center;margin-bottom:20px;">'
-      + '<div style="font-family:var(--font-head);font-size:1.2rem;color:var(--steel-anchor);">Timothy Lutheran Church</div>'
-      + '<div style="font-size:.9rem;color:var(--warm-gray);">Charitable Contribution Statement — ' + esc(yr) + '</div>'
+      + '<div style="font-family:var(--font-head);font-size:1.2rem;color:var(--steel-anchor);">' + esc(_churchConfig.church_name || 'Timothy Lutheran Church') + '</div>'
+      + '<div style="font-size:.9rem;color:var(--warm-gray);">Charitable Contribution Statement — ' + esc(String(yr)) + '</div>'
       + '</div>'
       + '<div style="margin-bottom:16px;font-size:.9rem;">'
       + '<div><strong>Prepared for:</strong> ' + esc(p.first_name) + ' ' + esc(p.last_name) + '</div>'
@@ -17294,20 +17830,252 @@ function runGivingStatement() {
       + '</div>'
       + '<table class="rpt-table"><thead><tr><th>Date</th><th>Fund</th><th style="text-align:right;">Amount</th><th>Method</th></tr></thead><tbody>'
       + rows
-      + '<tr class="rpt-total"><td colspan="2">Total ' + esc(yr) + '</td><td style="text-align:right;">' + fmtMoney(d.total_cents||0) + '</td><td></td></tr>'
+      + '<tr class="rpt-total"><td colspan="2">Total ' + esc(String(yr)) + '</td><td style="text-align:right;">' + fmtMoney(d.total_cents||0) + '</td><td></td></tr>'
       + '</tbody></table>'
       + '<div style="font-size:.78rem;color:var(--warm-gray);margin-top:16px;font-style:italic;">No goods or services were provided in exchange for these contributions. Please retain for your tax records.</div>'
-      + '<div style="margin-top:8px;display:flex;gap:8px;"><button class="btn-secondary" style="font-size:.8rem;" onclick="window.print()">Print</button>'
-      + '<button class="btn-secondary" style="font-size:.8rem;" onclick="downloadStatement()">Download CSV</button></div>'
+      + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
+      + '<button class="btn-secondary" style="font-size:.8rem;" onclick="window.print()">Print</button>'
+      + '<button class="btn-secondary" style="font-size:.8rem;" onclick="runGivingStatementLetter()">View Letter</button>'
+      + '<button class="btn-secondary" style="font-size:.8rem;" onclick="emailGivingLetter()">&#9993; Email Letter</button>'
+      + '<button class="btn-secondary" style="font-size:.8rem;" onclick="downloadStatement()">Download CSV</button>'
+      + '</div>'
       + '</div>'
     );
   });
 }
+function buildGiftTable(entries, mode) {
+  if (!entries || !entries.length) return 'No contributions recorded for this period.';
+  var header = mode === 'household'
+    ? '<tr><th>Date</th><th>Person</th><th>Fund</th><th>Amount</th></tr>'
+    : '<tr><th>Date</th><th>Fund</th><th>Amount</th><th>Method</th></tr>';
+  var rows = entries.map(function(e) {
+    if (mode === 'household')
+      return '<tr><td>' + esc(fmtDate(e.gift_date)) + '</td><td>' + esc(e.first_name + ' ' + e.last_name) + '</td><td>' + esc(e.fund_name) + '</td><td>' + fmtMoney(e.amount) + '</td></tr>';
+    return '<tr><td>' + esc(fmtDate(e.gift_date)) + '</td><td>' + esc(e.fund_name) + '</td><td>' + fmtMoney(e.amount) + '</td><td>' + esc(e.method) + '</td></tr>';
+  }).join('');
+  return '<table style="width:100%;border-collapse:collapse;font-size:.9rem;"><thead style="background:#f5f5f5;">' + header + '</thead><tbody>' + rows + '</tbody></table>';
+}
+function renderLetterHTML(d) {
+  var cfg = _churchConfig;
+  var tpl = cfg.giving_letter_template || DEFAULT_LETTER_TEMPLATE;
+  var name, total, year;
+  if (d._mode === 'household') {
+    name = (d.household || {}).name || 'Friend';
+    total = fmtMoney(d.total_cents || 0);
+    year = String(d.year || '');
+  } else {
+    var p = d.person || {};
+    name = (p.first_name + ' ' + p.last_name).trim() || 'Friend';
+    total = fmtMoney(d.total_cents || 0);
+    year = String(d.year || '');
+  }
+  var giftTable = buildGiftTable(d.entries || [], d._mode);
+  var ein = cfg.church_ein || '';
+  var einLine = ein ? 'Our EIN/Tax ID is ' + ein + '. No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.' : 'No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.';
+  var today = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+  var letter = tpl
+    .replace(/\{\{name\}\}/g, name)
+    .replace(/\{\{year\}\}/g, year)
+    .replace(/\{\{total\}\}/g, total)
+    .replace(/\{\{ein\}\}/g, ein)
+    .replace(/\{\{date\}\}/g, today)
+    .replace(/\{\{gift_table\}\}/g, giftTable)
+    .replace(/\{\{#if_ein\}\}[\s\S]*?\{\{\/if_ein\}\}/g, ein ? einLine : '');
+  // Convert newlines to <br> for display
+  return letter.replace(/\n/g, '<br>');
+}
+function runGivingStatementLetter() {
+  if (!_stmtData) { alert('Run a giving statement first.'); return; }
+  if (!_churchConfig.church_name) {
+    // Load config if not yet loaded
+    api('/admin/api/config/church').then(function(cfg) {
+      _churchConfig = cfg || {};
+      showGivingLetter();
+    });
+  } else {
+    showGivingLetter();
+  }
+}
+function showGivingLetter() {
+  var d = _stmtData;
+  var letterHtml = renderLetterHTML(d);
+  var name, email, yr;
+  yr = String(d.year || document.getElementById('rpt-year').value || '');
+  if (d._mode === 'household') {
+    name = (d.household || {}).name || '';
+    email = '';
+  } else {
+    var p = d.person || {};
+    name = (p.first_name + ' ' + p.last_name).trim();
+    email = p.email || '';
+  }
+  var churchName = _churchConfig.church_name || 'Timothy Lutheran Church';
+  showRptOutput(
+    '<div style="max-width:640px;margin:0 auto;">'
+    + '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">'
+    + '<button class="btn-secondary" style="font-size:.8rem;" onclick="runGivingStatement()">&#8592; Back to Statement</button>'
+    + '<button class="btn-secondary" style="font-size:.8rem;" onclick="window.print()">Print Letter</button>'
+    + (email ? '<button class="btn-primary" style="font-size:.8rem;" onclick="emailGivingLetter()">&#9993; Email to ' + esc(email) + '</button>' : '')
+    + '<div id="letter-email-status" class="import-status" style="align-self:center;"></div>'
+    + '</div>'
+    + '<div id="letter-body" style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:28px 32px;font-size:.92rem;line-height:1.65;">'
+    + '<div style="font-family:var(--font-head);font-size:1.1rem;color:var(--steel-anchor);margin-bottom:4px;">' + esc(churchName) + '</div>'
+    + '<hr style="margin:12px 0;">'
+    + letterHtml
+    + '</div></div>'
+  );
+}
+function emailGivingLetter() {
+  if (!_stmtData) return;
+  var p = _stmtData.person || {};
+  var email = p.email || '';
+  if (!email) { alert('No email address on file for this person.'); return; }
+  var status = document.getElementById('letter-email-status');
+  if (status) { status.textContent = 'Sending…'; status.className = 'import-status'; }
+  var yr = String(_stmtData.year || '');
+  var churchName = _churchConfig.church_name || 'Timothy Lutheran Church';
+  var letterHtml = renderLetterHTML(_stmtData);
+  var fullHtml = '<div style="font-family:Georgia,serif;font-size:14px;line-height:1.65;max-width:560px;">'
+    + '<div style="font-size:16px;font-weight:bold;margin-bottom:6px;">' + esc(churchName) + '</div>'
+    + '<hr style="margin:10px 0;">'
+    + letterHtml + '</div>';
+  api('/admin/api/giving/send-statement', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      to_email: email,
+      to_name: (p.first_name + ' ' + p.last_name).trim(),
+      subject: yr + ' Charitable Contribution Statement — ' + churchName,
+      html_body: fullHtml
+    })
+  }).then(function(d) {
+    if (status) {
+      if (d.ok) { status.textContent = 'Sent to ' + email; status.className = 'import-status ok'; }
+      else { status.textContent = 'Error: ' + (d.error || 'unknown'); status.className = 'import-status err'; }
+    }
+  }).catch(function(e) {
+    if (status) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; }
+  });
+}
 function downloadStatement() {
-  var pid = document.getElementById('rpt-person-id').value;
+  var mode = (document.querySelector('input[name="rpt-stmt-mode"]:checked') || {}).value || 'person';
   var yr = document.getElementById('rpt-year').value;
+  if (!yr) { alert('Enter a year first.'); return; }
+  if (mode === 'household') {
+    alert('CSV download is only available for person statements. Use Print or View Letter for household statements.');
+    return;
+  }
+  var pid = document.getElementById('rpt-person-id').value;
   if (!pid || !yr) { alert('Select a person and year first.'); return; }
   window.location = '/admin/api/reports/giving-statement?person_id=' + pid + '&year=' + yr + '&format=csv';
+}
+// ── BATCH SEND ─────────────────────────────────────────────────────────
+function loadBatchStatementGivers() {
+  var yr = document.getElementById('batch-stmt-year').value;
+  var status = document.getElementById('batch-stmt-status');
+  var listEl = document.getElementById('batch-stmt-list');
+  if (!yr) { status.textContent = 'Enter a year.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Loading givers for ' + yr + '…'; status.className = 'import-status';
+  listEl.innerHTML = '';
+  // Fetch people who gave in this year (via giving summary approach - get all people with giving)
+  api('/admin/api/reports/giving-statement?year=' + yr + '&list_givers=1').then(function(d) {
+    var givers = d.givers || [];
+    if (!givers.length) {
+      status.textContent = 'No givers with email found for ' + yr + '.';
+      status.className = 'import-status err';
+      return;
+    }
+    status.textContent = givers.length + ' givers found with email. Check who to include, then Send.';
+    status.className = 'import-status ok';
+    listEl.innerHTML = '<div style="margin-bottom:8px;display:flex;gap:8px;">'
+      + '<button class="btn-sm" onclick="selectAllBatchGivers(true)">Select All</button>'
+      + '<button class="btn-sm" onclick="selectAllBatchGivers(false)">Deselect All</button>'
+      + '<button class="btn-primary" style="font-size:.8rem;padding:4px 12px;" onclick="sendBatchStatements(' + yr + ')">Send Selected</button>'
+      + '</div>'
+      + '<div id="batch-givers-list">'
+      + givers.map(function(g) {
+        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;cursor:pointer;">'
+          + '<input type="checkbox" data-pid="' + g.id + '" checked>'
+          + '<span>' + esc(g.first_name + ' ' + g.last_name) + '</span>'
+          + '<span style="color:var(--warm-gray);font-size:.78rem;">' + esc(g.email) + '</span>'
+          + '<span style="margin-left:auto;font-size:.78rem;">' + fmtMoney(g.total_cents) + '</span>'
+          + '</label>';
+      }).join('')
+      + '</div>';
+  }).catch(function(e) {
+    status.textContent = 'Error: ' + e.message; status.className = 'import-status err';
+  });
+}
+function selectAllBatchGivers(checked) {
+  document.querySelectorAll('#batch-givers-list input[type=checkbox]').forEach(function(cb) { cb.checked = checked; });
+}
+function sendBatchStatements(yr) {
+  var status = document.getElementById('batch-stmt-status');
+  var checks = document.querySelectorAll('#batch-givers-list input[type=checkbox]:checked');
+  if (!checks.length) { status.textContent = 'No givers selected.'; status.className = 'import-status err'; return; }
+  // Ensure church config is loaded
+  if (!_churchConfig.church_name) {
+    api('/admin/api/config/church').then(function(cfg) {
+      _churchConfig = cfg || {};
+      doSendBatch(yr, checks, status);
+    });
+  } else {
+    doSendBatch(yr, checks, status);
+  }
+}
+function doSendBatch(yr, checks, status) {
+  var ids = Array.from(checks).map(function(cb){return cb.dataset.pid;});
+  var total = ids.length, done = 0, failed = 0;
+  status.textContent = 'Sending 0/' + total + '…'; status.className = 'import-status';
+  function sendNext() {
+    if (!ids.length) {
+      status.textContent = 'Done. ' + done + ' sent, ' + failed + ' failed.';
+      status.className = failed ? 'import-status' : 'import-status ok';
+      return;
+    }
+    var pid = ids.shift();
+    api('/admin/api/reports/giving-statement?person_id=' + pid + '&year=' + yr).then(function(d) {
+      if (d.error || !d.person) { failed++; sendNext(); return; }
+      d._mode = 'person';
+      var p = d.person || {};
+      if (!p.email) { failed++; sendNext(); return; }
+      var churchName = _churchConfig.church_name || 'Timothy Lutheran Church';
+      var letterHtml = renderLetterHTML(d);
+      var fullHtml = '<div style="font-family:Georgia,serif;font-size:14px;line-height:1.65;max-width:560px;">'
+        + '<div style="font-size:16px;font-weight:bold;margin-bottom:6px;">' + esc(churchName) + '</div><hr style="margin:10px 0;">'
+        + letterHtml + '</div>';
+      return api('/admin/api/giving/send-statement', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          to_email: p.email,
+          to_name: (p.first_name + ' ' + p.last_name).trim(),
+          subject: yr + ' Charitable Contribution Statement — ' + churchName,
+          html_body: fullHtml
+        })
+      });
+    }).then(function(r) {
+      if (r && r.ok) done++; else failed++;
+      status.textContent = 'Sending ' + (done+failed) + '/' + total + '…';
+      sendNext();
+    }).catch(function() { failed++; sendNext(); });
+  }
+  sendNext();
+}
+// ── CLEAR GIVING ──────────────────────────────────────────────────────
+function clearAllGiving() {
+  if (!confirm('This will PERMANENTLY DELETE all giving entries and batches. This cannot be undone.\n\nAre you absolutely sure?')) return;
+  if (!confirm('Last chance — click OK to permanently delete ALL giving data.')) return;
+  var status = document.getElementById('clear-giving-status');
+  status.textContent = 'Deleting…'; status.className = 'import-status';
+  api('/admin/api/giving/all', {method:'DELETE'}).then(function(d) {
+    if (d.ok) {
+      status.textContent = 'All giving data cleared. You can now re-import.';
+      status.className = 'import-status ok';
+      loadBatches();
+    } else {
+      status.textContent = 'Error: ' + (d.error||'unknown');
+      status.className = 'import-status err';
+    }
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
 // ── IMPORT ──────────────────────────────────────────────────────────────
@@ -17513,8 +18281,12 @@ function syncBreezeAttendanceCounts() {
   api('/admin/api/import/breeze-attendance-sync', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({only_empty:true})}).then(function(d) {
     if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
     if (d.message) { status.textContent = d.message; status.className = 'import-status err'; return; }
-    status.textContent = 'Done. ' + d.synced + ' services updated with attendance counts' + (d.failed ? ', ' + d.failed + ' failed.' : '.');
-    status.className = 'import-status ok';
+    var msg = 'Done. ' + d.synced + ' services updated' + (d.failed ? ', ' + d.failed + ' failed' : '') + ' (of ' + d.total + ' total).';
+    if (d.errors && d.errors.length) {
+      msg += ' First errors: ' + d.errors.slice(0,3).map(function(e){return e.date+' '+e.time+': '+e.error;}).join('; ');
+    }
+    status.textContent = msg;
+    status.className = d.failed ? 'import-status' : 'import-status ok';
   }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
@@ -17544,12 +18316,24 @@ var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 function loadAttendance() {
   var from = document.getElementById('att-from').value;
   var to = document.getElementById('att-to').value;
-  var q = '/admin/api/attendance?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+  var q = '/admin/api/attendance?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&order=' + _attOrder;
   api(q).then(function(d) {
     _loadedServices = d.services || [];
+    _attTotalInDb = d.total_in_db || 0;
     renderAttendanceChart(_loadedServices);
-    renderAttendanceList(_loadedServices, d.total_in_db || 0);
+    renderAttendanceList(_loadedServices, _attTotalInDb);
   });
+}
+function renderAttendanceListFromLoaded() {
+  _attGroupBy = (document.getElementById('att-group-by') || {}).value || 'none';
+  renderAttendanceList(_loadedServices, _attTotalInDb || 0);
+}
+var _attTotalInDb = 0;
+function toggleAttOrder() {
+  _attOrder = _attOrder === 'desc' ? 'asc' : 'desc';
+  var btn = document.getElementById('att-order-btn');
+  if (btn) btn.textContent = _attOrder === 'asc' ? '&#8593; Asc' : '&#8595; Desc';
+  loadAttendance();
 }
 
 function renderAttendanceChart(services) {
@@ -17624,6 +18408,7 @@ function renderAttendanceList(services, totalInDb) {
       + '</div>';
     return;
   }
+  var groupBy = (document.getElementById('att-group-by') || {}).value || _attGroupBy || 'none';
   // Group by date
   var byDate = {};
   var dates = [];
@@ -17632,7 +18417,19 @@ function renderAttendanceList(services, totalInDb) {
     byDate[s.service_date].push(s);
   });
   var html = '';
+  var lastMonth = '';
+  var MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   dates.forEach(function(date) {
+    // Month group header
+    if (groupBy === 'month') {
+      var parts2 = date.split('-');
+      var monthKey = parts2[0] + '-' + parts2[1];
+      if (monthKey !== lastMonth) {
+        lastMonth = monthKey;
+        html += '<div style="padding:8px 14px 4px;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);background:var(--linen);border-bottom:1px solid var(--border);">'
+          + MONTH_FULL[parseInt(parts2[1])-1] + ' ' + parts2[0] + '</div>';
+      }
+    }
     var rows = byDate[date];
     var combined = rows.reduce(function(sum, r) { return sum + (r.attendance || 0); }, 0);
     var parts = date.split('-');
@@ -17825,8 +18622,8 @@ function runAttendanceByTime() {
     var html = '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance by Service Time</div>';
     html += '<table class="rpt-table" style="margin-bottom:16px;"><thead><tr><th>Service</th><th style="text-align:right;">Services</th><th style="text-align:right;">Total</th><th style="text-align:right;">Avg/Service</th></tr></thead><tbody>';
     (d.by_time || []).forEach(function(r) {
-      var lbl = r.service_time === '08:00' ? '8am' : r.service_time === '10:45' ? '10:45am' : esc(r.service_time);
-      html += '<tr><td>' + lbl + '</td><td style="text-align:right;">' + r.services + '</td><td style="text-align:right;">' + r.total + '</td><td style="text-align:right;">' + r.avg_attendance + '</td></tr>';
+      var lbl = r.service_name || (r.service_time === '08:00' ? '8am Service' : r.service_time === '10:45' ? '10:45am Service' : esc(r.service_time));
+      html += '<tr><td>' + esc(lbl) + '</td><td style="text-align:right;">' + r.services + '</td><td style="text-align:right;">' + r.total + '</td><td style="text-align:right;">' + r.avg_attendance + '</td></tr>';
     });
     html += '</tbody></table>';
     if (d.sundays && d.sundays.length) {
