@@ -16606,7 +16606,13 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div style="padding:16px 20px 20px;">
     <!-- Chart card -->
     <div class="att-chart-card">
-      <div class="att-stats-row" id="att-stats"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+        <div class="att-stats-row" id="att-stats" style="flex:1;flex-wrap:wrap;"></div>
+        <div style="display:flex;gap:4px;flex-shrink:0;padding-left:8px;">
+          <button class="btn-sm" id="att-mode-line" onclick="setAttChartMode(&#39;line&#39;)" style="padding:3px 8px;font-size:.75rem;" title="Line chart">Line</button>
+          <button class="btn-sm" id="att-mode-bars" onclick="setAttChartMode(&#39;bars&#39;)" style="padding:3px 8px;font-size:.75rem;opacity:.55;" title="Monthly bars">Bars</button>
+        </div>
+      </div>
       <div id="att-chart-wrap"></div>
     </div>
     <!-- Controls row -->
@@ -16893,7 +16899,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-07-v13';
+var DEPLOY_VERSION = '2026-04-08-v14';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -16908,7 +16914,7 @@ var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
 var _hhOffset = 0, _hhTotal = 0;
-var _attOrder = 'desc', _attGroupBy = 'none';
+var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
 var _churchConfig = {};
 var DEFAULT_LETTER_TEMPLATE = 'Dear {{name}},\\n\\nThank you for your generous contributions to Timothy Lutheran Church during {{year}}. Your gifts make a difference in our ministry and community.\\n\\nBelow is a summary of your giving for {{year}}:\\n\\n{{gift_table}}\\n\\nTotal Contributions: {{total}}\\n\\n{{#if_ein}}Our EIN/Tax ID is {{ein}}. No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.{{/if_ein}}\\n\\nWith gratitude,\\n\\nTimothy Lutheran Church\\n\\nDate: {{date}}';
@@ -18488,6 +18494,14 @@ function toggleAttOrder() {
   if (btn) btn.textContent = _attOrder === 'asc' ? '&#8593; Asc' : '&#8595; Desc';
   loadAttendance();
 }
+function setAttChartMode(m) {
+  _attChartMode = m;
+  var bl = document.getElementById('att-mode-line');
+  var bb = document.getElementById('att-mode-bars');
+  if (bl) bl.style.opacity = m === 'line' ? '1' : '.55';
+  if (bb) bb.style.opacity = m === 'bars' ? '1' : '.55';
+  renderAttendanceChart(_loadedServices);
+}
 
 function renderAttendanceChart(services) {
   var today = new Date().toISOString().slice(0,10);
@@ -18512,14 +18526,69 @@ function renderAttendanceChart(services) {
   var latest = byDate[dataPts[dataPts.length-1]];
   var latestDate = dataPts[dataPts.length-1].split('-');
   var latestLbl = MONTH_NAMES[parseInt(latestDate[1])-1]+' '+parseInt(latestDate[2]);
+  var peakVal = Math.max.apply(null, vals);
+  var peakIdx = vals.indexOf(peakVal);
+  var peakParts = dataPts[peakIdx].split('-');
+  var peakLbl = MONTH_NAMES[parseInt(peakParts[1])-1]+' '+parseInt(peakParts[2])+', '+peakParts[0];
+  var curYear = today.slice(0,4);
+  var priorYear = String(parseInt(curYear)-1);
+  var todayMD = today.slice(5);
+  var annualTotal = dataPts.reduce(function(s,d){return d.slice(0,4)===curYear?s+byDate[d]:s;},0);
+  var ytdCur = annualTotal;
+  var ytdPrior = dataPts.reduce(function(s,d){return d.slice(0,4)===priorYear&&d.slice(5)<=todayMD?s+byDate[d]:s;},0);
+  var ytdHtml = '';
+  if (ytdCur>0 && ytdPrior>0) {
+    var pct = Math.round((ytdCur-ytdPrior)/ytdPrior*100);
+    var pctColor = pct>=0 ? '#3a7d44' : '#b03a2e';
+    ytdHtml = '<div><div class="att-stat-val" style="color:'+pctColor+';">'+(pct>=0?'+':'')+pct+'%</div><div class="att-stat-lbl">YTD vs '+priorYear+'</div></div>';
+  }
   if (statsEl) statsEl.innerHTML =
     '<div><div class="att-stat-val">'+latest+'</div><div class="att-stat-lbl">Latest ('+latestLbl+')</div></div>'
     +'<div><div class="att-stat-val">'+avg+'</div><div class="att-stat-lbl">Weekly Avg</div></div>'
+    +'<div><div class="att-stat-val">'+peakVal+'</div><div class="att-stat-lbl">Peak ('+peakLbl+')</div></div>'
+    +(annualTotal?'<div><div class="att-stat-val">'+annualTotal+'</div><div class="att-stat-lbl">'+curYear+' Total</div></div>':'')
+    +ytdHtml
     +'<div><div class="att-stat-val">'+dataPts.length+'</div><div class="att-stat-lbl">Sundays w/ Data</div></div>';
 
   var W=800,H=160,pL=32,pR=10,pT=8,pB=28,cW=W-pL-pR,cH=H-pT-pB;
-  var maxV=Math.max.apply(null,vals)*1.1||1;
   var n=dataPts.length;
+  var cw=document.getElementById('att-chart-wrap');
+
+  if (_attChartMode === 'bars') {
+    var byMonth={}, bMonths=[];
+    dataPts.forEach(function(d){
+      var mk=d.slice(0,7);
+      if(!byMonth[mk]){byMonth[mk]=0;bMonths.push(mk);}
+      byMonth[mk]+=byDate[d];
+    });
+    var bVals=bMonths.map(function(m){return byMonth[m];});
+    var maxV2=Math.max.apply(null,bVals)*1.1||1;
+    var nb=bMonths.length;
+    var slotW=(W-pL-pR)/nb;
+    var barW=Math.max(4,Math.min(32,slotW*0.7));
+    var px2=function(i){return pL+(i+0.5)*slotW;};
+    var py2=function(v){return pT+cH-(v/maxV2)*cH;};
+    var baseY=pT+cH;
+    var grid2='',ylbls2='',xlbls2='',bars2='';
+    [0,Math.round(maxV2*0.5/1.1),Math.round(maxV2/1.1)].forEach(function(v){
+      var yy=py2(v);
+      grid2+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+      ylbls2+='<text x="'+(pL-3)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+Math.round(v)+'</text>';
+    });
+    var stepB=Math.max(1,Math.ceil(nb/8));
+    for(var bi=0;bi<nb;bi+=stepB){
+      var mp=bMonths[bi].split('-');
+      xlbls2+='<text x="'+px2(bi).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+MONTH_NAMES[parseInt(mp[1])-1]+' '+mp[0].slice(2)+'</text>';
+    }
+    bars2=bMonths.map(function(m,bi2){
+      var bx=px2(bi2),bv=byMonth[m],by=py2(bv),bh=baseY-by;
+      return '<rect x="'+(bx-barW/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="#2E7EA6" rx="2" opacity="0.85"><title>'+m+': '+bv+'</title></rect>';
+    }).join('');
+    if(cw) cw.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid2+bars2+xlbls2+ylbls2+'</svg>';
+    return;
+  }
+
+  var maxV=Math.max.apply(null,vals)*1.1||1;
   var px=function(i){return pL+(i/(n>1?n-1:1))*cW;};
   var py=function(v){return pT+cH-(v/maxV)*cH;};
   var pts=dataPts.map(function(d,i){return [px(i),py(byDate[d])];});
@@ -18528,24 +18597,149 @@ function renderAttendanceChart(services) {
   var step=Math.max(1,Math.ceil(n/7));
   var xlbls='',ylbls='',grid='';
   [0,Math.round(maxV*0.5/1.1),Math.round(maxV/1.1)].forEach(function(v){
-    var y=py(v);
-    grid+='<line x1="'+pL+'" y1="'+y.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+y.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
-    ylbls+='<text x="'+(pL-3)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+v+'</text>';
+    var yy=py(v);
+    grid+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylbls+='<text x="'+(pL-3)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+v+'</text>';
   });
   for(var i=0;i<n;i+=step){
     var p=dataPts[i].split('-');
     xlbls+='<text x="'+px(i).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+MONTH_NAMES[parseInt(p[1])-1]+' '+parseInt(p[2])+'</text>';
   }
+  var avgPts=[];
+  for(var ai=3;ai<n;ai++){
+    avgPts.push([px(ai),py((vals[ai]+vals[ai-1]+vals[ai-2]+vals[ai-3])/4)]);
+  }
+  var avgLine=avgPts.length>1?'<path d="'+avgPts.map(function(p2,j){return(j?'L ':'M ')+p2[0].toFixed(1)+','+p2[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#C9973A" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"/>':'';
+  var markers='';
+  var yearsInRange={};
+  dataPts.forEach(function(d){yearsInRange[d.slice(0,4)]=1;});
+  Object.keys(yearsInRange).forEach(function(yr){
+    var ey=parseInt(yr),ea=ey%19,eb=Math.floor(ey/100),ec=ey%100;
+    var edd=Math.floor(eb/4),ee=eb%4,ef=Math.floor((eb+8)/25);
+    var eg=Math.floor((eb-ef+1)/3),eh=(19*ea+eb-edd-eg+15)%30;
+    var eii=Math.floor(ec/4),ek=ec%4,el=(32+2*ee+2*eii-eh-ek)%7;
+    var emm=Math.floor((ea+11*eh+22*el)/451);
+    var emo=Math.floor((eh+el-7*emm+114)/31),edy=(eh+el-7*emm+114)%31+1;
+    var eDate=yr+'-'+(emo<10?'0'+emo:''+emo)+'-'+(edy<10?'0'+edy:''+edy);
+    var ei=dataPts.indexOf(eDate);
+    if(ei>=0){
+      var ex=px(ei);
+      markers+='<line x1="'+ex.toFixed(1)+'" y1="'+pT+'" x2="'+ex.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#5A9E6F" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
+      markers+='<text x="'+ex.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#5A9E6F" font-size="8">Easter</text>';
+    }
+    [yr+'-12-24',yr+'-12-25'].forEach(function(xd,xi){
+      var xii=dataPts.indexOf(xd);
+      if(xii>=0){
+        var xx=px(xii);
+        markers+='<line x1="'+xx.toFixed(1)+'" y1="'+pT+'" x2="'+xx.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#9B59B6" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
+        markers+='<text x="'+xx.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#9B59B6" font-size="8">'+(xi===0?'Xmas Eve':'Christmas')+'</text>';
+      }
+    });
+  });
   var dots=pts.map(function(p,i){
     var d=dataPts[i].split('-');
     var tip=MONTH_NAMES[parseInt(d[1])-1]+' '+parseInt(d[2])+' '+d[0]+': '+byDate[dataPts[i]];
     return '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="3" fill="#2E7EA6" style="cursor:default;"><title>'+tip+'</title></circle>';
   }).join('');
-  var cw=document.getElementById('att-chart-wrap');
+  var avgLegend='<div style="display:flex;gap:16px;margin-top:4px;flex-wrap:wrap;">'
+    +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:20px;height:2px;background:#2E7EA6;"></span>Weekly</span>'
+    +(avgLine?'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:20px;height:2px;background:#C9973A;border-top:2px dashed #C9973A;"></span>4-wk avg</span>':'')
+    +'</div>';
   if(cw) cw.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid
     +'<path d="'+area+'" fill="rgba(46,126,166,0.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#2E7EA6" stroke-width="2" stroke-linejoin="round"/>'
-    +dots+xlbls+ylbls+'</svg>';
+    +avgLine+markers+dots+xlbls+ylbls+'</svg>'+avgLegend;
+}
+
+function renderYoYChart(d) {
+  var palette=['#2E7EA6','#C9973A','#5A9E6F','#9B59B6','#E74C3C'];
+  var mShort=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var W=800,H=200,pL=36,pR=12,pT=12,pB=36,cW=W-pL-pR,cH=H-pT-pB;
+  var allV=[];
+  d.years.forEach(function(yr){
+    for(var mo=1;mo<=12;mo++){
+      var ms=mo<10?'0'+mo:''+mo;
+      var row=(d.monthly[yr]||[]).find(function(r){return r.month===ms;});
+      if(row&&row.total) allV.push(row.total);
+    }
+  });
+  if(!allV.length) return '';
+  var maxV=Math.max.apply(null,allV)*1.1;
+  var pxY=function(i){return pL+i*(cW/11);};
+  var pyY=function(v){return pT+cH-(v/maxV)*cH;};
+  var grid='',ylbls='',xlbls='',lines='';
+  [0,Math.round(maxV*0.5/1.1),Math.round(maxV/1.1)].forEach(function(v){
+    var yy=pyY(v);
+    grid+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylbls+='<text x="'+(pL-3)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+Math.round(v)+'</text>';
+  });
+  for(var xi=0;xi<12;xi++){
+    xlbls+='<text x="'+pxY(xi).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+mShort[xi]+'</text>';
+  }
+  var legend='<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;justify-content:center;">';
+  d.years.forEach(function(yr,yi){
+    var color=palette[yi%palette.length];
+    var pts=[];
+    for(var mo2=1;mo2<=12;mo2++){
+      var ms2=mo2<10?'0'+mo2:''+mo2;
+      var row2=(d.monthly[yr]||[]).find(function(r){return r.month===ms2;});
+      if(row2&&row2.total) pts.push({x:pxY(mo2-1),y:pyY(row2.total),v:row2.total,mi:mo2-1});
+    }
+    if(!pts.length) return;
+    var pathD=pts.map(function(p,j){return(j?'L ':'M ')+p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ');
+    lines+='<path d="'+pathD+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round"/>';
+    pts.forEach(function(p){
+      lines+='<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="'+color+'"><title>'+mShort[p.mi]+' '+yr+': '+p.v+'</title></circle>';
+    });
+    legend+='<span style="display:flex;align-items:center;gap:5px;font-size:.8rem;"><span style="display:inline-block;width:14px;height:14px;background:'+color+';border-radius:3px;flex-shrink:0;"></span>'+yr+'</span>';
+  });
+  legend+='</div>';
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid+lines+xlbls+ylbls+'</svg>';
+  return '<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 16px 8px;margin-bottom:16px;"><div style="font-weight:700;color:var(--steel-anchor);font-size:.9rem;margin-bottom:8px;">Year-over-Year Trend</div>'+svg+legend+'</div>';
+}
+
+function renderByServiceChart(d) {
+  var sundays=d.sundays||[];
+  if(sundays.length>52) sundays=sundays.slice(sundays.length-52);
+  var n=sundays.length;
+  if(!n) return '';
+  var W=800,H=180,pL=36,pR=12,pT=12,pB=32,cW=W-pL-pR,cH=H-pT-pB;
+  var allV=[];
+  sundays.forEach(function(s){if(s.att_8)allV.push(s.att_8);if(s.att_1045)allV.push(s.att_1045);});
+  if(!allV.length) return '';
+  var maxV=Math.max.apply(null,allV)*1.1;
+  var pxS=function(i){return pL+(i/(n>1?n-1:1))*cW;};
+  var pyS=function(v){return pT+cH-(v/maxV)*cH;};
+  var grid='',ylbls='',xlbls='',line8='',line1045='';
+  [0,Math.round(maxV*0.5/1.1),Math.round(maxV/1.1)].forEach(function(v){
+    var yy=pyS(v);
+    grid+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylbls+='<text x="'+(pL-3)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+Math.round(v)+'</text>';
+  });
+  var stepS=Math.max(1,Math.ceil(n/8));
+  for(var si=0;si<n;si+=stepS){
+    var sp=sundays[si].service_date.split('-');
+    xlbls+='<text x="'+pxS(si).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+MONTH_NAMES[parseInt(sp[1])-1]+' '+parseInt(sp[2])+'</text>';
+  }
+  var pts8=[],pts1045=[];
+  sundays.forEach(function(s,i){
+    if(s.att_8) pts8.push([pxS(i),pyS(s.att_8),s.att_8,s.service_date]);
+    if(s.att_1045) pts1045.push([pxS(i),pyS(s.att_1045),s.att_1045,s.service_date]);
+  });
+  if(pts8.length){
+    line8='<path d="'+pts8.map(function(p,j){return(j?'L ':'M ')+p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#C9973A" stroke-width="2" stroke-linejoin="round"/>';
+    pts8.forEach(function(p){line8+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.5" fill="#C9973A"><title>'+p[3]+' 8am: '+p[2]+'</title></circle>';});
+  }
+  if(pts1045.length){
+    line1045='<path d="'+pts1045.map(function(p,j){return(j?'L ':'M ')+p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#2E7EA6" stroke-width="2" stroke-linejoin="round"/>';
+    pts1045.forEach(function(p){line1045+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.5" fill="#2E7EA6"><title>'+p[3]+' 10:45am: '+p[2]+'</title></circle>';});
+  }
+  var legend='<div style="display:flex;gap:16px;margin-top:6px;justify-content:center;">'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:.8rem;"><span style="display:inline-block;width:24px;height:3px;background:#C9973A;"></span>8am</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:.8rem;"><span style="display:inline-block;width:24px;height:3px;background:#2E7EA6;"></span>10:45am</span>'
+    +'</div>';
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid+line8+line1045+xlbls+ylbls+'</svg>';
+  return '<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 16px 8px;margin-bottom:16px;"><div style="font-weight:700;color:var(--steel-anchor);font-size:.9rem;margin-bottom:8px;">8am vs 10:45am Trend</div>'+svg+legend+'</div>';
 }
 
 function renderAttendanceList(services, totalInDb) {
@@ -18741,7 +18935,8 @@ function runAttendanceSummary() {
   if (!years.length) { alert('Select at least one year.'); return; }
   api('/admin/api/reports/attendance-summary?years=' + encodeURIComponent(years.join(','))).then(function(d) {
     var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    var html = '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance Year-over-Year (Sunday Combined)</div>';
+    var html = renderYoYChart(d);
+    html += '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance Year-over-Year (Sunday Combined)</div>';
     html += '<table class="rpt-table"><thead><tr><th>Month</th>';
     d.years.forEach(function(yr) { html += '<th style="text-align:right;">' + yr + '</th>'; });
     html += '</tr></thead><tbody>';
@@ -18772,7 +18967,8 @@ function runAttendanceByTime() {
   var from = document.getElementById('rpt-att-from').value;
   var to = document.getElementById('rpt-att-to').value;
   api('/admin/api/reports/attendance-by-time?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)).then(function(d) {
-    var html = '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance by Service Time</div>';
+    var html = renderByServiceChart(d);
+    html += '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance by Service Time</div>';
     html += '<table class="rpt-table" style="margin-bottom:16px;"><thead><tr><th>Service</th><th style="text-align:right;">Services</th><th style="text-align:right;">Total</th><th style="text-align:right;">Avg/Service</th></tr></thead><tbody>';
     (d.by_time || []).forEach(function(r) {
       var lbl = r.service_name || (r.service_time === '08:00' ? '8am Service' : r.service_time === '10:45' ? '10:45am Service' : esc(r.service_time));
