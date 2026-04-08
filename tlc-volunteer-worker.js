@@ -12499,6 +12499,10 @@ export default {
         headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' }
       });
     }
+    if (path === '/admin/backlog' && method === 'GET') {
+      if (!await isAuthed(req, env)) return html(LOGIN_HTML);
+      return html(BACKLOG_HTML, 200, { 'Cache-Control': 'no-store, no-cache, must-revalidate' });
+    }
     if (path === '/sw.js') {
       return new Response(SW_JS, {
         headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache, no-store' }
@@ -17117,7 +17121,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-08-v23';
+var DEPLOY_VERSION = '2026-04-08-v24';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -19319,4 +19323,245 @@ function runAttendanceByTime() {
 </body>
 </html>
 
+`;
+
+// ── Dev Backlog ─────────────────────────────────────────────────────
+const BACKLOG_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHMS Dev Backlog — Timothy Lutheran</title>
+<style>
+  :root {
+    --navy: #1E2D4A; --teal: #2E7EA6; --gold: #C9973A;
+    --bg: #F7F6F3; --surface: #FFFFFF; --border: #E2DED6;
+    --text: #1E2D4A; --muted: #6B7280; --faint: #9CA3AF;
+    --success: #2D6A4F; --success-bg: #D8F3DC;
+    --warn-bg: #FFF3CD; --warn: #92600A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
+  .page { max-width: 760px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid var(--navy); }
+  .logo-block h1 { font-size: 22px; font-weight: normal; color: var(--navy); letter-spacing: -0.02em; }
+  .logo-block p { font-size: 12px; color: var(--muted); font-family: 'Courier New', monospace; margin-top: 3px; }
+  .header-stats { display: flex; gap: 12px; }
+  .stat { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; min-width: 64px; }
+  .stat-num { font-size: 22px; font-weight: bold; color: var(--navy); display: block; line-height: 1; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-family: 'Courier New', monospace; margin-top: 3px; display: block; }
+  .stat.blocked .stat-num { color: var(--warn); }
+  .add-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input { flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 14px; font-family: 'Georgia', serif; color: var(--text); background: var(--bg); }
+  .add-row input:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .add-row select { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: 'Georgia', serif; color: var(--text); background: var(--bg); cursor: pointer; width: 148px; }
+  .add-btn { background: var(--navy); color: white; border: none; border-radius: 6px; padding: 8px 18px; font-size: 14px; font-family: 'Georgia', serif; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+  .add-btn:hover { background: var(--teal); }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .filter-btn { font-size: 12px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--muted); cursor: pointer; font-family: 'Courier New', monospace; transition: all 0.12s; }
+  .filter-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .filter-btn.active { background: var(--navy); color: white; border-color: var(--navy); }
+  .section { margin-bottom: 2rem; }
+  .section-heading { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); font-family: 'Courier New', monospace; margin-bottom: 8px; padding-left: 2px; }
+  .item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; transition: border-color 0.12s; }
+  .item:hover { border-color: #C5C0B8; }
+  .item.done { opacity: 0.45; }
+  .item.blocked { border-left: 3px solid var(--gold); }
+  .check { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); cursor: pointer; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+  .check:hover { border-color: var(--teal); }
+  .check.checked { background: var(--success-bg); border-color: var(--success); }
+  .check.checked::after { content: ''; display: block; width: 7px; height: 4px; border-left: 2px solid var(--success); border-bottom: 2px solid var(--success); transform: rotate(-45deg) translateY(-1px); }
+  .item-body { flex: 1; min-width: 0; }
+  .item-text { font-size: 14px; line-height: 1.5; color: var(--text); }
+  .item.done .item-text { text-decoration: line-through; color: var(--faint); }
+  .item-note { font-size: 12px; color: var(--muted); font-family: 'Courier New', monospace; margin-top: 4px; line-height: 1.4; }
+  .tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 99px; font-family: 'Courier New', monospace; letter-spacing: 0.03em; }
+  .tag-bug         { background: #FEE2E2; color: #991B1B; }
+  .tag-feature     { background: #DBEAFE; color: #1E40AF; }
+  .tag-improvement { background: #D1FAE5; color: #065F46; }
+  .tag-integration { background: #EDE9FE; color: #5B21B6; }
+  .tag-performance { background: #FEF3C7; color: #92600A; }
+  .tag-reporting   { background: #CCFBF1; color: #0F766E; }
+  .tag-question    { background: #F3F4F6; color: #374151; }
+  .tag-security    { background: #FEE2E2; color: #7F1D1D; }
+  .tag-blocked     { background: var(--warn-bg); color: var(--warn); }
+  .del-btn { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 18px; padding: 0 2px; line-height: 1; flex-shrink: 0; transition: color 0.12s; margin-top: 1px; }
+  .del-btn:hover { color: #DC2626; }
+  .empty { font-size: 13px; color: var(--faint); font-family: 'Courier New', monospace; padding: 10px 2px; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 11px; color: var(--faint); font-family: 'Courier New', monospace; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="logo-block">
+      <h1>CHMS Dev Backlog</h1>
+      <p>admin.timothystl.org &mdash; internal tracker</p>
+    </div>
+    <div class="header-stats">
+      <div class="stat"><span class="stat-num" id="open-count">0</span><span class="stat-label">Open</span></div>
+      <div class="stat blocked"><span class="stat-num" id="blocked-count">0</span><span class="stat-label">Blocked</span></div>
+      <div class="stat"><span class="stat-num" id="done-count">0</span><span class="stat-label">Done</span></div>
+    </div>
+  </header>
+  <div class="add-section">
+    <div class="add-row">
+      <input type="text" id="new-item" placeholder="Describe the task, feature, or question..." />
+      <select id="new-type">
+        <option value="feature">Feature</option>
+        <option value="improvement">Improvement</option>
+        <option value="performance">Performance</option>
+        <option value="reporting">Reporting</option>
+        <option value="bug">Bug</option>
+        <option value="security">Security</option>
+        <option value="integration">Integration</option>
+        <option value="question">Question</option>
+      </select>
+      <button class="add-btn" onclick="addItem()">+ Add</button>
+    </div>
+  </div>
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All open</button>
+    <button class="filter-btn" onclick="setFilter('feature',this)">Features</button>
+    <button class="filter-btn" onclick="setFilter('improvement',this)">Improvements</button>
+    <button class="filter-btn" onclick="setFilter('performance',this)">Performance</button>
+    <button class="filter-btn" onclick="setFilter('reporting',this)">Reporting</button>
+    <button class="filter-btn" onclick="setFilter('security',this)">Security</button>
+    <button class="filter-btn" onclick="setFilter('integration',this)">Integrations</button>
+    <button class="filter-btn" onclick="setFilter('question',this)">Questions</button>
+    <button class="filter-btn" onclick="setFilter('blocked',this)">Blocked</button>
+    <button class="filter-btn" onclick="setFilter('done',this)">Done</button>
+  </div>
+  <div class="section" id="open-section">
+    <div class="section-heading">Open</div>
+    <div id="open-list"></div>
+  </div>
+  <div class="section" id="blocked-section">
+    <div class="section-heading">Blocked / waiting</div>
+    <div id="blocked-list"></div>
+  </div>
+  <div class="section" id="done-section" style="display:none;">
+    <div class="section-heading">Completed</div>
+    <div id="done-list"></div>
+  </div>
+  <footer>
+    <span>Timothy Lutheran Church &mdash; timothystl.org</span>
+    <span id="last-saved"></span>
+  </footer>
+</div>
+<script>
+const STORAGE_KEY = 'chms_backlog_v1';
+const defaults = [
+  { id:1,  text:"Edit and manage current tags", type:"improvement", done:false, blocked:false, note:"" },
+  { id:2,  text:"Fix how organization names are displayed", type:"bug", done:false, blocked:false, note:"" },
+  { id:3,  text:"Improve overall load times", type:"performance", done:false, blocked:false, note:"" },
+  { id:4,  text:"Security audit of data handling and access", type:"security", done:false, blocked:false, note:"" },
+  { id:5,  text:"Divide app into separate pages/chunks for faster loading", type:"performance", done:false, blocked:false, note:"Code splitting — each major function as its own route" },
+  { id:6,  text:"Rename subdomain (admin.timothystl.org)", type:"improvement", done:false, blocked:false, note:"" },
+  { id:7,  text:"Define integration path with volunteer app", type:"integration", done:false, blocked:false, note:"scheduler.timothystl.org currently in maintenance mode" },
+  { id:8,  text:"UI overhaul — closer to standard CHMS patterns (benchmark Breeze, Planning Center)", type:"improvement", done:false, blocked:false, note:"" },
+  { id:9,  text:"Search within giving / batches", type:"feature", done:false, blocked:false, note:"" },
+  { id:10, text:"Giving reports: YOY, YTD, by fund, by type — with graphs", type:"reporting", done:false, blocked:false, note:"" },
+  { id:11, text:"Wait for Tithe.ly / Breeze merger to settle before deep integration work", type:"integration", done:false, blocked:true, note:"Hold all integration decisions until merger outcome is clear" },
+  { id:12, text:"Mobile usage review — audit usability on phones and tablets", type:"improvement", done:false, blocked:false, note:"" },
+  { id:13, text:"Clarify what 'Seed Sunday for the year' does", type:"question", done:false, blocked:false, note:"Needs documentation or removal — what does this currently do?" },
+  { id:14, text:"YOY giving graph — add toggle for true year-over-year comparison view", type:"reporting", done:false, blocked:false, note:"" },
+  { id:15, text:"Year-end average weekly attendance figure", type:"reporting", done:false, blocked:false, note:"" },
+  { id:16, text:"Overlay giving data on top of attendance trends", type:"reporting", done:false, blocked:false, note:"Dual-axis or combined chart view" },
+  { id:17, text:"Automated giving report showing trend impact on budget projections", type:"reporting", done:false, blocked:false, note:"" },
+];
+let items = [], nextId = 1, activeFilter = 'all';
+function load() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      items = parsed.items || defaults;
+      nextId = parsed.nextId || (Math.max(...items.map(i=>i.id)) + 1);
+    } else {
+      items = JSON.parse(JSON.stringify(defaults));
+      nextId = 18;
+    }
+  } catch(e) { items = JSON.parse(JSON.stringify(defaults)); nextId = 18; }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, nextId }));
+  const now = new Date();
+  document.getElementById('last-saved').textContent =
+    'Saved ' + now.toLocaleDateString('en-US', {month:'short',day:'numeric'}) +
+    ' at ' + now.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'});
+}
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function addItem() {
+  const input = document.getElementById('new-item');
+  const type  = document.getElementById('new-type').value;
+  const text  = input.value.trim();
+  if (!text) return;
+  items.unshift({ id: nextId++, text, type, done: false, blocked: false, note: '' });
+  input.value = '';
+  save(); render();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('new-item').addEventListener('keydown', e => { if (e.key === 'Enter') addItem(); });
+});
+function toggle(id) {
+  const item = items.find(i => i.id === id);
+  if (item) { item.done = !item.done; if (item.done) item.blocked = false; }
+  save(); render();
+}
+function del(id) {
+  if (!confirm('Remove this item?')) return;
+  items = items.filter(i => i.id !== id);
+  save(); render();
+}
+function itemHTML(i) {
+  const note = i.note ? \`<div class="item-note">\${i.note}</div>\` : '';
+  const blockedTag = i.blocked ? '<span class="tag tag-blocked">blocked</span>' : '';
+  return \`<div class="item\${i.done?' done':''}\${i.blocked?' blocked':''}">
+    <div class="check\${i.done?' checked':''}" onclick="toggle(\${i.id})" title="\${i.done?'Mark open':'Mark done'}"></div>
+    <div class="item-body">
+      <div class="item-text">\${i.text}</div>
+      \${note}
+      <div class="tags"><span class="tag tag-\${i.type}">\${i.type}</span>\${blockedTag}</div>
+    </div>
+    <button class="del-btn" onclick="del(\${i.id})" title="Remove">&times;</button>
+  </div>\`;
+}
+function render() {
+  const f = activeFilter;
+  let openItems, blockedItems, doneItems;
+  if (f === 'done') {
+    openItems = []; blockedItems = []; doneItems = items.filter(i => i.done);
+  } else if (f === 'blocked') {
+    openItems = []; blockedItems = items.filter(i => i.blocked && !i.done); doneItems = [];
+  } else if (f === 'all') {
+    openItems    = items.filter(i => !i.done && !i.blocked);
+    blockedItems = items.filter(i => i.blocked && !i.done);
+    doneItems    = [];
+  } else {
+    openItems    = items.filter(i => i.type === f && !i.done && !i.blocked);
+    blockedItems = items.filter(i => i.type === f && i.blocked && !i.done);
+    doneItems    = [];
+  }
+  document.getElementById('open-list').innerHTML    = openItems.length    ? openItems.map(itemHTML).join('')    : '<div class="empty">Nothing here.</div>';
+  document.getElementById('blocked-list').innerHTML = blockedItems.length ? blockedItems.map(itemHTML).join('') : '<div class="empty">Nothing blocked.</div>';
+  document.getElementById('done-list').innerHTML    = doneItems.length    ? doneItems.map(itemHTML).join('')    : '<div class="empty">Nothing completed yet.</div>';
+  document.getElementById('open-section').style.display    = (f==='done'||f==='blocked') ? 'none' : '';
+  document.getElementById('blocked-section').style.display = (f==='done') ? 'none' : '';
+  document.getElementById('done-section').style.display    = (f==='done') ? '' : 'none';
+  document.getElementById('open-count').textContent    = items.filter(i=>!i.done&&!i.blocked).length;
+  document.getElementById('blocked-count').textContent = items.filter(i=>i.blocked&&!i.done).length;
+  document.getElementById('done-count').textContent    = items.filter(i=>i.done).length;
+}
+load(); render();
+</script>
+</body>
+</html>
 `;
