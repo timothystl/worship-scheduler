@@ -17097,7 +17097,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-08-v21';
+var DEPLOY_VERSION = '2026-04-08-v22';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -18607,18 +18607,39 @@ function importGivingCSV(file) {
   status.textContent = 'Reading\u2026'; status.className = 'import-status';
   var reader = new FileReader();
   reader.onload = function(e) {
-    status.textContent = 'Uploading ' + file.name + '\u2026'; status.className = 'import-status';
-    fetch('/admin/api/import/giving-csv', {
-      method: 'POST',
-      headers: {'Content-Type': 'text/csv'},
-      body: e.target.result
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
-      var msg = 'Done \u2014 ' + (d.imported||0) + ' imported, ' + (d.skipped||0) + ' skipped (of ' + (d.total||0) + ' rows).';
-      if (d.batchesMade) msg += ' ' + d.batchesMade + ' new batches.';
-      if (d.fundsMade) msg += ' ' + d.fundsMade + ' new funds.';
-      status.textContent = msg; status.className = 'import-status ok';
-    }).catch(function(err) { status.textContent = 'Error: ' + err.message; status.className = 'import-status err'; });
+    var lines = e.target.result.split(/\\r?\\n/);
+    var header = lines[0];
+    var dataLines = lines.slice(1).filter(function(l) { return l.trim(); });
+    var total = dataLines.length;
+    var chunkSize = 500;
+    var chunks = [];
+    for (var i = 0; i < dataLines.length; i += chunkSize)
+      chunks.push(dataLines.slice(i, i + chunkSize));
+    var totImported = 0, totSkipped = 0, totBatches = 0, totFunds = 0;
+    function sendChunk(idx) {
+      if (idx >= chunks.length) {
+        var msg = 'Done \u2014 ' + totImported + ' imported, ' + totSkipped + ' skipped (of ' + total + ' rows).';
+        if (totBatches) msg += ' ' + totBatches + ' new batches.';
+        if (totFunds)   msg += ' ' + totFunds + ' new funds.';
+        status.textContent = msg; status.className = 'import-status ok';
+        return;
+      }
+      var pct = Math.round(idx / chunks.length * 100);
+      status.textContent = 'Uploading\u2026 ' + pct + '% (' + (idx * chunkSize) + ' of ' + total + ' rows)';
+      fetch('/admin/api/import/giving-csv', {
+        method: 'POST',
+        headers: {'Content-Type': 'text/csv'},
+        body: header + '\\n' + chunks[idx].join('\\n')
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { status.textContent = 'Error on chunk ' + idx + ': ' + d.error; status.className = 'import-status err'; return; }
+        totImported += d.imported || 0;
+        totSkipped  += d.skipped  || 0;
+        totBatches  += d.batchesMade || 0;
+        totFunds    += d.fundsMade   || 0;
+        sendChunk(idx + 1);
+      }).catch(function(err) { status.textContent = 'Error: ' + err.message; status.className = 'import-status err'; });
+    }
+    sendChunk(0);
   };
   reader.readAsText(file);
 }
