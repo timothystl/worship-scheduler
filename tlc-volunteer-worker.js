@@ -16783,7 +16783,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-07-v10';
+var DEPLOY_VERSION = '2026-04-07-v11';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -18090,7 +18090,7 @@ function doSendBatch(yr, checks, status) {
 }
 // ── CLEAR GIVING ──────────────────────────────────────────────────────
 function clearAllGiving() {
-  if (!confirm('This will PERMANENTLY DELETE all giving entries and batches. This cannot be undone.\n\nAre you absolutely sure?')) return;
+  if (!confirm('This will PERMANENTLY DELETE all giving entries and batches. This cannot be undone.\\n\\nAre you absolutely sure?')) return;
   if (!confirm('Last chance — click OK to permanently delete ALL giving data.')) return;
   var status = document.getElementById('clear-giving-status');
   status.textContent = 'Deleting…'; status.className = 'import-status';
