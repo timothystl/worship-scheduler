@@ -13926,6 +13926,14 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true });
   }
 
+  // ── Prune empty batches ───────────────────────────────────────────
+  if (seg === 'giving/prune-empty-batches' && method === 'POST') {
+    const r = await db.prepare(
+      'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
+    ).run();
+    return json({ ok: true, deleted: r.meta?.changes ?? 0 });
+  }
+
   // ── Send Giving Statement via Resend ─────────────────────────────
   if (seg === 'giving/send-statement' && method === 'POST') {
     let b = {}; try { b = await req.json(); } catch {}
@@ -14145,6 +14153,11 @@ async function handleChmsApi(req, env, url, method, seg) {
     for (let i = 0; i < entryInserts.length; i += 100) {
       await db.batch(entryInserts.slice(i, i + 100));
     }
+
+    // ── Prune any batches that ended up with no entries ──────────────
+    await db.prepare(
+      'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
+    ).run();
 
     return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, from_giving_list: givingListEntries.length, date_range: { start, end } });
   }
@@ -16731,6 +16744,12 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <button class="btn-primary" onclick="syncBreezeAttendanceCounts()">Sync Counts from Breeze</button>
     <div class="import-status" id="att-sync-status"></div>
   </div>
+  <div class="import-card">
+    <h3>&#128465; Prune Empty Batches</h3>
+    <p>Remove any giving batches that have no entries (can be left behind by failed or partial imports). Safe to run at any time.</p>
+    <button class="btn-secondary" onclick="pruneEmptyBatches()">Delete Empty Batches</button>
+    <div class="import-status" id="prune-batches-status"></div>
+  </div>
   <div class="import-card" style="border-color:#e74c3c;">
     <h3 style="color:#e74c3c;">&#9888; Clear All Giving Data</h3>
     <p>Permanently deletes all giving entries and batches from the database. Use this to start fresh before re-importing correct data. <strong>This cannot be undone.</strong></p>
@@ -16920,7 +16939,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-08-v17';
+var DEPLOY_VERSION = '2026-04-08-v18';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -18233,6 +18252,20 @@ function doSendBatch(yr, checks, status) {
   sendNext();
 }
 // ── CLEAR GIVING ──────────────────────────────────────────────────────
+function pruneEmptyBatches() {
+  var status = document.getElementById('prune-batches-status');
+  status.textContent = 'Pruning…'; status.className = 'import-status';
+  api('/admin/api/giving/prune-empty-batches', {method:'POST'}).then(function(d) {
+    if (d.ok) {
+      status.textContent = 'Done — ' + d.deleted + ' empty batch(es) deleted.';
+      status.className = 'import-status ok';
+      loadBatches();
+    } else {
+      status.textContent = 'Error: ' + (d.error||'unknown');
+      status.className = 'import-status err';
+    }
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
+}
 function clearAllGiving() {
   if (!confirm('This will PERMANENTLY DELETE all giving entries and batches. This cannot be undone.\\n\\nAre you absolutely sure?')) return;
   if (!confirm('Last chance — click OK to permanently delete ALL giving data.')) return;
