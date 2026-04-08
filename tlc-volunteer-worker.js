@@ -13049,6 +13049,16 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true, id: personId });
   }
 
+  if (seg === 'people/bulk-member-type' && method === 'POST') {
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Boolean) : [];
+    const mt = b.member_type || '';
+    if (!ids.length || !mt) return json({ error: 'ids and member_type required' }, 400);
+    const placeholders = ids.map(() => '?').join(',');
+    await db.prepare(`UPDATE people SET member_type=? WHERE id IN (${placeholders})`).bind(mt, ...ids).run();
+    return json({ ok: true, updated: ids.length });
+  }
+
   const pmatch = seg.match(/^people\/(\d+)$/);
   if (pmatch) {
     const pid = parseInt(pmatch[1]);
@@ -16750,7 +16760,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-07-v8';
+var DEPLOY_VERSION = '2026-04-07-v9';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -17204,12 +17214,8 @@ function applyBulkMemberType() {
   if (!_selectedPeople.size) { alert('No people selected.'); return; }
   if (!confirm('Change member type to "' + mt + '" for ' + _selectedPeople.size + ' people?')) return;
   var ids = Array.from(_selectedPeople);
-  var done = 0;
-  ids.forEach(function(id) {
-    api('/admin/api/people/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({member_type:mt})}).then(function() {
-      done++;
-      if (done === ids.length) { clearSelection(); loadPeople(); }
-    });
+  api('/admin/api/people/bulk-member-type', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:ids, member_type:mt})}).then(function() {
+    clearSelection(); loadPeople();
   });
 }
 function renderBulkTagsPanel() {
