@@ -17881,7 +17881,6 @@ function renderLetterHTML(d) {
     .replace(/\{\{date\}\}/g, today)
     .replace(/\{\{gift_table\}\}/g, giftTable)
     .replace(/\{\{#if_ein\}\}[\\s\\S]*?\{\{\\/if_ein\}\}/g, ein ? einLine : '');
-  // Convert newlines to <br> for display (\\n → \n in output, matches actual newlines)
   return letter.replace(/\\n/g, '<br>');
 }
 function runGivingStatementLetter() {
