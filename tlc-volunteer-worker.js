@@ -13548,8 +13548,9 @@ async function handleChmsApi(req, env, url, method, seg) {
     for (const yr of years) {
       const rows = (await db.prepare(
         `SELECT strftime('%m', service_date) as month,
-                SUM(attendance) as total,
+                ROUND(SUM(attendance) * 1.0 / COUNT(DISTINCT service_date)) as total,
                 COUNT(DISTINCT service_date) as sundays,
+                SUM(attendance) as monthly_total,
                 SUM(CASE WHEN service_time='08:00' THEN attendance ELSE 0 END) as att_8,
                 SUM(CASE WHEN service_time='10:45' THEN attendance ELSE 0 END) as att_1045
          FROM worship_services
@@ -16919,7 +16920,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-08-v15';
+var DEPLOY_VERSION = '2026-04-08-v16';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -18958,16 +18959,18 @@ function runAttendanceSummary() {
   api('/admin/api/reports/attendance-summary?years=' + encodeURIComponent(years.join(','))).then(function(d) {
     var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     var html = renderYoYChart(d);
-    html += '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:12px;">Attendance Year-over-Year (Sunday Combined)</div>';
+    html += '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:4px;">Attendance Year-over-Year (Sunday Combined)</div>';
+    html += '<div style="font-size:.78rem;color:var(--warm-gray);margin-bottom:12px;">Monthly values show average Sunday attendance for that month.</div>';
     html += '<table class="rpt-table"><thead><tr><th>Month</th>';
-    d.years.forEach(function(yr) { html += '<th style="text-align:right;">' + yr + '</th>'; });
+    d.years.forEach(function(yr) { html += '<th style="text-align:right;">' + yr + '<br><span style="font-weight:400;font-size:.75rem;">avg/Sun</span></th>'; });
     html += '</tr></thead><tbody>';
     for (var m = 1; m <= 12; m++) {
       var mStr = String(m).padStart(2, '0');
       html += '<tr><td>' + months[m-1] + '</td>';
       d.years.forEach(function(yr) {
         var row = (d.monthly[yr] || []).find(function(r) { return r.month === mStr; });
-        html += '<td style="text-align:right;">' + (row ? row.total : '—') + '</td>';
+        var cell = row ? row.total + '<span style="color:var(--warm-gray);font-size:.75rem;"> ('+row.sundays+')</span>' : '—';
+        html += '<td style="text-align:right;">' + cell + '</td>';
       });
       html += '</tr>';
     }
