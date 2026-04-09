@@ -147,7 +147,19 @@ const DB_INIT = [
   `CREATE TABLE IF NOT EXISTS chms_config (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS church_register (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    type       TEXT    NOT NULL DEFAULT '',
+    event_date TEXT    NOT NULL DEFAULT '',
+    name       TEXT    NOT NULL DEFAULT '',
+    name2      TEXT    NOT NULL DEFAULT '',
+    officiant  TEXT    NOT NULL DEFAULT '',
+    notes      TEXT    NOT NULL DEFAULT '',
+    person_id  INTEGER,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_register_type ON church_register(type, event_date)`
 ];
 
 // ── AUTH ─────────────────────────────────────────────────────────────
@@ -13957,6 +13969,30 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true });
   }
 
+  // ── Church Register ──────────────────────────────────────────────
+  if (seg === 'register' && method === 'GET') {
+    const rtype = url.searchParams.get('type');
+    let rsql = 'SELECT * FROM church_register';
+    const rparams = [];
+    if (rtype) { rsql += ' WHERE type=?'; rparams.push(rtype); }
+    rsql += ' ORDER BY event_date DESC, id DESC';
+    const rrows = (await db.prepare(rsql).bind(...rparams).all()).results || [];
+    return json({ entries: rrows });
+  }
+  if (seg === 'register' && method === 'POST') {
+    let rb = {}; try { rb = await req.json(); } catch {}
+    if (!rb.type || !rb.name) return json({ error: 'type and name required' }, 400);
+    const rr = await db.prepare(
+      'INSERT INTO church_register (type,event_date,name,name2,officiant,notes,person_id) VALUES (?,?,?,?,?,?,?)'
+    ).bind(rb.type||'', rb.event_date||'', rb.name||'', rb.name2||'', rb.officiant||'', rb.notes||'', rb.person_id||null).run();
+    return json({ ok: true, id: rr.meta.last_row_id });
+  }
+  const regDelMatch = seg.match(/^register\/(\d+)$/);
+  if (regDelMatch && method === 'DELETE') {
+    await db.prepare('DELETE FROM church_register WHERE id=?').bind(parseInt(regDelMatch[1])).run();
+    return json({ ok: true });
+  }
+
   // ── Dev Board (Kanban) ───────────────────────────────────────────
   if (seg === 'board' && method === 'GET') {
     const row = await db.prepare("SELECT value FROM chms_config WHERE key='dev_board'").first();
@@ -16571,26 +16607,30 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .h-members{display:flex;flex-wrap:wrap;gap:6px;}
 .h-member-pill{font-size:.75rem;background:var(--blue-mist);border:1px solid var(--ice-blue);color:var(--steel-anchor);padding:2px 8px;border-radius:10px;}
 /* ── GIVING ── */
-.giving-layout{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;}
+.giving-layout{display:grid;grid-template-columns:300px 1fr;gap:0;flex:1;min-height:0;}
 @media(max-width:900px){.giving-layout{grid-template-columns:1fr;}}
-.batch-list-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-.batch-list-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-.batch-list-hdr h3{font-family:var(--font-head);font-size:.95rem;color:var(--steel-anchor);}
-.batch-row{padding:12px 16px;border-bottom:1px solid var(--linen);cursor:pointer;transition:background .1s;}
-.batch-row:hover{background:var(--blue-mist);}
-.batch-row.selected{background:var(--blue-mist);border-left:3px solid var(--steel-anchor);}
-.batch-row.open-batch{border-left:3px solid var(--amber);}
-.batch-date{font-size:.8rem;color:var(--warm-gray);}
-.batch-desc{font-weight:600;font-size:.9rem;color:var(--charcoal);}
-.batch-meta{display:flex;gap:8px;align-items:center;margin-top:2px;font-size:.78rem;color:var(--warm-gray);}
-.badge-open{background:var(--pale-gold);color:var(--deep-amber);padding:1px 6px;border-radius:6px;font-size:.7rem;font-weight:700;text-transform:uppercase;}
-.badge-closed{background:var(--linen);color:var(--warm-gray);padding:1px 6px;border-radius:6px;font-size:.7rem;font-weight:700;text-transform:uppercase;}
-.batch-detail-panel{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-.batch-detail-hdr{padding:14px 18px;border-bottom:1px solid var(--border);}
-.total-bar{padding:12px 18px;background:var(--blue-mist);border-bottom:1px solid var(--ice-blue);display:flex;align-items:center;gap:10px;}
-.total-amount{font-family:var(--font-head);font-size:1.3rem;color:var(--steel-anchor);font-weight:700;}
+.batch-list-panel{background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.batch-list-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.batch-list-hdr h3{font-family:var(--font-head);font-size:.92rem;color:var(--steel-anchor);}
+.batch-search-wrap{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.batch-search-wrap input{width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.84rem;font-family:var(--font-body);background:var(--linen);box-sizing:border-box;color:var(--charcoal);}
+.batch-search-wrap input:focus{outline:none;border-color:var(--steel-anchor);background:var(--white);}
+.batch-filter-pills{padding:7px 10px;border-bottom:1px solid var(--border);display:flex;gap:5px;flex-shrink:0;}
+#batch-list{flex:1;overflow-y:auto;}
+.batch-row{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+.batch-row:hover{background:var(--linen);}
+.batch-row.selected{background:var(--blue-mist);box-shadow:inset 3px 0 0 var(--teal);}
+.batch-date{font-size:.75rem;color:var(--warm-gray);}
+.batch-desc{font-weight:600;font-size:.87rem;color:var(--charcoal);margin:1px 0;}
+.batch-meta{display:flex;gap:8px;align-items:center;margin-top:3px;font-size:.74rem;color:var(--warm-gray);}
+.badge-open{background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:700;}
+.badge-closed{background:var(--linen);color:var(--warm-gray);padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:700;}
+.batch-detail-panel{background:var(--white);display:flex;flex-direction:column;overflow-y:auto;}
+.batch-detail-hdr{padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.total-bar{padding:10px 18px;background:var(--linen);border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:10px;flex-shrink:0;}
+.total-amount{font-family:var(--font-head);font-size:1.4rem;color:var(--steel-anchor);font-weight:700;}
 .total-count{font-size:.82rem;color:var(--warm-gray);}
-.entry-form{padding:14px 18px;border-bottom:1px solid var(--border);}
+.entry-form{padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field label{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);}
@@ -16603,10 +16643,13 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .method-row{display:flex;gap:14px;align-items:center;}
 .method-row label{display:flex;align-items:center;gap:5px;font-size:.87rem;cursor:pointer;}
 .entries-table{width:100%;border-collapse:collapse;font-size:.87rem;}
-.entries-table th{padding:8px 10px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);border-bottom:1px solid var(--border);}
-.entries-table td{padding:8px 10px;border-bottom:1px solid var(--linen);}
-.entries-table tr:hover td{background:var(--blue-mist);}
-.del-entry{background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px;opacity:.7;}
+.entries-table th{padding:8px 12px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);border-bottom:1px solid var(--border);background:var(--linen);}
+.entries-table th.amt-col{text-align:right;}
+.entries-table td{padding:9px 12px;border-bottom:1px solid var(--border);}
+.entries-table td.amt-col{text-align:right;font-variant-numeric:tabular-nums;}
+.entries-table tr:last-child td{border-bottom:none;}
+.entries-table tr:hover td{background:var(--linen);}
+.del-entry{background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px;opacity:.6;}
 .del-entry:hover{opacity:1;}
 /* ── REPORTS ── */
 .report-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:20px;}
@@ -16623,13 +16666,18 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .rpt-total{font-weight:700;border-top:2px solid var(--border) !important;}
 /* ── ATTENDANCE ── */
 .att-chart-card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 18px 10px;margin-bottom:14px;}
-.att-stats-row{display:flex;gap:28px;margin-bottom:14px;flex-wrap:wrap;}
-.att-stat-val{font-size:1.9rem;font-weight:700;font-family:var(--font-head);color:var(--steel-anchor);line-height:1;}
-.att-stat-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--warm-gray);margin-top:2px;}
+.att-stats-row{display:flex;gap:22px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end;}
+.att-stat-val{font-size:1.75rem;font-weight:700;font-family:var(--font-head);color:var(--steel-anchor);line-height:1;}
+.att-stat-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--warm-gray);margin-top:3px;}
+.att-stat-primary .att-stat-val{font-size:2.6rem;}
+.att-stat-divider{width:1px;height:36px;background:var(--border);flex-shrink:0;}
 .att-list-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-.att-date-group{border-bottom:1px solid var(--linen);}
+.att-date-group{border-bottom:1px solid var(--border);}
+.att-date-group:last-child{border-bottom:none;}
 .att-date-hdr{display:flex;align-items:center;gap:6px;padding:10px 14px 4px;cursor:pointer;transition:background .15s;}
-.att-date-hdr:hover{background:var(--blue-mist);}
+.att-date-hdr:hover{background:var(--linen);}
+.att-date-group.future{background:var(--linen);opacity:.5;}
+.att-date-group.future .att-date-hdr:hover{background:var(--linen);}
 .att-combined{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--steel-anchor);background:var(--ice-blue);padding:2px 8px;border-radius:100px;}
 .att-svc-nums{display:flex;gap:20px;padding:2px 14px 8px;font-size:.88rem;}
 .att-svc-lbl{font-size:.7rem;font-weight:700;color:var(--warm-gray);text-transform:uppercase;margin-right:4px;}
@@ -16723,6 +16771,47 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .dir-tag-more{font-size:10px;color:var(--warm-gray);}
 #p-grid{flex:1;min-height:0;overflow-y:auto;}
 #p-pager{position:sticky;bottom:0;background:var(--white);border-top:1px solid var(--border);padding:9px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+/* ── PROFILE VIEW ── */
+.content-area.pv-mode > .topbar{display:none;}
+.content-area.pv-mode > .tab-panel{display:none!important;}
+.content-area.pv-mode > #profile-view{display:flex;}
+#profile-view{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.pv-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.pv-hdr{display:flex;align-items:flex-start;gap:18px;padding:20px 24px 16px;border-bottom:1px solid var(--border);}
+.pv-photo{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;flex-shrink:0;}
+.pv-hdr-info{flex:1;}
+.pv-fullname{font-size:20px;font-weight:500;color:var(--charcoal);line-height:1.2;}
+.pv-meta{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.pv-hh-link{font-size:13px;color:var(--sky-steel);cursor:pointer;}
+.pv-hh-link:hover{text-decoration:underline;}
+.pv-role-txt{font-size:13px;color:var(--warm-gray);}
+.pv-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 24px;flex-shrink:0;}
+.pv-tab{font-size:13px;padding:10px 18px;color:var(--warm-gray);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all .12s;}
+.pv-tab:hover{color:var(--charcoal);}
+.pv-tab.active{color:var(--charcoal);border-bottom-color:var(--amber);font-weight:600;}
+.pv-layout{display:flex;flex:1;overflow:hidden;}
+.pv-main{flex:1;padding:20px 24px;overflow-y:auto;}
+.ptab-panel{display:none;}
+.ptab-panel.active{display:block;}
+.pv-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.pv-card{background:var(--linen);border:1px solid var(--border);border-radius:9px;padding:14px 16px;}
+.pv-card-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:10px;font-family:monospace;}
+.pv-field{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);}
+.pv-field:last-child{border-bottom:none;}
+.pv-field-key{font-size:12px;color:var(--warm-gray);flex-shrink:0;margin-right:12px;}
+.pv-field-val{font-size:13px;color:var(--charcoal);text-align:right;}
+.pv-field-val.empty{color:var(--warm-gray);font-style:italic;}
+.pv-field-val a{color:var(--sky-steel);}
+.pv-aside{width:210px;border-left:1px solid var(--border);padding:18px;flex-shrink:0;background:var(--linen);overflow-y:auto;}
+.pv-aside-block{margin-bottom:18px;}
+.pv-aside-block+.pv-aside-block{padding-top:18px;border-top:1px solid var(--border);}
+.pv-aside-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:8px;font-family:monospace;}
+.pv-aside-big{font-size:26px;font-weight:600;color:var(--steel-anchor);line-height:1;}
+.pv-aside-sub{font-size:11px;color:var(--warm-gray);margin-top:3px;}
+.pv-aside-link{font-size:12px;color:var(--sky-steel);cursor:pointer;display:block;padding:3px 0;}
+.pv-aside-link:hover{text-decoration:underline;}
+.topbar-back{font-size:13px;color:var(--sky-steel);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.topbar-back:hover{text-decoration:underline;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
@@ -16746,6 +16835,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
   <div class="s-item" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
   <div class="s-item" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
+  <div class="s-item" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
   <div class="s-divider"></div>
   <div class="s-item" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-bottom">
@@ -16829,7 +16919,10 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         <h3>Batches</h3>
         <button class="btn-primary" style="padding:5px 12px;font-size:.8rem;" onclick="openNewBatch()">+ New</button>
       </div>
-      <div class="filter-pills" style="padding:10px 14px;border-bottom:1px solid var(--border);">
+      <div class="batch-search-wrap">
+        <input type="search" id="batch-search-input" placeholder="Search batches&#8230;" oninput="filterBatchSearch(this.value)">
+      </div>
+      <div class="batch-filter-pills">
         <button class="pill active" data-bs="all" onclick="setBatchFilter(this,'all')">All</button>
         <button class="pill" data-bs="open" onclick="setBatchFilter(this,'open')">Open</button>
         <button class="pill" data-bs="closed" onclick="setBatchFilter(this,'closed')">Closed</button>
@@ -16838,9 +16931,9 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
     <!-- Batch detail -->
     <div class="batch-detail-panel" id="batch-detail">
-      <div style="padding:40px;text-align:center;color:var(--warm-gray);">
-        <div style="font-size:2rem;margin-bottom:8px;">&#128176;</div>
-        Select a batch to view entries
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--warm-gray);gap:10px;padding:40px;">
+        <svg viewBox="0 0 24 24" style="width:38px;height:38px;fill:none;stroke:currentColor;stroke-width:1.5;opacity:.35;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg>
+        <div style="font-size:.9rem;">Select a batch to view entries</div>
       </div>
     </div>
   </div>
@@ -16931,7 +17024,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <!-- Controls row -->
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <button class="btn-primary" style="font-size:.85rem;" onclick="openNewSundayEntry()">+ Add Sunday</button>
-      <button class="btn-secondary" style="font-size:.8rem;" onclick="seedYearSundays()">&#128197; Seed Sundays for Year</button>
+      <button class="btn-secondary" style="font-size:.8rem;" onclick="seedYearSundays()">&#128197; Pre-fill Year Sundays</button>
       <div style="flex:1;"></div>
       <input type="date" id="att-from" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
       <span style="font-size:.8rem;color:var(--warm-gray);">to</span>
@@ -17095,6 +17188,77 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
   </div>
 </div>
+<!-- ═══ REGISTER TAB ═══ -->
+<div id="tab-register" class="tab-panel">
+  <div style="display:flex;border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0;background:var(--white);">
+    <button class="pv-tab active" data-rtab="baptism" onclick="showRegisterTab('baptism')" style="font-size:13px;padding:12px 18px;">Baptisms</button>
+    <button class="pv-tab" data-rtab="confirmation" onclick="showRegisterTab('confirmation')" style="font-size:13px;padding:12px 18px;">Confirmations</button>
+    <button class="pv-tab" data-rtab="wedding" onclick="showRegisterTab('wedding')" style="font-size:13px;padding:12px 18px;">Weddings</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:20px;">
+    <!-- Add form -->
+    <div id="reg-add-form" style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;">
+      <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warm-gray);margin-bottom:12px;" id="reg-form-title">Add Baptism</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px;">
+        <div class="field"><label>Date</label><input type="date" id="reg-date"></div>
+        <div class="field"><label id="reg-name-lbl">Name Baptized</label><input type="text" id="reg-name" placeholder="Full name"></div>
+        <div class="field" id="reg-name2-wrap"><label id="reg-name2-lbl">Parent / Sponsor</label><input type="text" id="reg-name2" placeholder="Optional"></div>
+        <div class="field"><label>Officiant</label><input type="text" id="reg-officiant" placeholder="Pastor name"></div>
+        <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="reg-notes" placeholder="Optional notes"></div>
+      </div>
+      <button class="btn-primary" style="font-size:.85rem;" onclick="addRegisterEntry()">Add Entry</button>
+    </div>
+    <!-- List -->
+    <div id="reg-list"></div>
+  </div>
+</div>
+
+<!-- ═══ PROFILE VIEW ═══ -->
+<div id="profile-view">
+  <div class="topbar">
+    <button class="hamburger" onclick="openSidebar()" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <span class="topbar-back" onclick="closeProfile()">&#8592; People</span>
+    <span id="pv-topbar-name" style="font-size:15px;font-weight:500;color:var(--charcoal);margin-left:8px;"></span>
+    <div style="display:flex;gap:8px;margin-left:auto;">
+      <button class="btn-secondary" onclick="window.print()">Print</button>
+      <button class="btn-secondary" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
+    </div>
+  </div>
+  <div class="pv-body">
+    <div class="pv-hdr">
+      <div class="pv-photo" id="pv-photo"></div>
+      <div class="pv-hdr-info">
+        <div class="pv-fullname" id="pv-fullname"></div>
+        <div class="pv-meta">
+          <span id="pv-badge"></span>
+          <span id="pv-hh" class="pv-hh-link"></span>
+          <span id="pv-role" class="pv-role-txt"></span>
+        </div>
+      </div>
+    </div>
+    <div class="pv-tabs">
+      <div class="pv-tab active" data-ptab="info" onclick="showPvTab('info')">Information</div>
+      <div class="pv-tab" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
+      <div class="pv-tab" data-ptab="attendance" onclick="showPvTab('attendance')">Attendance</div>
+      <div class="pv-tab" data-ptab="timeline" onclick="showPvTab('timeline')">Timeline</div>
+    </div>
+    <div class="pv-layout">
+      <div class="pv-main">
+        <div id="ptab-info" class="ptab-panel active"></div>
+        <div id="ptab-giving" class="ptab-panel">
+          <div id="pv-giving-content" style="color:var(--warm-gray);font-size:13px;padding:20px 0;">Loading giving history…</div>
+        </div>
+        <div id="ptab-attendance" class="ptab-panel">
+          <div style="color:var(--warm-gray);font-size:13px;padding:20px 0;">Attendance records for this person will appear here.</div>
+        </div>
+        <div id="ptab-timeline" class="ptab-panel">
+          <div style="color:var(--warm-gray);font-size:13px;padding:20px 0;font-style:italic;">Timeline coming soon — pastoral notes and visit log.</div>
+        </div>
+      </div>
+      <div class="pv-aside" id="pv-aside"></div>
+    </div>
+  </div>
+</div>
 </div><!-- /content-area -->
 </div><!-- /app-shell -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -17243,6 +17407,8 @@ var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
 var _hhOffset = 0, _hhTotal = 0;
+var _currentPvPerson = null;
+var _batchSearch = '';
 var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
 var _churchConfig = {};
@@ -17291,7 +17457,7 @@ function initials(first, last) {
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────
 function showTab(name) {
-  var labels = {people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',import:'Import',settings:'Settings'};
+  var labels = {people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',register:'Register',import:'Import',settings:'Settings'};
   document.querySelectorAll('.s-item[data-tab]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.tab === name);
   });
@@ -17306,6 +17472,7 @@ function showTab(name) {
   if (name === 'giving') loadBatches();
   if (name === 'reports') initReports();
   if (name === 'attendance') loadAttendance();
+  if (name === 'register') loadRegister();
   if (name === 'settings') loadSettings();
 }
 function openSidebar() {
@@ -17793,8 +17960,141 @@ function renderPeopleMobile(people) {
 // ── PERSON DETAIL ─────────────────────────────────────────────────────
 function openPersonDetail(id) {
   api('/admin/api/people/' + id).then(function(p) {
-    openPersonEdit(p);
+    showProfile(p);
   });
+}
+function showProfile(p) {
+  _currentPvPerson = p;
+  var isOrg = p.member_type === 'organization';
+  var displayName = isOrg ? (p.first_name||p.last_name||'Unnamed') : ((p.first_name||'')+' '+(p.last_name||'')).trim();
+  // Topbar
+  var tn = document.getElementById('pv-topbar-name');
+  if (tn) tn.textContent = displayName;
+  // Header photo placeholder (initials or org icon)
+  var photoEl = document.getElementById('pv-photo');
+  if (photoEl) {
+    if (isOrg) {
+      photoEl.innerHTML = '<svg viewBox="0 0 24 24" style="width:32px;height:32px;fill:none;stroke:var(--warm-gray);stroke-width:1.5"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg>';
+      photoEl.style.background = 'var(--linen)';
+    } else {
+      var initials = ((p.first_name||'').charAt(0)+(p.last_name||'').charAt(0)).toUpperCase();
+      var colors = ['#2E7EA6','#C9973A','#5A9E6F','#9B59B6','#E87040'];
+      var bg = colors[p.id % colors.length];
+      photoEl.innerHTML = '<span style="color:white;font-size:24px;font-weight:600;line-height:1;">' + initials + '</span>';
+      photoEl.style.background = bg;
+    }
+  }
+  // Full name
+  var fnEl = document.getElementById('pv-fullname');
+  if (fnEl) fnEl.textContent = displayName;
+  // Badge
+  var bdEl = document.getElementById('pv-badge');
+  if (bdEl) {
+    var mt = p.member_type||'visitor';
+    var badgeClass = mt === 'member' ? 'dir-badge-member' : mt === 'organization' ? 'dir-badge-organization' : 'dir-badge-visitor';
+    var badgeLabel = mt.charAt(0).toUpperCase()+mt.slice(1);
+    bdEl.innerHTML = '<span class="dir-badge '+badgeClass+'">'+badgeLabel+'</span>';
+  }
+  // Household
+  var hhEl = document.getElementById('pv-hh');
+  if (hhEl) hhEl.textContent = p.household_name ? ' \u00b7 '+p.household_name : '';
+  // Role
+  var roleEl = document.getElementById('pv-role');
+  if (roleEl) roleEl.textContent = p.family_role ? ' \u00b7 '+p.family_role : '';
+  // Info tab content
+  var infoEl = document.getElementById('ptab-info');
+  if (infoEl) {
+    var tags = (p.tags||[]).map(function(t){
+      return '<span class="dir-tag" style="padding:3px 8px;background:'+t.color+'20;border-color:'+t.color+';color:'+t.color+';">'+esc(t.name)+'</span>';
+    }).join(' ');
+    infoEl.innerHTML = '<div class="pv-info-grid">'
+      + pvField('Email', p.email ? '<a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>' : '—')
+      + pvField('Phone', p.phone ? esc(p.phone) : '—')
+      + pvField('Address', [p.address1,p.city,((p.state||'')+(p.zip?' '+p.zip:''))].filter(Boolean).map(esc).join(', ')||'—')
+      + pvField('Date of Birth', p.dob||'—')
+      + pvField('Baptism', p.baptism_date||'—')
+      + pvField('Confirmation', p.confirmation_date||'—')
+      + pvField('Anniversary', p.anniversary_date||'—')
+      + (p.death_date ? pvField('Death', p.death_date) : '')
+      + '</div>'
+      + (tags ? '<div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap;">'+tags+'</div>' : '')
+      + (p.notes ? '<div style="margin-top:16px;"><div class="pv-field-key">Notes</div><div class="pv-field-val" style="white-space:pre-wrap;">'+esc(p.notes)+'</div></div>' : '');
+  }
+  // Aside: summary stats
+  var asideEl = document.getElementById('pv-aside');
+  if (asideEl) {
+    asideEl.innerHTML = '<div style="padding:16px;">'
+      + '<div class="pv-card-lbl" style="margin-bottom:4px;">ID</div>'
+      + '<div style="font-size:13px;color:var(--charcoal);margin-bottom:16px;">#'+p.id+'</div>'
+      + (p.deceased ? '<div style="color:var(--danger);font-size:12px;font-weight:600;margin-bottom:12px;">DECEASED</div>' : '')
+      + '<div class="pv-card-lbl" style="margin-bottom:4px;">Added</div>'
+      + '<div style="font-size:13px;color:var(--charcoal);">'+(p.created_at ? p.created_at.slice(0,10) : '—')+'</div>'
+      + '</div>';
+  }
+  // Show profile view
+  var ca = document.querySelector('.content-area');
+  if (ca) ca.classList.add('pv-mode');
+  // Reset to info tab
+  showPvTab('info');
+}
+function pvField(label, val) {
+  return '<div class="pv-field"><div class="pv-field-key">'+label+'</div><div class="pv-field-val">'+val+'</div></div>';
+}
+function closeProfile() {
+  _currentPvPerson = null;
+  var ca = document.querySelector('.content-area');
+  if (ca) ca.classList.remove('pv-mode');
+}
+function showPvTab(name) {
+  document.querySelectorAll('.pv-tab').forEach(function(b){
+    b.classList.toggle('active', b.dataset.ptab === name);
+  });
+  document.querySelectorAll('.ptab-panel').forEach(function(p){
+    p.classList.toggle('active', p.id === 'ptab-'+name);
+  });
+  if (name === 'giving' && _currentPvPerson) loadPvGiving(_currentPvPerson.id);
+  if (name === 'attendance' && _currentPvPerson) loadPvAttendance(_currentPvPerson.id);
+}
+function loadPvGiving(personId) {
+  var el = document.getElementById('ptab-giving');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Loading...</div>';
+  api('/admin/api/giving?person_id='+personId+'&limit=200').then(function(d) {
+    var entries = (d && d.entries) ? d.entries : (Array.isArray(d) ? d : []);
+    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">No giving records found.</div>'; return; }
+    var total = entries.reduce(function(s,e){return s+(e.amount||0);},0);
+    var byYear = {};
+    entries.forEach(function(e){
+      var yr = (e.contribution_date||'').slice(0,4)||'—';
+      byYear[yr] = (byYear[yr]||0)+(e.amount||0);
+    });
+    var yearRows = Object.keys(byYear).sort().reverse().map(function(yr){
+      return '<tr><td style="padding:6px 12px;">'+yr+'</td><td style="padding:6px 12px;text-align:right;">$'+(byYear[yr]/100).toFixed(2)+'</td></tr>';
+    }).join('');
+    var recentRows = entries.slice(0,20).map(function(e){
+      return '<tr><td style="padding:6px 12px;">'+(e.contribution_date||'—')+'</td>'
+        +'<td style="padding:6px 12px;">'+(e.fund_name||'General')+'</td>'
+        +'<td style="padding:6px 12px;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td></tr>';
+    }).join('');
+    el.innerHTML = '<div style="padding:20px;">'
+      +'<div style="display:flex;gap:16px;margin-bottom:20px;">'
+      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div><div class="pv-card-lbl">Total Given</div></div>'
+      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">'+entries.length+'</div><div class="pv-card-lbl">Gifts</div></div>'
+      +'</div>'
+      +'<div class="pv-card-lbl" style="margin-bottom:8px;">By Year</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">'
+      +'<tbody>'+yearRows+'</tbody></table>'
+      +'<div class="pv-card-lbl" style="margin-bottom:8px;">Recent Gifts</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      +'<thead><tr style="background:var(--linen);"><th style="padding:6px 12px;text-align:left;font-weight:500;">Date</th><th style="padding:6px 12px;text-align:left;font-weight:500;">Fund</th><th style="padding:6px 12px;text-align:right;font-weight:500;">Amount</th></tr></thead>'
+      +'<tbody>'+recentRows+'</tbody></table>'
+      +'</div>';
+  }).catch(function(){ el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>'; });
+}
+function loadPvAttendance(personId) {
+  var el = document.getElementById('ptab-attendance');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Attendance data coming soon.</div>';
 }
 function openPersonEdit(p) {
   var isNew = !p || !p.id;
@@ -17895,8 +18195,14 @@ function savePerson() {
   var url = id ? '/admin/api/people/' + id : '/admin/api/people';
   var meth = id ? 'PUT' : 'POST';
   api(url, {method:meth, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(r) {
-    if (r.ok) { closeModal('person-modal'); loadPeople(); }
-    else alert('Error saving: ' + (r.error||'unknown'));
+    if (r.ok) {
+      closeModal('person-modal');
+      var pvId = _currentPvPerson ? (_currentPvPerson.id || r.id) : null;
+      if (pvId) {
+        api('/admin/api/people/' + pvId).then(function(p) { showProfile(p); });
+      }
+      loadPeople();
+    } else alert('Error saving: ' + (r.error||'unknown'));
   });
 }
 function deletePerson() {
@@ -17904,6 +18210,97 @@ function deletePerson() {
   if (!id) return;
   if (!confirm('Mark this person as inactive?')) return;
   api('/admin/api/people/' + id, {method:'DELETE'}).then(function() { closeModal('person-modal'); loadPeople(); });
+}
+
+// ── CHURCH REGISTER ───────────────────────────────────────────────────
+var _regType = 'baptism';
+var _regLabels = {
+  baptism:      { title: 'Baptisms',     nameLbl: 'Name Baptized',    name2Lbl: 'Parent / Sponsor', col2: 'Parent/Sponsor' },
+  confirmation: { title: 'Confirmations',nameLbl: 'Name Confirmed',   name2Lbl: 'Class / Year',     col2: 'Class/Year' },
+  wedding:      { title: 'Weddings',     nameLbl: 'Bride',            name2Lbl: 'Groom',            col2: 'Groom' }
+};
+function showRegisterTab(type) {
+  _regType = type;
+  document.querySelectorAll('[data-rtab]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.rtab === type);
+  });
+  var lbl = _regLabels[type];
+  var ftitle = document.getElementById('reg-form-title');
+  if (ftitle) ftitle.textContent = 'Add ' + lbl.title.slice(0, -1);
+  var nl = document.getElementById('reg-name-lbl'); if (nl) nl.textContent = lbl.nameLbl;
+  var n2l = document.getElementById('reg-name2-lbl'); if (n2l) n2l.textContent = lbl.name2Lbl;
+  loadRegister();
+}
+function loadRegister() {
+  var el = document.getElementById('reg-list');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);font-size:.85rem;">Loading\u2026</div>';
+  api('/admin/api/register?type=' + _regType).then(function(d) {
+    renderRegisterList(d.entries || []);
+  }).catch(function() {
+    el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load register.</div>';
+  });
+}
+function renderRegisterList(entries) {
+  var el = document.getElementById('reg-list');
+  if (!el) return;
+  var lbl = _regLabels[_regType];
+  if (!entries.length) {
+    el.innerHTML = '<div style="padding:32px;text-align:center;background:var(--white);border:1px solid var(--border);border-radius:12px;color:var(--warm-gray);">'
+      + '<div style="font-size:.9rem;margin-bottom:4px;">No ' + lbl.title.toLowerCase() + ' recorded yet.</div>'
+      + '<div style="font-size:.8rem;">Use the form above to add the first entry.</div></div>';
+    return;
+  }
+  var rows = entries.map(function(e) {
+    return '<tr>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--warm-gray);white-space:nowrap;">' + (e.event_date||'\u2014') + '</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(e.name||'\u2014') + '</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid var(--border);">' + esc(e.name2||'\u2014') + '</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--warm-gray);">' + esc(e.officiant||'\u2014') + '</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--warm-gray);font-size:.82rem;">' + esc(e.notes||'') + '</td>'
+      + '<td style="padding:10px 8px;border-bottom:1px solid var(--border);"><button class="del-entry" onclick="deleteRegisterEntry(' + e.id + ')" title="Delete">&#215;</button></td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML = '<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:.87rem;">'
+    + '<thead><tr style="background:var(--linen);">'
+    + '<th style="padding:8px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);">Date</th>'
+    + '<th style="padding:8px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);">' + esc(lbl.nameLbl) + '</th>'
+    + '<th style="padding:8px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);">' + esc(lbl.col2) + '</th>'
+    + '<th style="padding:8px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);">Officiant</th>'
+    + '<th style="padding:8px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warm-gray);">Notes</th>'
+    + '<th></th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>';
+}
+function addRegisterEntry() {
+  var date = document.getElementById('reg-date').value;
+  var name = document.getElementById('reg-name').value.trim();
+  var name2 = document.getElementById('reg-name2').value.trim();
+  var officiant = document.getElementById('reg-officiant').value.trim();
+  var notes = document.getElementById('reg-notes').value.trim();
+  if (!name) { alert('Name is required.'); return; }
+  api('/admin/api/register', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({type: _regType, event_date: date, name: name, name2: name2, officiant: officiant, notes: notes})
+  }).then(function(r) {
+    if (r.ok) {
+      document.getElementById('reg-date').value = '';
+      document.getElementById('reg-name').value = '';
+      document.getElementById('reg-name2').value = '';
+      document.getElementById('reg-officiant').value = '';
+      document.getElementById('reg-notes').value = '';
+      loadRegister();
+    } else alert('Error: ' + (r.error||'unknown'));
+  });
+}
+function deleteRegisterEntry(id) {
+  if (!confirm('Delete this register entry?')) return;
+  api('/admin/api/register/' + id, {method:'DELETE'}).then(function(r) {
+    if (r.ok) loadRegister();
+    else alert(r.error || 'Cannot delete.');
+  });
 }
 
 // ── HOUSEHOLDS ────────────────────────────────────────────────────────
@@ -18063,18 +18460,32 @@ function loadBatches() {
     renderBatchList(d.batches || []);
   });
 }
+function filterBatchSearch(val) {
+  _batchSearch = (val||'').toLowerCase().trim();
+  loadBatches();
+}
 function renderBatchList(batches) {
   var c = document.getElementById('batch-list');
-  if (!batches.length) { c.innerHTML = '<div style="padding:20px;text-align:center;color:var(--warm-gray);font-size:.85rem;">No batches</div>'; return; }
-  c.innerHTML = batches.map(function(b) {
-    var cls = 'batch-row' + (b.id === currentBatchId ? ' selected' : '') + (!b.closed ? ' open-batch' : '');
+  var filtered = _batchSearch
+    ? batches.filter(function(b) {
+        return (b.description||'').toLowerCase().indexOf(_batchSearch) >= 0
+            || (b.batch_date||'').indexOf(_batchSearch) >= 0;
+      })
+    : batches;
+  if (!filtered.length) {
+    c.innerHTML = '<div style="padding:30px 16px;text-align:center;color:var(--warm-gray);font-size:.84rem;">'
+      + (_batchSearch ? 'No batches match &#8220;' + esc(_batchSearch) + '&#8221;' : 'No batches yet') + '</div>';
+    return;
+  }
+  c.innerHTML = filtered.map(function(b) {
+    var cls = 'batch-row' + (b.id === currentBatchId ? ' selected' : '');
+    var badge = b.closed ? '<span class="badge-closed">Closed</span>' : '<span class="badge-open">Open</span>';
     return '<div class="' + cls + '" onclick="openBatch(' + b.id + ')">'
       + '<div class="batch-date">' + fmtDate(b.batch_date) + '</div>'
       + '<div class="batch-desc">' + esc(b.description) + '</div>'
       + '<div class="batch-meta">'
-      + '<span>' + (b.entry_count||0) + ' entries &bull; ' + fmtMoney(b.total_cents||0) + '</span>'
-      + '<span class="' + (b.closed ? 'badge-closed' : 'badge-open') + '">' + (b.closed ? 'Closed' : 'Open') + '</span>'
-      + '</div></div>';
+      + '<span>' + (b.entry_count||0) + ' entries \u00b7 ' + fmtMoney(b.total_cents||0) + '</span>'
+      + badge + '</div></div>';
   }).join('');
 }
 function openBatch(id) {
@@ -18094,14 +18505,16 @@ function renderBatchDetail(b) {
     return '<option value="' + f.id + '">' + esc(f.name) + '</option>';
   }).join('');
 
-  var entryRows = (b.entries||[]).map(function(e) {
-    return '<tr><td>' + esc(e.person_name||'(anonymous)') + '</td>'
-      + '<td>' + esc(e.fund_name) + '</td>'
-      + '<td>' + fmtMoney(e.amount) + '</td>'
-      + '<td>' + esc(e.method) + (e.check_number ? ' #'+esc(e.check_number) : '') + '</td>'
-      + '<td>' + (isOpen ? '<button class="del-entry" onclick="deleteEntry(' + e.id + ')" title="Remove">&#215;</button>' : '') + '</td>'
-      + '</tr>';
-  }).join('');
+  var entryRows = (b.entries||[]).length
+    ? (b.entries||[]).map(function(e) {
+        return '<tr><td>' + esc(e.person_name||'(anonymous)') + '</td>'
+          + '<td>' + esc(e.fund_name) + '</td>'
+          + '<td class="amt-col">' + fmtMoney(e.amount) + '</td>'
+          + '<td>' + esc(e.method) + (e.check_number ? ' #'+esc(e.check_number) : '') + '</td>'
+          + '<td style="width:32px;padding:0 8px;">' + (isOpen ? '<button class="del-entry" onclick="deleteEntry(' + e.id + ')" title="Remove">&#215;</button>' : '') + '</td>'
+          + '</tr>';
+      }).join('')
+    : '<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--warm-gray);">No entries in this batch yet.</td></tr>';
 
   var entryForm = isOpen ? (
     '<div class="entry-form">'
@@ -18137,7 +18550,7 @@ function renderBatchDetail(b) {
     + actionBtns + '</div></div>'
     + '<div class="total-bar"><span class="total-amount">' + fmtMoney(total) + '</span><span class="total-count">' + (b.entries||[]).length + ' entries</span></div>'
     + entryForm
-    + '<div style="overflow-x:auto;"><table class="entries-table"><thead><tr><th>Person</th><th>Fund</th><th>Amount</th><th>Method</th><th></th></tr></thead><tbody id="entry-tbody">' + entryRows + '</tbody></table></div>';
+    + '<div style="overflow-x:auto;"><table class="entries-table"><thead><tr><th>Person</th><th>Fund</th><th class="amt-col">Amount</th><th>Method</th><th></th></tr></thead><tbody id="entry-tbody">' + entryRows + '</tbody></table></div>';
 
   // Wire up check# toggle
   c.querySelectorAll('input[name="e-method"]').forEach(function(r) {
@@ -18984,12 +19397,13 @@ function renderAttendanceChart(services) {
     ytdHtml = '<div><div class="att-stat-val" style="color:'+pctColor+';">'+(pct>=0?'+':'')+pct+'%</div><div class="att-stat-lbl">YTD vs '+priorYear+'</div></div>';
   }
   if (statsEl) statsEl.innerHTML =
-    '<div><div class="att-stat-val">'+latest+'</div><div class="att-stat-lbl">Latest ('+latestLbl+')</div></div>'
+    '<div class="att-stat-primary"><div class="att-stat-val">'+latest+'</div><div class="att-stat-lbl">Latest \u00b7 '+latestLbl+'</div></div>'
+    +'<div class="att-stat-divider"></div>'
     +'<div><div class="att-stat-val">'+avg+'</div><div class="att-stat-lbl">Weekly Avg</div></div>'
-    +'<div><div class="att-stat-val">'+peakVal+'</div><div class="att-stat-lbl">Peak ('+peakLbl+')</div></div>'
+    +'<div><div class="att-stat-val">'+peakVal+'</div><div class="att-stat-lbl">Peak \u00b7 '+peakLbl+'</div></div>'
     +(annualTotal?'<div><div class="att-stat-val">'+annualTotal+'</div><div class="att-stat-lbl">'+curYear+' Total</div></div>':'')
     +ytdHtml
-    +'<div><div class="att-stat-val">'+dataPts.length+'</div><div class="att-stat-lbl">Sundays w/ Data</div></div>';
+    +'<div><div class="att-stat-val">'+dataPts.length+'</div><div class="att-stat-lbl">Sundays</div></div>';
 
   var n=dataPts.length;
   var H=210,pL=32,pR=12,pT=10,pB=30;
@@ -19220,7 +19634,7 @@ function renderAttendanceList(services, totalInDb) {
       : '<div style="font-size:.8rem;color:var(--warm-gray);margin-top:6px;">&#9432; No records in the database yet. Run the attendance import from the Import tab first.</div>';
     el.innerHTML = '<div style="padding:32px 24px;text-align:center;background:var(--white);border:1px solid var(--border);border-radius:12px;">'
       + '<div style="font-size:1rem;font-weight:600;color:var(--steel-anchor);margin-bottom:8px;">No services recorded for this period.</div>'
-      + '<div style="font-size:.85rem;color:var(--warm-gray);margin-bottom:4px;">Click <strong>+ Add Sunday</strong> to enter attendance manually, or <strong>Seed Sundays for Year</strong> to pre-populate the calendar.</div>'
+      + '<div style="font-size:.85rem;color:var(--warm-gray);margin-bottom:4px;">Click <strong>+ Add Sunday</strong> to enter attendance manually, or <strong>Pre-fill Year Sundays</strong> to pre-populate the calendar.</div>'
       + dbNote
       + '</div>';
     return;
@@ -19233,6 +19647,7 @@ function renderAttendanceList(services, totalInDb) {
     if (!byDate[s.service_date]) { byDate[s.service_date] = []; dates.push(s.service_date); }
     byDate[s.service_date].push(s);
   });
+  var today2 = new Date().toISOString().slice(0,10);
   var html = '';
   var lastMonth = '';
   var MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -19256,7 +19671,8 @@ function renderAttendanceList(services, totalInDb) {
     var isSunday = rows.some(function(r){return r.service_type==='sunday';});
     var sundayName = (s8.service_name || s1045.service_name || (rows[0]&&rows[0].service_name) || '');
     var dk = date.replace(/-/g,'_');
-    html += '<div class="att-date-group">';
+    var isFuture = date > today2;
+    html += '<div class="att-date-group' + (isFuture ? ' future' : '') + '">';
     html += '<div class="att-date-hdr" onclick="toggleAttEdit(&#39;'+dk+'&#39;)">'
       + '<span style="font-weight:700;color:var(--steel-anchor);min-width:88px;">'+displayDate+'</span>'
       + (sundayName ? '<span style="font-size:.75rem;color:var(--warm-gray);">'+esc(sundayName)+'</span>' : '')
