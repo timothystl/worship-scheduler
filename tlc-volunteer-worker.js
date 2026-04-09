@@ -16441,9 +16441,12 @@ const CHMS_HTML = `<!DOCTYPE html>
   --linen:#F2EDE2;--white:#FFFFFF;--border:#E8E0D0;--charcoal:#3D3530;--warm-gray:#7A6E60;
   --font-head:'Lora',Georgia,serif;--font-body:'Source Sans 3',Arial,sans-serif;
   --danger:#B85C3A;
+  --navy:#1E2D4A;--teal:#2E7EA6;--gold-accent:#C9973A;
+  --bg:#F7F6F3;--muted:#6B7280;--faint:#9CA3AF;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:var(--font-body);background:var(--warm-white);color:var(--charcoal);min-height:100vh;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--font-body);background:var(--warm-white);color:var(--charcoal);}
 a{color:var(--sky-steel);}
 /* ── HEADER ── */
 header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px 24px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(10,60,92,.07);position:sticky;top:0;z-index:100;}
@@ -16464,7 +16467,37 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .tab-btn:hover:not(.active){background:var(--blue-mist);}
 /* ── PANELS ── */
 .tab-panel{display:none;padding:20px 24px;}
-.tab-panel.active{display:block;}
+.tab-panel.active{display:flex;flex-direction:column;flex:1;overflow-y:auto;}
+/* ── APP SHELL ── */
+#offline-banner{position:relative;z-index:200;}
+.app-shell{display:flex;height:100vh;}
+/* ── SIDEBAR ── */
+.sidebar{width:54px;background:var(--navy);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0;z-index:100;}
+.s-logo{width:34px;height:34px;border-radius:8px;background:var(--gold-accent);display:flex;align-items:center;justify-content:center;margin-bottom:10px;flex-shrink:0;}
+.s-logo svg{width:18px;height:18px;fill:white;}
+.s-item{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0;transition:background .12s;}
+.s-item:hover{background:rgba(255,255,255,.1);}
+.s-item.active{background:var(--teal);}
+.s-item svg{width:19px;height:19px;fill:none;stroke:rgba(255,255,255,.55);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;}
+.s-item.active svg{stroke:white;}
+.s-divider{width:28px;height:1px;background:rgba(255,255,255,.15);margin:4px 0;flex-shrink:0;}
+.s-bottom{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.s-tip{position:absolute;left:48px;top:50%;transform:translateY(-50%);background:var(--navy);color:white;font-size:12px;white-space:nowrap;padding:4px 10px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:300;border:1px solid rgba(255,255,255,.15);}
+.s-item:hover .s-tip{opacity:1;}
+/* ── CONTENT AREA ── */
+.content-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+/* ── TOPBAR ── */
+.topbar{height:50px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;background:var(--white);}
+.topbar-title{font-size:15px;font-weight:500;color:var(--charcoal);flex:1;}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:0;}
+.hamburger svg{width:22px;height:22px;stroke:var(--charcoal);fill:none;stroke-width:2;}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:90;}
+@media(max-width:700px){
+  .sidebar{position:fixed;left:-54px;height:100vh;top:0;transition:left .2s;}
+  .sidebar.open{left:0;}
+  .sidebar-overlay.open{display:block;}
+  .hamburger{display:flex;}
+}
 /* ── TOOLBAR ── */
 .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
 .search-wrap{position:relative;flex:1;min-width:180px;max-width:360px;}
@@ -16637,7 +16670,7 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;font-family:monospace;}
 /* ── PRINT ── */
 @media print{
-  header,.tab-bar,.toolbar,.modal-overlay,.hdr-actions,#offline-banner{display:none!important;}
+  .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
   .tab-panel{display:block!important;padding:0;}
   .tab-panel:not(#tab-reports){display:none!important;}
   body{background:white;}
@@ -16649,28 +16682,31 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </head>
 <body>
 <div id="offline-banner">You are offline — showing cached contacts</div>
-<header>
-  <div class="hdr-logo">&#10013;</div>
-  <div class="hdr-text">
-    <div class="hdr-church">Timothy Lutheran Church</div>
-    <div class="hdr-title">People &amp; Giving</div>
-    <div class="hdr-sub">Member directory, households, and giving records</div>
+<div class="app-shell">
+<nav class="sidebar" id="sidebar">
+  <div class="s-logo"><svg viewBox="0 0 20 20"><path d="M10 1L2 7v12h6v-5h4v5h6V7L10 1z"/></svg></div>
+  <div class="s-item active" data-tab="people" onclick="showTab('people')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><span class="s-tip">People</span></div>
+  <div class="s-item" data-tab="households" onclick="showTab('households')"><svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg><span class="s-tip">Households</span></div>
+  <div class="s-divider"></div>
+  <div class="s-item" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
+  <div class="s-item" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
+  <div class="s-item" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
+  <div class="s-divider"></div>
+  <div class="s-item" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
+  <div class="s-bottom">
+    <div class="s-item" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
   </div>
-  <div class="hdr-actions">
-    <span style="font-size:.7rem;color:var(--warm-gray);align-self:center;" id="deploy-ver"></span>
+</nav>
+<div class="content-area">
+<div class="topbar">
+  <button class="hamburger" onclick="openSidebar()" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <span class="topbar-title" id="topbar-title">People</span>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span style="font-size:.7rem;color:var(--warm-gray);" id="deploy-ver"></span>
     <a href="/admin" class="btn-sm">&#8592; Volunteers</a>
     <a href="/admin/logout" class="btn-sm">Sign Out</a>
   </div>
-</header>
-<nav class="tab-bar">
-  <button class="tab-btn active" data-tab="people" onclick="showTab('people')">People</button>
-  <button class="tab-btn" data-tab="households" onclick="showTab('households')">Households</button>
-  <button class="tab-btn" data-tab="giving" onclick="showTab('giving')">Giving</button>
-  <button class="tab-btn" data-tab="reports" onclick="showTab('reports')">Reports</button>
-  <button class="tab-btn" data-tab="attendance" onclick="showTab('attendance')">Attendance</button>
-  <button class="tab-btn" data-tab="import" onclick="showTab('import')">Import</button>
-  <button class="tab-btn" data-tab="settings" onclick="showTab('settings')">Settings</button>
-</nav>
+</div>
 
 <!-- ═══ PEOPLE TAB ═══ -->
 <div id="tab-people" class="tab-panel active">
@@ -17004,6 +17040,9 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
   </div>
 </div>
+</div><!-- /content-area -->
+</div><!-- /app-shell -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <!-- ═══ MODALS ═══ -->
 <!-- Person edit modal -->
@@ -17197,18 +17236,30 @@ function initials(first, last) {
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────
 function showTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(function(b) {
+  var labels = {people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',import:'Import',settings:'Settings'};
+  document.querySelectorAll('.s-item[data-tab]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.tab === name);
   });
   document.querySelectorAll('.tab-panel').forEach(function(p) {
     p.classList.toggle('active', p.id === 'tab-' + name);
   });
+  var t = document.getElementById('topbar-title');
+  if (t) t.textContent = labels[name] || name;
+  closeSidebar();
   if (name === 'people') loadPeople();
   if (name === 'households') loadHouseholds();
   if (name === 'giving') loadBatches();
   if (name === 'reports') initReports();
   if (name === 'attendance') loadAttendance();
   if (name === 'settings') loadSettings();
+}
+function openSidebar() {
+  var s = document.getElementById('sidebar'); if (s) s.classList.add('open');
+  var o = document.getElementById('sidebar-overlay'); if (o) o.classList.add('open');
+}
+function closeSidebar() {
+  var s = document.getElementById('sidebar'); if (s) s.classList.remove('open');
+  var o = document.getElementById('sidebar-overlay'); if (o) o.classList.remove('open');
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
