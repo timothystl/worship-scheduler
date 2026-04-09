@@ -16698,6 +16698,47 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .dir-tag-more{font-size:10px;color:var(--warm-gray);}
 #p-grid{flex:1;min-height:0;overflow-y:auto;}
 #p-pager{position:sticky;bottom:0;background:var(--white);border-top:1px solid var(--border);padding:9px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+/* ── PROFILE VIEW ── */
+.content-area.pv-mode > .topbar{display:none;}
+.content-area.pv-mode > .tab-panel{display:none!important;}
+.content-area.pv-mode > #profile-view{display:flex;}
+#profile-view{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.pv-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.pv-hdr{display:flex;align-items:flex-start;gap:18px;padding:20px 24px 16px;border-bottom:1px solid var(--border);}
+.pv-photo{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;flex-shrink:0;}
+.pv-hdr-info{flex:1;}
+.pv-fullname{font-size:20px;font-weight:500;color:var(--charcoal);line-height:1.2;}
+.pv-meta{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.pv-hh-link{font-size:13px;color:var(--sky-steel);cursor:pointer;}
+.pv-hh-link:hover{text-decoration:underline;}
+.pv-role-txt{font-size:13px;color:var(--warm-gray);}
+.pv-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 24px;flex-shrink:0;}
+.pv-tab{font-size:13px;padding:10px 18px;color:var(--warm-gray);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1px;transition:all .12s;}
+.pv-tab:hover{color:var(--charcoal);}
+.pv-tab.active{color:var(--charcoal);border-bottom-color:var(--amber);font-weight:600;}
+.pv-layout{display:flex;flex:1;overflow:hidden;}
+.pv-main{flex:1;padding:20px 24px;overflow-y:auto;}
+.ptab-panel{display:none;}
+.ptab-panel.active{display:block;}
+.pv-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.pv-card{background:var(--linen);border:1px solid var(--border);border-radius:9px;padding:14px 16px;}
+.pv-card-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:10px;font-family:monospace;}
+.pv-field{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);}
+.pv-field:last-child{border-bottom:none;}
+.pv-field-key{font-size:12px;color:var(--warm-gray);flex-shrink:0;margin-right:12px;}
+.pv-field-val{font-size:13px;color:var(--charcoal);text-align:right;}
+.pv-field-val.empty{color:var(--warm-gray);font-style:italic;}
+.pv-field-val a{color:var(--sky-steel);}
+.pv-aside{width:210px;border-left:1px solid var(--border);padding:18px;flex-shrink:0;background:var(--linen);overflow-y:auto;}
+.pv-aside-block{margin-bottom:18px;}
+.pv-aside-block+.pv-aside-block{padding-top:18px;border-top:1px solid var(--border);}
+.pv-aside-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:8px;font-family:monospace;}
+.pv-aside-big{font-size:26px;font-weight:600;color:var(--steel-anchor);line-height:1;}
+.pv-aside-sub{font-size:11px;color:var(--warm-gray);margin-top:3px;}
+.pv-aside-link{font-size:12px;color:var(--sky-steel);cursor:pointer;display:block;padding:3px 0;}
+.pv-aside-link:hover{text-decoration:underline;}
+.topbar-back{font-size:13px;color:var(--sky-steel);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.topbar-back:hover{text-decoration:underline;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
@@ -17070,6 +17111,52 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
   </div>
 </div>
+<!-- ═══ PROFILE VIEW ═══ -->
+<div id="profile-view">
+  <div class="topbar">
+    <button class="hamburger" onclick="openSidebar()" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <span class="topbar-back" onclick="closeProfile()">&#8592; People</span>
+    <span id="pv-topbar-name" style="font-size:15px;font-weight:500;color:var(--charcoal);margin-left:8px;"></span>
+    <div style="display:flex;gap:8px;margin-left:auto;">
+      <button class="btn-secondary" onclick="window.print()">Print</button>
+      <button class="btn-secondary" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
+    </div>
+  </div>
+  <div class="pv-body">
+    <div class="pv-hdr">
+      <div class="pv-photo" id="pv-photo"></div>
+      <div class="pv-hdr-info">
+        <div class="pv-fullname" id="pv-fullname"></div>
+        <div class="pv-meta">
+          <span id="pv-badge"></span>
+          <span id="pv-hh" class="pv-hh-link"></span>
+          <span id="pv-role" class="pv-role-txt"></span>
+        </div>
+      </div>
+    </div>
+    <div class="pv-tabs">
+      <div class="pv-tab active" data-ptab="info" onclick="showPvTab('info')">Information</div>
+      <div class="pv-tab" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
+      <div class="pv-tab" data-ptab="attendance" onclick="showPvTab('attendance')">Attendance</div>
+      <div class="pv-tab" data-ptab="timeline" onclick="showPvTab('timeline')">Timeline</div>
+    </div>
+    <div class="pv-layout">
+      <div class="pv-main">
+        <div id="ptab-info" class="ptab-panel active"></div>
+        <div id="ptab-giving" class="ptab-panel">
+          <div id="pv-giving-content" style="color:var(--warm-gray);font-size:13px;padding:20px 0;">Loading giving history…</div>
+        </div>
+        <div id="ptab-attendance" class="ptab-panel">
+          <div style="color:var(--warm-gray);font-size:13px;padding:20px 0;">Attendance records for this person will appear here.</div>
+        </div>
+        <div id="ptab-timeline" class="ptab-panel">
+          <div style="color:var(--warm-gray);font-size:13px;padding:20px 0;font-style:italic;">Timeline coming soon — pastoral notes and visit log.</div>
+        </div>
+      </div>
+      <div class="pv-aside" id="pv-aside"></div>
+    </div>
+  </div>
+</div>
 </div><!-- /content-area -->
 </div><!-- /app-shell -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -17218,6 +17305,7 @@ var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
 var _hhOffset = 0, _hhTotal = 0;
+var _currentPvPerson = null;
 var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
 var _churchConfig = {};
@@ -17768,8 +17856,141 @@ function renderPeopleMobile(people) {
 // ── PERSON DETAIL ─────────────────────────────────────────────────────
 function openPersonDetail(id) {
   api('/admin/api/people/' + id).then(function(p) {
-    openPersonEdit(p);
+    showProfile(p);
   });
+}
+function showProfile(p) {
+  _currentPvPerson = p;
+  var isOrg = p.member_type === 'organization';
+  var displayName = isOrg ? (p.first_name||p.last_name||'Unnamed') : ((p.first_name||'')+' '+(p.last_name||'')).trim();
+  // Topbar
+  var tn = document.getElementById('pv-topbar-name');
+  if (tn) tn.textContent = displayName;
+  // Header photo placeholder (initials or org icon)
+  var photoEl = document.getElementById('pv-photo');
+  if (photoEl) {
+    if (isOrg) {
+      photoEl.innerHTML = '<svg viewBox="0 0 24 24" style="width:32px;height:32px;fill:none;stroke:var(--warm-gray);stroke-width:1.5"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg>';
+      photoEl.style.background = 'var(--linen)';
+    } else {
+      var initials = ((p.first_name||'').charAt(0)+(p.last_name||'').charAt(0)).toUpperCase();
+      var colors = ['#2E7EA6','#C9973A','#5A9E6F','#9B59B6','#E87040'];
+      var bg = colors[p.id % colors.length];
+      photoEl.innerHTML = '<span style="color:white;font-size:24px;font-weight:600;line-height:1;">' + initials + '</span>';
+      photoEl.style.background = bg;
+    }
+  }
+  // Full name
+  var fnEl = document.getElementById('pv-fullname');
+  if (fnEl) fnEl.textContent = displayName;
+  // Badge
+  var bdEl = document.getElementById('pv-badge');
+  if (bdEl) {
+    var mt = p.member_type||'visitor';
+    var badgeClass = mt === 'member' ? 'dir-badge-member' : mt === 'organization' ? 'dir-badge-organization' : 'dir-badge-visitor';
+    var badgeLabel = mt.charAt(0).toUpperCase()+mt.slice(1);
+    bdEl.innerHTML = '<span class="dir-badge '+badgeClass+'">'+badgeLabel+'</span>';
+  }
+  // Household
+  var hhEl = document.getElementById('pv-hh');
+  if (hhEl) hhEl.textContent = p.household_name ? ' \u00b7 '+p.household_name : '';
+  // Role
+  var roleEl = document.getElementById('pv-role');
+  if (roleEl) roleEl.textContent = p.family_role ? ' \u00b7 '+p.family_role : '';
+  // Info tab content
+  var infoEl = document.getElementById('ptab-info');
+  if (infoEl) {
+    var tags = (p.tags||[]).map(function(t){
+      return '<span class="dir-tag" style="padding:3px 8px;background:'+t.color+'20;border-color:'+t.color+';color:'+t.color+';">'+esc(t.name)+'</span>';
+    }).join(' ');
+    infoEl.innerHTML = '<div class="pv-info-grid">'
+      + pvField('Email', p.email ? '<a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>' : '—')
+      + pvField('Phone', p.phone ? esc(p.phone) : '—')
+      + pvField('Address', [p.address1,p.city,((p.state||'')+(p.zip?' '+p.zip:''))].filter(Boolean).map(esc).join(', ')||'—')
+      + pvField('Date of Birth', p.dob||'—')
+      + pvField('Baptism', p.baptism_date||'—')
+      + pvField('Confirmation', p.confirmation_date||'—')
+      + pvField('Anniversary', p.anniversary_date||'—')
+      + (p.death_date ? pvField('Death', p.death_date) : '')
+      + '</div>'
+      + (tags ? '<div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap;">'+tags+'</div>' : '')
+      + (p.notes ? '<div style="margin-top:16px;"><div class="pv-field-key">Notes</div><div class="pv-field-val" style="white-space:pre-wrap;">'+esc(p.notes)+'</div></div>' : '');
+  }
+  // Aside: summary stats
+  var asideEl = document.getElementById('pv-aside');
+  if (asideEl) {
+    asideEl.innerHTML = '<div style="padding:16px;">'
+      + '<div class="pv-card-lbl" style="margin-bottom:4px;">ID</div>'
+      + '<div style="font-size:13px;color:var(--charcoal);margin-bottom:16px;">#'+p.id+'</div>'
+      + (p.deceased ? '<div style="color:var(--danger);font-size:12px;font-weight:600;margin-bottom:12px;">DECEASED</div>' : '')
+      + '<div class="pv-card-lbl" style="margin-bottom:4px;">Added</div>'
+      + '<div style="font-size:13px;color:var(--charcoal);">'+(p.created_at ? p.created_at.slice(0,10) : '—')+'</div>'
+      + '</div>';
+  }
+  // Show profile view
+  var ca = document.querySelector('.content-area');
+  if (ca) ca.classList.add('pv-mode');
+  // Reset to info tab
+  showPvTab('info');
+}
+function pvField(label, val) {
+  return '<div class="pv-field"><div class="pv-field-key">'+label+'</div><div class="pv-field-val">'+val+'</div></div>';
+}
+function closeProfile() {
+  _currentPvPerson = null;
+  var ca = document.querySelector('.content-area');
+  if (ca) ca.classList.remove('pv-mode');
+}
+function showPvTab(name) {
+  document.querySelectorAll('.pv-tab').forEach(function(b){
+    b.classList.toggle('active', b.dataset.ptab === name);
+  });
+  document.querySelectorAll('.ptab-panel').forEach(function(p){
+    p.classList.toggle('active', p.id === 'ptab-'+name);
+  });
+  if (name === 'giving' && _currentPvPerson) loadPvGiving(_currentPvPerson.id);
+  if (name === 'attendance' && _currentPvPerson) loadPvAttendance(_currentPvPerson.id);
+}
+function loadPvGiving(personId) {
+  var el = document.getElementById('ptab-giving');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Loading...</div>';
+  api('/admin/api/giving?person_id='+personId+'&limit=200').then(function(d) {
+    var entries = (d && d.entries) ? d.entries : (Array.isArray(d) ? d : []);
+    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">No giving records found.</div>'; return; }
+    var total = entries.reduce(function(s,e){return s+(e.amount||0);},0);
+    var byYear = {};
+    entries.forEach(function(e){
+      var yr = (e.contribution_date||'').slice(0,4)||'—';
+      byYear[yr] = (byYear[yr]||0)+(e.amount||0);
+    });
+    var yearRows = Object.keys(byYear).sort().reverse().map(function(yr){
+      return '<tr><td style="padding:6px 12px;">'+yr+'</td><td style="padding:6px 12px;text-align:right;">$'+(byYear[yr]/100).toFixed(2)+'</td></tr>';
+    }).join('');
+    var recentRows = entries.slice(0,20).map(function(e){
+      return '<tr><td style="padding:6px 12px;">'+(e.contribution_date||'—')+'</td>'
+        +'<td style="padding:6px 12px;">'+(e.fund_name||'General')+'</td>'
+        +'<td style="padding:6px 12px;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td></tr>';
+    }).join('');
+    el.innerHTML = '<div style="padding:20px;">'
+      +'<div style="display:flex;gap:16px;margin-bottom:20px;">'
+      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div><div class="pv-card-lbl">Total Given</div></div>'
+      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">'+entries.length+'</div><div class="pv-card-lbl">Gifts</div></div>'
+      +'</div>'
+      +'<div class="pv-card-lbl" style="margin-bottom:8px;">By Year</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">'
+      +'<tbody>'+yearRows+'</tbody></table>'
+      +'<div class="pv-card-lbl" style="margin-bottom:8px;">Recent Gifts</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      +'<thead><tr style="background:var(--linen);"><th style="padding:6px 12px;text-align:left;font-weight:500;">Date</th><th style="padding:6px 12px;text-align:left;font-weight:500;">Fund</th><th style="padding:6px 12px;text-align:right;font-weight:500;">Amount</th></tr></thead>'
+      +'<tbody>'+recentRows+'</tbody></table>'
+      +'</div>';
+  }).catch(function(){ el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>'; });
+}
+function loadPvAttendance(personId) {
+  var el = document.getElementById('ptab-attendance');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Attendance data coming soon.</div>';
 }
 function openPersonEdit(p) {
   var isNew = !p || !p.id;
@@ -17870,8 +18091,14 @@ function savePerson() {
   var url = id ? '/admin/api/people/' + id : '/admin/api/people';
   var meth = id ? 'PUT' : 'POST';
   api(url, {method:meth, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(r) {
-    if (r.ok) { closeModal('person-modal'); loadPeople(); }
-    else alert('Error saving: ' + (r.error||'unknown'));
+    if (r.ok) {
+      closeModal('person-modal');
+      var pvId = _currentPvPerson ? (_currentPvPerson.id || r.id) : null;
+      if (pvId) {
+        api('/admin/api/people/' + pvId).then(function(p) { showProfile(p); });
+      }
+      loadPeople();
+    } else alert('Error saving: ' + (r.error||'unknown'));
   });
 }
 function deletePerson() {
