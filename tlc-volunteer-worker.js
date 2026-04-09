@@ -16668,6 +16668,36 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .p-card.selected .p-select-cb{background:var(--steel-anchor);border-color:var(--steel-anchor);color:#fff;}
 /* ── SETTINGS ── */
 code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;font-family:monospace;}
+/* ── PEOPLE DIRECTORY TABLE ── */
+.dir-table{width:100%;border-collapse:collapse;font-size:13px;}
+.dir-table th{text-align:left;padding:9px 14px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--warm-gray);border-bottom:1px solid var(--border);background:var(--linen);white-space:nowrap;position:sticky;top:0;z-index:1;}
+.dir-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.dir-table tbody tr:hover td{background:#f5f3ee;}
+.dir-table tbody tr.dir-row-selected td{background:var(--blue-mist);}
+.dir-name-cell{display:flex;align-items:center;gap:10px;}
+.dir-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;}
+.dir-avatar-org{border-radius:7px!important;background:var(--linen);}
+.dir-avatar-0{background:#B5D4F4;color:#0C447C;}
+.dir-avatar-1{background:#9FE1CB;color:#085041;}
+.dir-avatar-2{background:#FAC775;color:#633806;}
+.dir-avatar-3{background:#F5C4B3;color:#712B13;}
+.dir-avatar-4{background:#D8B4FE;color:#5B21B6;}
+.dir-name-link{color:var(--sky-steel);font-weight:500;}
+.dir-badge{font-size:10px;padding:3px 8px;border-radius:99px;white-space:nowrap;display:inline-block;font-weight:500;}
+.dir-badge-member{background:#D8F3DC;color:#1B4332;}
+.dir-badge-associate{background:var(--pale-sage);color:#2D5016;}
+.dir-badge-friend{background:var(--linen);color:var(--charcoal);}
+.dir-badge-visitor{background:#DBEAFE;color:#1E40AF;}
+.dir-badge-inactive{background:#FEF3C7;color:#92600A;}
+.dir-badge-organization{background:var(--linen);color:var(--warm-gray);}
+.dir-contact a{color:var(--sky-steel);font-size:12px;}
+.dir-phone{font-size:12px;color:var(--warm-gray);}
+.dir-hh-link{font-size:13px;color:var(--sky-steel);}
+.dir-tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
+.dir-tag{font-size:10px;padding:2px 7px;border-radius:99px;white-space:nowrap;border:1px solid transparent;}
+.dir-tag-more{font-size:10px;color:var(--warm-gray);}
+#p-grid{flex:1;min-height:0;overflow-y:auto;}
+#p-pager{position:sticky;bottom:0;background:var(--white);border-top:1px solid var(--border);padding:9px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
@@ -17545,13 +17575,16 @@ function renderPeoplePager() {
   var el = document.getElementById('p-pager');
   if (!el) return;
   var total = _peopleTotal, limit = peopleFilter.limit, offset = peopleFilter.offset;
-  if (total <= limit) { el.innerHTML = '<span style="color:var(--warm-gray);font-size:.82rem;">' + total + ' people</span>'; return; }
-  var page = Math.floor(offset / limit) + 1;
-  var pages = Math.ceil(total / limit);
   var from = offset + 1, to = Math.min(offset + limit, total);
-  el.innerHTML = '<button class="btn-secondary" style="padding:4px 10px;font-size:.8rem;" onclick="peoplePage(-1)" ' + (offset === 0 ? 'disabled' : '') + '>&#8592; Prev</button>'
-    + '<span style="font-size:.82rem;color:var(--warm-gray);margin:0 10px;">' + from + '–' + to + ' of ' + total + '</span>'
-    + '<button class="btn-secondary" style="padding:4px 10px;font-size:.8rem;" onclick="peoplePage(1)" ' + (to >= total ? 'disabled' : '') + '>Next &#8594;</button>';
+  var countHtml = '<span style="font-size:12px;color:var(--warm-gray);">Showing ' + from + '–' + to + ' of ' + total + ' people</span>';
+  var prevDisabled = offset === 0 ? ' disabled' : '';
+  var nextDisabled = to >= total ? ' disabled' : '';
+  var navHtml = total <= limit ? '' :
+    '<div style="display:flex;gap:6px;">'
+    + '<button class="btn-secondary" style="padding:5px 12px;font-size:12px;"' + prevDisabled + ' onclick="peoplePage(-1)">&#8592; Prev</button>'
+    + '<button class="btn-secondary" style="padding:5px 12px;font-size:12px;"' + nextDisabled + ' onclick="peoplePage(1)">Next &#8594;</button>'
+    + '</div>';
+  el.innerHTML = countHtml + navHtml;
 }
 function peoplePage(dir) {
   peopleFilter.offset = Math.max(0, peopleFilter.offset + dir * peopleFilter.limit);
@@ -17560,30 +17593,42 @@ function peoplePage(dir) {
 function renderPeopleDesktop(people) {
   _loadedPeople = people;
   var c = document.getElementById('p-grid');
-  if (!people.length) { c.innerHTML = '<div class="empty"><div class="empty-icon">&#128100;</div>No people found</div>'; return; }
-  c.innerHTML = people.map(function(p) {
-    var isSelected = _selectedPeople.has(p.id);
-    var cls = 'p-card' + (p.member_type === 'member' ? ' member' : '') + (_selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
-    var clickHandler = _selectMode
+  if (!people.length) { c.innerHTML = '<div class="empty" style="padding:40px 24px;"><div class="empty-icon">&#128100;</div>No people found</div>'; return; }
+  var isOrg, isSelected, displayName, avInner, avClass, clickHandler, tags, tagHtml, trCls;
+  var rows = people.map(function(p) {
+    isOrg = p.member_type === 'organization';
+    isSelected = _selectedPeople.has(p.id);
+    displayName = isOrg
+      ? esc(p.first_name || p.last_name)
+      : esc(p.last_name) + (p.last_name && p.first_name ? ', ' : '') + esc(p.first_name);
+    avInner = isOrg
+      ? '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:#888;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg>'
+      : (p.photo_url ? '<img src="' + esc(p.photo_url) + '" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;">' : initials(p.first_name, p.last_name));
+    avClass = 'dir-avatar ' + (isOrg ? 'dir-avatar-org' : 'dir-avatar-' + (p.id % 5));
+    clickHandler = _selectMode
       ? 'onclick="togglePersonSelect(' + p.id + ', this)"'
       : 'onclick="openPersonDetail(' + p.id + ')"';
-    var tags = (p.tags||[]).map(function(t) {
-      return '<span class="tag-chip" style="background:' + esc(t.color) + '20;border-color:' + esc(t.color) + ';color:' + esc(t.color) + '">' + esc(t.name) + '</span>';
+    tags = p.tags || [];
+    tagHtml = tags.slice(0,3).map(function(t) {
+      return '<span class="dir-tag" style="background:' + esc(t.color) + '22;color:' + esc(t.color) + ';border-color:' + esc(t.color) + '44;">' + esc(t.name) + '</span>';
     }).join('');
-    return '<div class="' + cls + '" ' + clickHandler + '>'
-      + (_selectMode ? '<div class="p-select-cb">' + (isSelected ? '&#10003;' : '') + '</div>' : '')
-      + '<div class="p-card-top">'
-      + '<div class="avatar">' + (p.photo_url ? '<img src="' + esc(p.photo_url) + '" alt="">' : initials(p.first_name, p.last_name)) + '</div>'
-      + '<div><div class="p-name">' + esc(p.last_name) + ', ' + esc(p.first_name) + '</div>'
-      + '<span class="' + typeClass(p.member_type) + '">' + esc(p.member_type||'visitor') + '</span></div></div>'
-      + '<div class="p-card-body">'
-      + (p.email ? '<div class="p-row"><span class="p-icon">&#9993;</span><a href="mailto:' + esc(p.email) + '" onclick="event.stopPropagation()">' + esc(p.email) + '</a></div>' : '')
-      + (p.phone ? '<div class="p-row"><span class="p-icon">&#128222;</span>' + esc(p.phone) + '</div>' : '')
-      + (p.household_name ? '<div class="p-row"><span class="p-icon">&#127968;</span>' + esc(p.household_name) + '</div>' : '')
-      + '</div>'
-      + (tags ? '<div class="p-tags">' + tags + '</div>' : '')
-      + '</div>';
+    if (tags.length > 3) tagHtml += '<span class="dir-tag-more">+' + (tags.length - 3) + '</span>';
+    trCls = isSelected ? ' class="dir-row-selected"' : '';
+    var badge = (p.member_type||'visitor').replace(/\s+/g,'-');
+    return '<tr' + trCls + ' style="cursor:pointer;" ' + clickHandler + '>'
+      + '<td style="width:36px;text-align:center;" onclick="event.stopPropagation()"><input type="checkbox"' + (isSelected ? ' checked' : '') + ' style="' + (_selectMode ? '' : 'display:none;') + '" onchange="togglePersonSelect(' + p.id + ',this.closest(\'tr\'))" onclick="event.stopPropagation()"></td>'
+      + '<td><div class="dir-name-cell"><div class="' + avClass + '">' + avInner + '</div><span class="dir-name-link">' + displayName + '</span></div></td>'
+      + '<td><span class="dir-badge dir-badge-' + badge + '">' + esc(p.member_type||'visitor') + '</span></td>'
+      + '<td class="dir-contact">' + (p.email ? '<a href="mailto:' + esc(p.email) + '" onclick="event.stopPropagation()">' + esc(p.email) + '</a>' : '') + (p.phone ? '<div class="dir-phone">' + esc(p.phone) + '</div>' : '') + '</td>'
+      + '<td>' + (p.household_name ? '<span class="dir-hh-link">' + esc(p.household_name) + '</span>' : '<span style="color:var(--faint);">—</span>') + '</td>'
+      + '<td><div class="dir-tags">' + tagHtml + '</div></td>'
+      + '</tr>';
   }).join('');
+  var cbAll = '<input type="checkbox" id="p-check-all" style="' + (_selectMode ? '' : 'display:none;') + '" onchange="selectAllVisible(this.checked)">';
+  c.innerHTML = '<table class="dir-table"><thead><tr>'
+    + '<th>' + cbAll + '</th>'
+    + '<th>Name</th><th>Status</th><th>Contact</th><th>Household</th><th>Tags</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 // ── MULTI-SELECT ──────────────────────────────────────────────────────
 function toggleSelectMode() {
@@ -17623,15 +17668,23 @@ function clearSelection() {
 function togglePersonSelect(id, el) {
   if (_selectedPeople.has(id)) {
     _selectedPeople.delete(id);
-    el.classList.remove('selected');
+    el.classList.remove('selected', 'dir-row-selected');
   } else {
     _selectedPeople.add(id);
-    el.classList.add('selected');
+    el.classList.add('selected', 'dir-row-selected');
   }
-  var cb = el.querySelector('.p-select-cb');
-  if (cb) cb.innerHTML = _selectedPeople.has(id) ? '&#10003;' : '';
+  var cb = el.querySelector('input[type=checkbox]');
+  if (cb) cb.checked = _selectedPeople.has(id);
   var countEl = document.getElementById('p-bulk-count');
   if (countEl) countEl.textContent = _selectedPeople.size + ' selected';
+}
+function selectAllVisible(checked) {
+  (_loadedPeople || []).forEach(function(p) {
+    if (checked) _selectedPeople.add(p.id); else _selectedPeople.delete(p.id);
+  });
+  var countEl = document.getElementById('p-bulk-count');
+  if (countEl) countEl.textContent = _selectedPeople.size + ' selected';
+  renderPeopleDesktop(_loadedPeople || []);
 }
 function applyBulkMemberType() {
   var mt = document.getElementById('p-bulk-mt').value;
