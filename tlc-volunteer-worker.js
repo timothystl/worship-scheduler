@@ -14698,16 +14698,17 @@ async function handleChmsApi(req, env, url, method, seg) {
       const ns = names.map(n => n.toLowerCase());
       return allFields.find(f => ns.includes((f.name||'').toLowerCase()));
     };
-    const F_STATUS_FIELD   = findField(['status','member status','membership status']);
-    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth']);
-    const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date']);
-    const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date']);
-    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary']);
-    const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '1076274773';
-    const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '423997769';
-    const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '156119694';
-    const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '724914824';
-    const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '2008692738';
+    const F_STATUS_FIELD   = findField(['status','member status','membership status','fellowship status','church status','member type']);
+    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth','birthday']);
+    const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized']);
+    const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed']);
+    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date']);
+    // Use empty string as fallback so details[''] is always undefined — never accidentally match a real field
+    const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '';
+    const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '';
+    const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '';
+    const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '';
+    const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '';
     // Convert MM/DD/YYYY or YYYY-MM-DD to YYYY-MM-DD
     const toISO = s => {
       if (!s) return '';
@@ -14733,13 +14734,13 @@ async function handleChmsApi(req, env, url, method, seg) {
         if (SKIP_STATUSES.has(statusName.toLowerCase())) { skipped++; continue; }
         let memberType = 'visitor';
         const sn = statusName.toLowerCase();
-        if (sn === 'member') memberType = 'member';
-        else if (sn === 'attender') memberType = 'associate';
-        else if (sn === 'no longer attends') memberType = 'inactive';
-        else if (sn === 'community contact' || sn === 'vietnamese congregation') memberType = 'friend';
+        if (sn === 'member' || sn === 'active member' || sn === 'full member') memberType = 'member';
+        else if (sn === 'attender' || sn === 'regular attender' || sn === 'regular attendee' || sn === 'attendee') memberType = 'associate';
+        else if (sn.includes('no longer') || sn === 'inactive' || sn === 'inactive member' || sn === 'former member') memberType = 'inactive';
+        else if (sn === 'community contact' || sn === 'vietnamese congregation' || sn === 'friend') memberType = 'friend';
         // Dates (stored as plain strings under their field ID key)
         const dob          = toISO(details[F_DOB]          || details['birthdate'] || '');
-        const baptismDate  = toISO(details[F_BAPTISM]       || details['date']      || '');
+        const baptismDate  = toISO(details[F_BAPTISM]       || '');
         const confirmDate  = toISO(details[F_CONFIRMATION]  || '');
         const anniversaryDate = toISO(details[F_ANNIVERSARY] || '');
         // Email, phone, address (from typed arrays)
