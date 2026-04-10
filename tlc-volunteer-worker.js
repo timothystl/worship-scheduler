@@ -191,20 +191,31 @@ async function authCookieHeader(env) {
   const b64url = btoa(String.fromCharCode(...new Uint8Array(sig)))
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `vol_auth=${ts}.${b64url}; Path=/; Expires=${exp}; HttpOnly; SameSite=Strict`;
+  return `vol_auth=${ts}.${b64url}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────
-function html(content, status = 200, headers = {}) {
+// Security headers applied to every response
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // Tight CSP — no external scripts, no eval; inline styles/scripts are
+  // required by the SPA so 'unsafe-inline' is the pragmatic choice here.
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data:; connect-src 'self'; frame-ancestors 'none';",
+};
+function html(content, status = 200, extraHeaders = {}) {
   return new Response(content, {
     status,
-    headers: { 'Content-Type': 'text/html;charset=UTF-8', ...headers }
+    headers: { 'Content-Type': 'text/html;charset=UTF-8', ...SEC_HEADERS, ...extraHeaders }
   });
 }
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', ...SEC_HEADERS }
   });
 }
 function redirect(url) {
@@ -12531,8 +12542,9 @@ export default {
       try {
         return await handleAdminApi(req, env, url, method);
       } catch (e) {
-        console.error('Admin API error:', e);
-        return json({ error: 'Internal server error: ' + (e.message || e) }, 500);
+        // Log full detail server-side, never expose internals to the client
+        console.error('Admin API error [' + method + ' ' + path + ']:', e?.message, e?.stack);
+        return json({ error: 'Internal server error. Please try again.' }, 500);
       }
     }
     // ── ChMS (People & Giving) ─────────────────────────────────────────
@@ -12854,6 +12866,18 @@ async function handleSchedulerDataApi(req, env, url, method) {
 
 // ── ADMIN LOGIN ───────────────────────────────────────────────────────
 async function handleAdminLogin(req, env) {
+  // ── Rate limiting: max 10 attempts per IP per 15-minute window ──────
+  const ip = req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For') || 'unknown';
+  const WINDOW_MS = 15 * 60 * 1000;
+  const MAX_ATTEMPTS = 10;
+  const rlKey = `rl_login:${ip}:${Math.floor(Date.now() / WINDOW_MS)}`;
+  if (env.RSVP_KV) {
+    const attempts = parseInt(await env.RSVP_KV.get(rlKey) || '0', 10);
+    if (attempts >= MAX_ATTEMPTS) {
+      return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Too many login attempts. Please wait 15 minutes and try again.</p>'), 429);
+    }
+  }
+  // ── Credential check ────────────────────────────────────────────────
   let body; try { body = await req.text(); } catch { body = ''; }
   const params = new URLSearchParams(body);
   const adminPassword = env.ADMIN_PASSWORD || '';
@@ -12861,7 +12885,14 @@ async function handleAdminLogin(req, env) {
     return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Admin password is not configured. Set the <code>ADMIN_PASSWORD</code> secret in the Cloudflare Dashboard.</p>'));
   }
   if (params.get('password') === adminPassword) {
+    // Clear rate-limit counter on successful login
+    if (env.RSVP_KV) await env.RSVP_KV.delete(rlKey).catch(() => {});
     return new Response('', { status: 302, headers: { Location: '/admin', 'Set-Cookie': await authCookieHeader(env) } });
+  }
+  // Increment failed-attempt counter (expires after 20 minutes to clean up)
+  if (env.RSVP_KV) {
+    const cur = parseInt(await env.RSVP_KV.get(rlKey) || '0', 10);
+    await env.RSVP_KV.put(rlKey, String(cur + 1), { expirationTtl: 20 * 60 }).catch(() => {});
   }
   return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Incorrect password. Please try again.</p>'));
 }
@@ -13034,8 +13065,13 @@ async function handleAdminApi(req, env, url, method) {
       seg.startsWith('giving') || seg.startsWith('reports/')   ||
       seg.startsWith('import/') || seg.startsWith('attendance') ||
       seg.startsWith('register') || seg.startsWith('config')   ||
-      seg === 'board') {
-    return handleChmsApi(req, env, url, method, seg);
+      seg === 'dashboard'      || seg === 'board') {
+    try {
+      return await handleChmsApi(req, env, url, method, seg);
+    } catch (e) {
+      console.error('ChMS API error [' + method + ' ' + seg + ']:', e?.message, e?.stack);
+      return json({ error: 'Internal server error. Please try again.' }, 500);
+    }
   }
 
   return json({ error: 'Not found' }, 404);
@@ -13122,15 +13158,21 @@ async function handleChmsApi(req, env, url, method, seg) {
        LEFT JOIN households h ON p.household_id=h.id
        WHERE ${where} ORDER BY p.last_name, p.first_name LIMIT ? OFFSET ?`
     ).bind(...binds, limit, offset).all()).results || [];
-    // Attach tags
-    const people = [];
-    for (const p of rows) {
-      const tagRows = (await db.prepare(
-        `SELECT t.id, t.name, t.color FROM tags t
-         JOIN person_tags pt ON pt.tag_id=t.id WHERE pt.person_id=?`
-      ).bind(p.id).all()).results || [];
-      people.push({ ...p, tags: tagRows });
+    // Batch-load tags for all returned people in a single query (avoids N+1)
+    const ids = rows.map(r => r.id);
+    const tagsByPerson = {};
+    if (ids.length) {
+      const ph = ids.map(() => '?').join(',');
+      const allTagRows = (await db.prepare(
+        `SELECT pt.person_id, t.id, t.name, t.color FROM tags t
+         JOIN person_tags pt ON pt.tag_id=t.id WHERE pt.person_id IN (${ph})`
+      ).bind(...ids).all()).results || [];
+      for (const tr of allTagRows) {
+        if (!tagsByPerson[tr.person_id]) tagsByPerson[tr.person_id] = [];
+        tagsByPerson[tr.person_id].push({ id: tr.id, name: tr.name, color: tr.color });
+      }
     }
+    const people = rows.map(p => ({ ...p, tags: tagsByPerson[p.id] || [] }));
     return json({ people, total, offset, limit });
   }
 
@@ -17098,6 +17140,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </head>
 <body>
 <div id="offline-banner">You are offline — showing cached contacts</div>
+<div id="error-boundary" role="alert" aria-live="assertive" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#c0392b;color:#fff;padding:11px 20px;border-radius:9px;font-size:.85rem;max-width:520px;width:90vw;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.3);"></div>
 <div class="app-shell">
 <nav class="sidebar" id="sidebar">
   <div class="s-logo"><svg viewBox="0 0 20 20"><path d="M10 1L2 7v12h6v-5h4v5h6V7L10 1z"/></svg></div>
@@ -17893,6 +17936,29 @@ function closeSidebar() {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
+// ── GLOBAL ERROR BOUNDARY ────────────────────────────────────────────
+function showErrorBanner(msg) {
+  var el = document.getElementById('error-boundary');
+  if (!el) return;
+  el.innerHTML = '<strong>Something went wrong.</strong> ' + (msg||'Unknown error')
+    + ' &nbsp;<a href="" onclick="location.reload();return false;" style="color:#ffd;text-decoration:underline;">Reload</a>'
+    + ' &nbsp;<span onclick="this.parentElement.style.display=\'none\'" style="cursor:pointer;opacity:.7;font-size:1.1em;margin-left:4px;">&#215;</span>';
+  el.style.display = 'block';
+  setTimeout(function(){ if(el) el.style.display='none'; }, 15000);
+}
+window.addEventListener('error', function(e) {
+  var loc = (e.filename||'').replace(/.*\//,'') + (e.lineno ? ':'+e.lineno : '');
+  console.error('[JS error]', e.message, loc, e.error);
+  showErrorBanner(esc(e.message || 'Script error') + (loc ? ' (' + loc + ')' : ''));
+});
+window.addEventListener('unhandledrejection', function(e) {
+  var msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason||'Promise rejected');
+  console.error('[Unhandled rejection]', e.reason);
+  // Suppress noisy offline/network errors from the service worker
+  if (/fetch|network|failed to fetch/i.test(msg)) return;
+  showErrorBanner(esc(msg));
+});
+
 window.addEventListener('load', function() {
   // Set default report year and dates
   var now = new Date();
