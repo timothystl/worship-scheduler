@@ -14045,6 +14045,51 @@ async function handleChmsApi(req, env, url, method, seg) {
     return json({ ok: true, deleted: r.meta?.changes ?? 0 });
   }
 
+  if (seg === 'import/register-from-people' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const cutoff = b.cutoff || '2020-01-01';
+    const types = Array.isArray(b.types) ? b.types : ['baptism','confirmation'];
+    let imported = 0, skipped = 0;
+
+    if (types.includes('baptism')) {
+      const people = (await db.prepare(
+        `SELECT id, first_name, last_name, dob, baptism_date FROM people
+         WHERE active=1 AND baptism_date >= ? AND baptism_date != ''`
+      ).bind(cutoff).all()).results || [];
+      const stmt = db.prepare(
+        `INSERT INTO church_register (type,event_date,name,dob,person_id) VALUES ('baptism',?,?,?,?)`
+      );
+      for (const p of people) {
+        const existing = await db.prepare(
+          `SELECT id FROM church_register WHERE person_id=? AND type='baptism'`
+        ).bind(p.id).first();
+        if (existing) { skipped++; continue; }
+        await stmt.bind(p.baptism_date, ((p.first_name||'')+' '+(p.last_name||'')).trim(), p.dob||'', p.id).run();
+        imported++;
+      }
+    }
+
+    if (types.includes('confirmation')) {
+      const people = (await db.prepare(
+        `SELECT id, first_name, last_name, dob, confirmation_date FROM people
+         WHERE active=1 AND confirmation_date >= ? AND confirmation_date != ''`
+      ).bind(cutoff).all()).results || [];
+      const stmt = db.prepare(
+        `INSERT INTO church_register (type,event_date,name,dob,person_id) VALUES ('confirmation',?,?,?,?)`
+      );
+      for (const p of people) {
+        const existing = await db.prepare(
+          `SELECT id FROM church_register WHERE person_id=? AND type='confirmation'`
+        ).bind(p.id).first();
+        if (existing) { skipped++; continue; }
+        await stmt.bind(p.confirmation_date, ((p.first_name||'')+' '+(p.last_name||'')).trim(), p.dob||'', p.id).run();
+        imported++;
+      }
+    }
+
+    return json({ ok: true, imported, skipped });
+  }
+
   // ── Dev Board (Kanban) ───────────────────────────────────────────
   if (seg === 'board' && method === 'GET') {
     const row = await db.prepare("SELECT value FROM chms_config WHERE key='dev_board'").first();
@@ -16854,9 +16899,9 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 #profile-view{display:none;flex-direction:column;flex:1;overflow:hidden;}
 .pv-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 .pv-hdr{display:flex;align-items:flex-start;gap:18px;padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
-.pv-photo{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;flex-shrink:0;}
+.pv-photo{width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.12);}
 .pv-hdr-info{flex:1;}
-.pv-fullname{font-size:22px;font-weight:600;color:var(--charcoal);line-height:1.2;}
+.pv-fullname{font-size:26px;font-weight:700;color:var(--charcoal);line-height:1.2;font-family:var(--font-head,inherit);}
 .pv-meta{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
 .pv-hh-link{font-size:13px;color:var(--sky-steel);cursor:pointer;}
 .pv-hh-link:hover{text-decoration:underline;}
@@ -16881,6 +16926,13 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .pv-row-val a{color:var(--sky-steel);text-decoration:none;}
 .pv-row-val a:hover{text-decoration:underline;}
 .pv-row-val.empty{color:var(--faint);font-style:italic;}
+/* Demographics card grid (Church360-style) */
+.pv-field-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px;}
+@media(max-width:600px){.pv-field-grid{grid-template-columns:repeat(2,1fr);}}
+.pv-field-card{border:1px solid var(--border);border-radius:7px;padding:8px 11px;background:var(--bg);}
+.pv-field-card-lbl{font-size:10px;color:var(--warm-gray);text-transform:lowercase;letter-spacing:.02em;margin-bottom:3px;}
+.pv-field-card-val{font-size:13px;color:var(--charcoal);font-weight:500;}
+.pv-field-card-val.empty{color:var(--faint);font-style:italic;font-weight:400;}
 .pv-family-member{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
 .pv-family-member:last-child{border-bottom:none;}
 .pv-family-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;flex-shrink:0;}
@@ -17213,6 +17265,17 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <p>Remove any giving batches that have no entries (can be left behind by failed or partial imports). Safe to run at any time.</p>
     <button class="btn-secondary" onclick="pruneEmptyBatches()">Delete Empty Batches</button>
     <div class="import-status" id="prune-batches-status"></div>
+  </div>
+  <div class="import-card">
+    <h3>&#9997; Generate Register from People Records</h3>
+    <p>Create church register entries from baptism and confirmation dates already stored on people records. People who already have a matching register entry are skipped (safe to re-run).</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <div class="field" style="margin:0;"><label>Earliest date to include</label><input type="date" id="reg-gen-cutoff" value="2020-01-01" style="font-size:.85rem;padding:4px 8px;"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-baptism" checked> Baptisms</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-confirm" checked> Confirmations</label>
+    </div>
+    <button class="btn-primary" onclick="generateRegisterFromPeople()">Generate Register Entries</button>
+    <div class="import-status" id="reg-gen-status"></div>
   </div>
   <div class="import-card" style="border-color:#e74c3c;">
     <h3 style="color:#e74c3c;">&#9888; Clear All Giving Data</h3>
@@ -18200,14 +18263,16 @@ function showProfile(p) {
       + '</div>';
     var rightCol = '<div>'
       + '<div class="pv-section">'
-      + '<div class="pv-section-title">Key Dates</div>'
-      + pvRow('Date of Birth', p.dob ? esc(p.dob)+calcAge(p.dob) : '')
-      + pvRow('Baptism', p.baptism_date ? esc(p.baptism_date) : '')
-      + pvRow('Confirmation', p.confirmation_date ? esc(p.confirmation_date) : '')
-      + pvRow('Anniversary', p.anniversary_date ? esc(p.anniversary_date) : '')
-      + (p.death_date ? pvRow('Death', esc(p.death_date)) : '')
+      + '<div class="pv-section-title">Demographics / Dates</div>'
+      + '<div class="pv-field-grid">'
+      + pvField('birthday', p.dob ? fmtDate(p.dob)+calcAge(p.dob) : '')
+      + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : '')
+      + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : '')
+      + pvField('anniversary', p.anniversary_date ? fmtDate(p.anniversary_date) : '')
+      + pvField('deceased', p.deceased ? (p.death_date ? fmtDate(p.death_date) : 'Yes') : 'No')
       + '</div>'
-      + (tagHtml ? '<div class="pv-section"><div class="pv-section-title">Tags</div><div style="display:flex;flex-wrap:wrap;gap:4px;">'+tagHtml+'</div></div>' : '')
+      + '</div>'
+      + (tagHtml ? '<div class="pv-section"><div class="pv-section-title">Tags</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+tagHtml+'</div></div>' : '')
       + (p.notes ? '<div class="pv-section"><div class="pv-section-title">Notes</div><div style="font-size:13px;color:var(--charcoal);white-space:pre-wrap;line-height:1.5;">'+esc(p.notes)+'</div></div>' : '')
       + '</div>';
     infoEl.innerHTML = '<div class="pv-info-cols">'+leftCol+rightCol+'</div>';
@@ -18247,7 +18312,8 @@ function pvRow(key, val) {
   return '<div class="pv-row"><div class="pv-row-key">'+key+'</div><div class="pv-row-val'+(empty?' empty':'')+'">'+(val||'—')+'</div></div>';
 }
 function pvField(label, val) {
-  return '<div class="pv-field"><div class="pv-field-key">'+label+'</div><div class="pv-field-val">'+val+'</div></div>';
+  var empty = !val;
+  return '<div class="pv-field-card"><div class="pv-field-card-lbl">'+label+'</div><div class="pv-field-card-val'+(empty?' empty':'')+'">'+( val||'—')+'</div></div>';
 }
 function loadPvFamily(hhId, selfId) {
   var el = document.getElementById('pv-family-members');
@@ -19657,6 +19723,27 @@ function doSendBatch(yr, checks, status) {
     }).catch(function() { failed++; sendNext(); });
   }
   sendNext();
+}
+// ── GENERATE REGISTER FROM PEOPLE ─────────────────────────────────────
+function generateRegisterFromPeople() {
+  var status = document.getElementById('reg-gen-status');
+  var cutoff = document.getElementById('reg-gen-cutoff').value || '2020-01-01';
+  var inclBaptism = document.getElementById('reg-gen-baptism').checked;
+  var inclConfirm = document.getElementById('reg-gen-confirm').checked;
+  if (!inclBaptism && !inclConfirm) { status.textContent = 'Select at least one type.'; status.className = 'import-status err'; return; }
+  status.textContent = 'Generating\u2026'; status.className = 'import-status';
+  var types = [];
+  if (inclBaptism) types.push('baptism');
+  if (inclConfirm) types.push('confirmation');
+  api('/admin/api/import/register-from-people', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cutoff: cutoff, types: types})
+  }).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    status.textContent = 'Done. ' + d.imported + ' entries created, ' + d.skipped + ' already existed.';
+    status.className = 'import-status ok';
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 // ── CLEAR GIVING ──────────────────────────────────────────────────────
 function pruneEmptyBatches() {
