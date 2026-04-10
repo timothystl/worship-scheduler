@@ -18780,7 +18780,7 @@ function parseRegImportFile(text, filename) {
   var colMap = {
     entry_no:       col(['entry no', 'entry no.', '#', 'no', 'no.']),
     record_type:    col(['record type','type']),
-    first_names:    col(['first names','first name','firstname','given names']),
+    first_names:    col(['first names','first name','firstname','given names','given name','first name s','christian name','christian names','forename','forenames','baptismal name','baptized name','name of child','child']),
     surname:        col(['surname','last name','lastname','family name']),
     dob:            col(['date of birth','dob','birth date','birthdate']),
     place_of_birth: col(['place of birth','birthplace','birth place']),
@@ -18788,13 +18788,14 @@ function parseRegImportFile(text, filename) {
     baptism_place:  col(['baptism place','place','location','church','baptism location']),
     father:         col(['father']),
     mother:         col(['mother']),
-    sponsors:       col(['sponsors   remarks','sponsors / remarks','sponsors/remarks','sponsors remarks','sponsors','godparents','witnesses','remarks']),
+    sponsors:       col(['sponsors   remarks','sponsors / remarks','sponsors/remarks','sponsors remarks','sponsors witnesses','sponsors / witnesses','sponsors','godparents','witnesses','remarks']),
     officiant:      col(['officiant','pastor','minister','priest','celebrant']),
     notes:          col(['notes','note','comments']),
     pdf_page:       col(['pdf page','page','pdf'])
   };
   var missing = [];
   if (colMap.first_names < 0 && colMap.surname < 0 && headers.indexOf('name') < 0) missing.push('Name column (First Names + Surname, or Name)');
+  if (colMap.first_names < 0 && colMap.surname >= 0) missing.push('First Names column (found Surname but no First Names/Given Name — names will be surnames only)');
   if (colMap.event_date < 0) missing.push('Date column (Baptism Date or Date)');
   var regType = document.getElementById('reg-import-type') ? document.getElementById('reg-import-type').value : 'baptism';
   var rows = [];
