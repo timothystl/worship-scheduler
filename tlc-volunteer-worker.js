@@ -12266,6 +12266,15 @@ async function initDb(db) {
     // people: deceased flag and death date
     'ALTER TABLE people ADD COLUMN deceased INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE people ADD COLUMN death_date TEXT NOT NULL DEFAULT ""',
+    // church_register: extended historical record fields
+    'ALTER TABLE church_register ADD COLUMN record_type TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN dob TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN place_of_birth TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN baptism_place TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN father TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN mother TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN sponsors TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE church_register ADD COLUMN pdf_page TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
@@ -13960,17 +13969,43 @@ async function handleChmsApi(req, env, url, method, seg) {
     let rb = {}; try { rb = await req.json(); } catch {}
     if (!rb.type || !rb.name) return json({ error: 'type and name required' }, 400);
     const rr = await db.prepare(
-      'INSERT INTO church_register (type,event_date,name,name2,officiant,notes,person_id) VALUES (?,?,?,?,?,?,?)'
-    ).bind(rb.type||'', rb.event_date||'', rb.name||'', rb.name2||'', rb.officiant||'', rb.notes||'', rb.person_id||null).run();
+      `INSERT INTO church_register (type,event_date,name,name2,officiant,notes,person_id,
+        record_type,dob,place_of_birth,baptism_place,father,mother,sponsors,pdf_page)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(rb.type||'', rb.event_date||'', rb.name||'', rb.name2||'', rb.officiant||'', rb.notes||'', rb.person_id||null,
+      rb.record_type||'', rb.dob||'', rb.place_of_birth||'', rb.baptism_place||'',
+      rb.father||'', rb.mother||'', rb.sponsors||'', rb.pdf_page||'').run();
     return json({ ok: true, id: rr.meta.last_row_id });
+  }
+  if (seg === 'register/batch' && method === 'POST') {
+    let rows = []; try { rows = await req.json(); } catch {}
+    if (!Array.isArray(rows) || !rows.length) return json({ error: 'expected array' }, 400);
+    let imported = 0, errors = 0;
+    const stmt = db.prepare(
+      `INSERT INTO church_register (type,event_date,name,name2,officiant,notes,
+        record_type,dob,place_of_birth,baptism_place,father,mother,sponsors,pdf_page)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    );
+    for (const rb of rows) {
+      try {
+        await stmt.bind(rb.type||'', rb.event_date||'', rb.name||'', rb.name2||'', rb.officiant||'', rb.notes||'',
+          rb.record_type||'', rb.dob||'', rb.place_of_birth||'', rb.baptism_place||'',
+          rb.father||'', rb.mother||'', rb.sponsors||'', rb.pdf_page||'').run();
+        imported++;
+      } catch(e) { errors++; }
+    }
+    return json({ ok: true, imported, errors });
   }
   const regDelMatch = seg.match(/^register\/(\d+)$/);
   if (regDelMatch && method === 'PUT') {
     const rid = parseInt(regDelMatch[1]);
     let rb2 = {}; try { rb2 = await req.json(); } catch {}
     await db.prepare(
-      'UPDATE church_register SET event_date=?,name=?,name2=?,officiant=?,notes=? WHERE id=?'
-    ).bind(rb2.event_date||'', rb2.name||'', rb2.name2||'', rb2.officiant||'', rb2.notes||'', rid).run();
+      `UPDATE church_register SET event_date=?,name=?,name2=?,officiant=?,notes=?,
+        record_type=?,dob=?,place_of_birth=?,baptism_place=?,father=?,mother=?,sponsors=?,pdf_page=? WHERE id=?`
+    ).bind(rb2.event_date||'', rb2.name||'', rb2.name2||'', rb2.officiant||'', rb2.notes||'',
+      rb2.record_type||'', rb2.dob||'', rb2.place_of_birth||'', rb2.baptism_place||'',
+      rb2.father||'', rb2.mother||'', rb2.sponsors||'', rb2.pdf_page||'', rid).run();
     return json({ ok: true });
   }
   if (regDelMatch && method === 'DELETE') {
@@ -17213,7 +17248,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <button class="pv-tab" data-rtab="wedding" onclick="showRegisterTab('wedding')" style="font-size:13px;padding:12px 18px;">Weddings</button>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
         <button class="btn-secondary" style="display:none;font-size:.8rem;" id="reg-add-toggle" onclick="toggleRegForm()">+ Add</button>
-        <button class="btn-secondary" style="font-size:.8rem;" onclick="printRegister()">Print Register</button>
+        <button class="btn-secondary" style="font-size:.8rem;" onclick="openRegImport()">&#8679; Import</button>
+        <button class="btn-secondary" style="font-size:.8rem;" onclick="printRegister()">Print</button>
       </div>
     </div>
     <!-- Filter toolbar -->
@@ -17298,6 +17334,67 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <!-- ═══ MODALS ═══ -->
+<!-- Register import modal -->
+<div class="modal-overlay" id="reg-import-modal" style="display:none;" onclick="if(event.target===this)closeRegImport()">
+  <div class="modal" style="max-width:820px;width:95vw;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <h2 style="margin:0;flex:1;">Import Register Records</h2>
+      <button class="btn-secondary" style="font-size:.8rem;" onclick="closeRegImport()">&#215; Close</button>
+    </div>
+    <!-- Step 1: file pick -->
+    <div id="reg-import-step1">
+      <p style="font-size:.875rem;color:var(--warm-gray);margin:0 0 16px;">
+        Upload a <strong>tab-separated (.tsv)</strong> or <strong>comma-separated (.csv)</strong> file exported from your spreadsheet.
+        The importer auto-detects these column headers:
+      </p>
+      <div style="background:var(--linen);border-radius:8px;padding:10px 14px;font-size:.78rem;color:var(--charcoal);margin-bottom:16px;line-height:1.8;">
+        <strong>Entry No.</strong> &nbsp;&#183;&nbsp; <strong>Record Type</strong> &nbsp;&#183;&nbsp;
+        <strong>First Names</strong> &nbsp;&#183;&nbsp; <strong>Surname</strong> &nbsp;&#183;&nbsp;
+        <strong>Date of Birth</strong> &nbsp;&#183;&nbsp; <strong>Place of Birth</strong> &nbsp;&#183;&nbsp;
+        <strong>Baptism Date</strong> &nbsp;&#183;&nbsp; <strong>Baptism Place</strong> &nbsp;&#183;&nbsp;
+        <strong>Father</strong> &nbsp;&#183;&nbsp; <strong>Mother</strong> &nbsp;&#183;&nbsp;
+        <strong>Sponsors / Remarks</strong> &nbsp;&#183;&nbsp; <strong>Officiant</strong> &nbsp;&#183;&nbsp;
+        <strong>Notes</strong> &nbsp;&#183;&nbsp; <strong>PDF Page</strong>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:6px;">Register Type</label>
+        <select id="reg-import-type" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+          <option value="baptism">Baptisms</option>
+          <option value="confirmation">Confirmations</option>
+          <option value="wedding">Weddings</option>
+        </select>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:var(--teal);color:white;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:600;">
+        &#8679; Choose File
+        <input type="file" id="reg-import-file" accept=".csv,.tsv,.txt" style="display:none;" onchange="regImportFileChosen(this)">
+      </label>
+      <span id="reg-import-filename" style="margin-left:10px;font-size:.85rem;color:var(--warm-gray);"></span>
+    </div>
+    <!-- Step 2: preview -->
+    <div id="reg-import-step2" style="display:none;">
+      <div id="reg-import-summary" style="font-size:.875rem;margin-bottom:14px;"></div>
+      <div style="overflow-x:auto;max-height:280px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;">
+        <table id="reg-import-preview" style="width:100%;border-collapse:collapse;font-size:.78rem;min-width:600px;">
+          <thead id="reg-import-preview-head" style="position:sticky;top:0;background:var(--linen);"></thead>
+          <tbody id="reg-import-preview-body"></tbody>
+        </table>
+      </div>
+      <div id="reg-import-warn" style="font-size:.82rem;color:var(--danger);margin-bottom:12px;display:none;"></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-primary" onclick="runRegImport()">Import <span id="reg-import-count"></span> Records</button>
+        <button class="btn-secondary" onclick="resetRegImport()">&#8592; Choose Different File</button>
+        <span id="reg-import-progress" style="font-size:.85rem;color:var(--warm-gray);display:none;"></span>
+      </div>
+    </div>
+    <!-- Step 3: done -->
+    <div id="reg-import-step3" style="display:none;text-align:center;padding:24px 0;">
+      <div style="font-size:2.4rem;margin-bottom:10px;">&#10003;</div>
+      <div style="font-size:1.1rem;font-weight:600;margin-bottom:6px;" id="reg-import-done-msg"></div>
+      <div style="font-size:.875rem;color:var(--warm-gray);margin-bottom:20px;" id="reg-import-done-sub"></div>
+      <button class="btn-primary" onclick="closeRegImport()">Done</button>
+    </div>
+  </div>
+</div>
 <!-- Person edit modal -->
 <div class="modal-overlay" id="person-modal">
   <div class="modal">
@@ -18397,39 +18494,56 @@ function renderRegisterList(entries) {
       + '<div style="font-size:.82rem;">' + (_regEntries.length ? 'Try adjusting the search or year filter.' : 'Use the form to record the first entry.') + '</div></div>';
     return;
   }
-  // Group by year
-  var byYear = {};
-  var yearOrder = [];
+  var byYear = {}; var yearOrder = [];
   entries.forEach(function(e) {
     var yr = (e.event_date||'').slice(0,4) || '\u2014';
     if (!byYear[yr]) { byYear[yr] = []; yearOrder.push(yr); }
     byYear[yr].push(e);
   });
+  // Detect if this batch has extended fields (historical import)
+  var hasExtended = entries.some(function(e){ return e.father||e.mother||e.sponsors||e.dob||e.baptism_place; });
   var html = '';
   yearOrder.forEach(function(yr) {
     var grp = byYear[yr];
     var rows = grp.map(function(e) {
+      // Date cell
       var dateDisp = e.event_date ? e.event_date : '\u2014';
-      var namePart = esc(e.name||'\u2014');
-      var name2Part = e.name2 ? esc(e.name2) : '<span style="color:var(--faint);">\u2014</span>';
+      var placeDisp = (e.baptism_place && hasExtended) ? '<br><span style="font-size:.75rem;color:var(--warm-gray);">'+esc(e.baptism_place)+'</span>' : '';
+      // Name cell
+      var namePart = '<strong>'+esc(e.name||'\u2014')+'</strong>';
+      if (e.dob) namePart += '<br><span style="font-size:.75rem;color:var(--warm-gray);">b. '+esc(e.dob)+'</span>';
+      if (e.notes) namePart += '<br><span style="font-size:.75rem;color:var(--warm-gray);font-style:italic;">'+esc(e.notes)+'</span>';
+      // Family cell (extended or simple)
+      var familyPart;
+      if (hasExtended) {
+        var parts = [];
+        if (e.father) parts.push('<span style="font-size:.72rem;color:var(--warm-gray);text-transform:uppercase;letter-spacing:.03em;">Father</span> '+esc(e.father));
+        if (e.mother) parts.push('<span style="font-size:.72rem;color:var(--warm-gray);text-transform:uppercase;letter-spacing:.03em;">Mother</span> '+esc(e.mother));
+        if (e.sponsors) parts.push('<span style="font-size:.72rem;color:var(--warm-gray);text-transform:uppercase;letter-spacing:.03em;">Sponsors</span> '+esc(e.sponsors));
+        if (!parts.length && e.name2) parts.push(esc(e.name2));
+        familyPart = parts.length ? parts.join('<br>') : '<span style="color:var(--faint);">\u2014</span>';
+      } else {
+        familyPart = e.name2 ? esc(e.name2) : '<span style="color:var(--faint);">\u2014</span>';
+      }
+      // Officiant + record_type badge
+      var rtBadge = (e.record_type && hasExtended) ? '<span style="display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:4px;background:var(--linen);color:var(--warm-gray);margin-bottom:3px;">'+esc(e.record_type)+'</span><br>' : '';
       var officPart = e.officiant ? esc(e.officiant) : '<span style="color:var(--faint);">\u2014</span>';
-      var notesPart = e.notes ? '<span style="font-size:.8rem;color:var(--warm-gray);">'+esc(e.notes)+'</span>' : '';
+      var pdfPart = e.pdf_page ? '<br><span style="font-size:.72rem;color:var(--faint);">p.'+esc(e.pdf_page)+'</span>' : '';
       return '<tr>'
-        + '<td style="white-space:nowrap;color:var(--warm-gray);width:96px;">'+dateDisp+'</td>'
-        + '<td style="font-weight:600;">'+namePart+(notesPart?'<br>'+notesPart:'')+'</td>'
-        + '<td>'+name2Part+'</td>'
-        + '<td>'+officPart+'</td>'
+        + '<td style="white-space:nowrap;color:var(--warm-gray);width:96px;">'+dateDisp+placeDisp+'</td>'
+        + '<td>'+namePart+'</td>'
+        + '<td style="font-size:.85rem;">'+familyPart+'</td>'
+        + '<td style="font-size:.85rem;">'+rtBadge+officPart+pdfPart+'</td>'
         + '<td style="white-space:nowrap;text-align:right;">'
         + '<button class="reg-edit-btn" onclick="openRegisterEdit('+e.id+')" title="Edit">Edit</button>'
         + '<button class="del-entry" onclick="deleteRegisterEntry('+e.id+')" title="Delete">&#215;</button>'
         + '</td>'
         + '</tr>';
     }).join('');
+    var famHeader = hasExtended ? 'Family' : esc(lbl.col2);
     html += '<div class="reg-year-hdr">'+yr+' <span style="font-weight:400;color:var(--faint);">('+grp.length+')</span></div>'
       + '<table class="reg-table" style="margin-top:8px;">'
-      + '<thead><tr>'
-      + '<th>Date</th><th>'+esc(lbl.nameLbl)+'</th><th>'+esc(lbl.col2)+'</th><th>Officiant</th><th></th>'
-      + '</tr></thead>'
+      + '<thead><tr><th>Date</th><th>'+esc(lbl.nameLbl)+'</th><th>'+famHeader+'</th><th>Officiant</th><th></th></tr></thead>'
       + '<tbody>'+rows+'</tbody></table>';
   });
   el.innerHTML = html;
@@ -18499,40 +18613,263 @@ function printRegister() {
     }
     return true;
   });
+  var hasExtended = entries.some(function(e){ return e.father||e.mother||e.sponsors||e.dob||e.baptism_place; });
   var byYear = {}; var yearOrder = [];
   entries.forEach(function(e) {
     var yr = (e.event_date||'').slice(0,4)||'\u2014';
     if (!byYear[yr]) { byYear[yr] = []; yearOrder.push(yr); }
     byYear[yr].push(e);
   });
+  var colSpan = hasExtended ? '9' : '5';
+  var thead = hasExtended
+    ? '<tr><th>#</th><th>Baptism Date</th><th>Name</th><th>DOB</th><th>Father</th><th>Mother</th><th>Sponsors / Remarks</th><th>Officiant</th><th>Place</th></tr>'
+    : '<tr><th>#</th><th>Date</th><th>'+lbl.nameLbl+'</th><th>'+lbl.col2+'</th><th>Officiant</th></tr>';
   var tableRows = '';
   yearOrder.forEach(function(yr) {
-    tableRows += '<tr class="yr-hdr"><td colspan="5">'+yr+'</td></tr>';
+    tableRows += '<tr class="yr-hdr"><td colspan="'+colSpan+'">'+yr+'</td></tr>';
     byYear[yr].forEach(function(e, i) {
-      tableRows += '<tr>'
-        +'<td>'+(i+1)+'</td>'
-        +'<td>'+(e.event_date||'\u2014')+'</td>'
-        +'<td><strong>'+(e.name||'\u2014')+'</strong></td>'
-        +'<td>'+(e.name2||'\u2014')+'</td>'
-        +'<td>'+(e.officiant||'\u2014')+(e.notes?'<br><em style="font-size:.8em;color:#666">'+e.notes+'</em>':'')+'</td>'
-        +'</tr>';
+      if (hasExtended) {
+        tableRows += '<tr>'
+          +'<td style="color:#999;">'+(i+1)+'</td>'
+          +'<td>'+(e.event_date||'\u2014')+'</td>'
+          +'<td><strong>'+(e.name||'\u2014')+'</strong>'+(e.record_type?'<br><small>'+e.record_type+'</small>':'')+'</td>'
+          +'<td>'+(e.dob||'\u2014')+(e.place_of_birth?'<br><small>'+e.place_of_birth+'</small>':'')+'</td>'
+          +'<td>'+(e.father||'\u2014')+'</td>'
+          +'<td>'+(e.mother||'\u2014')+'</td>'
+          +'<td>'+(e.sponsors||e.name2||'\u2014')+(e.notes?'<br><em>'+e.notes+'</em>':'')+'</td>'
+          +'<td>'+(e.officiant||'\u2014')+'</td>'
+          +'<td>'+(e.baptism_place||'\u2014')+(e.pdf_page?'<br><small>p.'+e.pdf_page+'</small>':'')+'</td>'
+          +'</tr>';
+      } else {
+        tableRows += '<tr>'
+          +'<td style="color:#999;">'+(i+1)+'</td>'
+          +'<td>'+(e.event_date||'\u2014')+'</td>'
+          +'<td><strong>'+(e.name||'\u2014')+'</strong></td>'
+          +'<td>'+(e.name2||'\u2014')+'</td>'
+          +'<td>'+(e.officiant||'\u2014')+(e.notes?'<br><em style="font-size:.8em;color:#666">'+e.notes+'</em>':'')+'</td>'
+          +'</tr>';
+      }
     });
   });
   var churchName = '';
   var cn = document.getElementById('settings-church-name'); if (cn) churchName = cn.value||'';
-  var printWin = window.open('', '_blank', 'width=820,height=900');
+  var printWin = window.open('', '_blank', 'width=1100,height=900');
   printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+lbl.title+' Register</title>'
-    +'<style>body{font-family:Georgia,serif;font-size:12pt;margin:0;padding:32px;}h1{font-size:18pt;margin:0 0 4px;}h2{font-size:12pt;font-weight:normal;color:#666;margin:0 0 24px;}table{width:100%;border-collapse:collapse;font-size:10pt;}'
-    +'th{border-bottom:2px solid #333;padding:6px 8px;text-align:left;}td{padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top;}'
-    +'.yr-hdr td{background:#f0f0f0;font-weight:bold;font-size:10pt;letter-spacing:.05em;padding:8px 8px 4px;border-bottom:1px solid #ccc;}'
-    +'@media print{body{padding:0;}.no-print{display:none;}}</style></head><body>'
-    +'<div class="no-print" style="margin-bottom:16px;"><button onclick="window.print()">Print</button></div>'
-    +'<h1>'+(churchName ? esc(churchName)+' \u2014 ' : '')+lbl.title+' Register</h1>'
-    +'<h2>'+(year||'All Years')+' \u00b7 '+entries.length+' entries</h2>'
-    +'<table><thead><tr><th>#</th><th>Date</th><th>'+lbl.nameLbl+'</th><th>'+lbl.col2+'</th><th>Officiant</th></tr></thead>'
-    +'<tbody>'+tableRows+'</tbody></table>'
+    +'<style>body{font-family:Georgia,serif;font-size:10pt;margin:0;padding:24px 32px;}h1{font-size:16pt;margin:0 0 2px;}h2{font-size:10pt;font-weight:normal;color:#666;margin:0 0 20px;}'
+    +'table{width:100%;border-collapse:collapse;font-size:8.5pt;}th{border-bottom:2px solid #222;padding:5px 6px;text-align:left;background:#f9f9f9;}td{padding:5px 6px;border-bottom:1px solid #e0e0e0;vertical-align:top;}'
+    +'.yr-hdr td{background:#eeeeee;font-weight:bold;font-size:9pt;letter-spacing:.05em;padding:7px 6px 4px;border-bottom:1px solid #bbb;}'
+    +'small{font-size:7.5pt;color:#777;}em{color:#555;}'
+    +'@media print{body{padding:0;}.no-print{display:none;}@page{size:landscape;}}</style></head><body>'
+    +'<div class="no-print" style="margin-bottom:16px;"><button onclick="window.print()">&#128424; Print</button></div>'
+    +'<h1>'+(churchName ? churchName+' \u2014 ' : '')+lbl.title+' Register</h1>'
+    +'<h2>'+(year||'All Years')+' \u00b7 '+entries.length+' '+(entries.length===1?'entry':'entries')+'</h2>'
+    +'<table><thead>'+thead+'</thead><tbody>'+tableRows+'</tbody></table>'
     +'</body></html>');
   printWin.document.close();
+}
+
+// ── REGISTER IMPORT ──────────────────────────────────────────────────
+var _regImportRows = [];   // parsed rows ready to import
+function openRegImport() {
+  var sel = document.getElementById('reg-import-type');
+  if (sel) sel.value = _regType;
+  showRegImportStep(1);
+  document.getElementById('reg-import-modal').style.display = 'flex';
+}
+function closeRegImport() {
+  document.getElementById('reg-import-modal').style.display = 'none';
+  resetRegImport();
+}
+function resetRegImport() {
+  _regImportRows = [];
+  var fi = document.getElementById('reg-import-file'); if (fi) fi.value = '';
+  var fn = document.getElementById('reg-import-filename'); if (fn) fn.textContent = '';
+  showRegImportStep(1);
+}
+function showRegImportStep(n) {
+  [1,2,3].forEach(function(i){
+    var el = document.getElementById('reg-import-step'+i);
+    if (el) el.style.display = (i===n) ? '' : 'none';
+  });
+}
+function regImportFileChosen(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var fn = document.getElementById('reg-import-filename');
+  if (fn) fn.textContent = file.name;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var parsed = parseRegImportFile(ev.target.result, file.name);
+      if (parsed.error) { alert(parsed.error); return; }
+      _regImportRows = parsed.rows;
+      showRegImportPreview(parsed);
+    } catch(err) { alert('Parse error: ' + err.message); }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+function parseRegImportFile(text, filename) {
+  // Detect delimiter: if splitting first line by tab gives 5+ fields, use tab
+  var lines = text.replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n').split('\\n').filter(function(l){ return l.trim(); });
+  if (lines.length < 2) return { error: 'File has fewer than 2 lines — need a header row and at least one data row.' };
+  var delim = lines[0].split('\\t').length >= 5 ? '\\t' : ',';
+  function parseLine(line) {
+    if (delim === '\\t') return line.split('\\t').map(function(c){ return c.trim(); });
+    // CSV: handle quoted fields
+    var cols = [], cur = '', inQ = false;
+    for (var ci = 0; ci < line.length; ci++) {
+      var ch = line[ci];
+      if (ch === '"' && !inQ) { inQ = true; }
+      else if (ch === '"' && inQ && line[ci+1] === '"') { cur += '"'; ci++; }
+      else if (ch === '"' && inQ) { inQ = false; }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    cols.push(cur.trim());
+    return cols;
+  }
+  var headers = parseLine(lines[0]).map(function(h){ return h.toLowerCase().replace(/[^a-z0-9]/g,' ').trim().replace(/\\s+/g,' '); });
+  function col(names) {
+    for (var ni = 0; ni < names.length; ni++) {
+      var idx = headers.indexOf(names[ni].toLowerCase());
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  }
+  var colMap = {
+    entry_no:       col(['entry no', 'entry no.', '#', 'no', 'no.']),
+    record_type:    col(['record type','type']),
+    first_names:    col(['first names','first name','firstname','given names']),
+    surname:        col(['surname','last name','lastname','family name']),
+    dob:            col(['date of birth','dob','birth date','birthdate']),
+    place_of_birth: col(['place of birth','birthplace','birth place']),
+    event_date:     col(['baptism date','confirmation date','wedding date','event date','date']),
+    baptism_place:  col(['baptism place','place','location','church','baptism location']),
+    father:         col(['father']),
+    mother:         col(['mother']),
+    sponsors:       col(['sponsors   remarks','sponsors / remarks','sponsors/remarks','sponsors remarks','sponsors','godparents','witnesses','remarks']),
+    officiant:      col(['officiant','pastor','minister','priest','celebrant']),
+    notes:          col(['notes','note','comments']),
+    pdf_page:       col(['pdf page','page','pdf'])
+  };
+  var missing = [];
+  if (colMap.first_names < 0 && colMap.surname < 0 && headers.indexOf('name') < 0) missing.push('Name column (First Names + Surname, or Name)');
+  if (colMap.event_date < 0) missing.push('Date column (Baptism Date or Date)');
+  var regType = document.getElementById('reg-import-type') ? document.getElementById('reg-import-type').value : 'baptism';
+  var rows = [];
+  var skipped = 0;
+  for (var li = 1; li < lines.length; li++) {
+    var cols = parseLine(lines[li]);
+    if (cols.every(function(c){ return !c; })) { skipped++; continue; }
+    function g(idx) { return (idx >= 0 && idx < cols.length) ? cols[idx] : ''; }
+    var firstName = g(colMap.first_names), surname = g(colMap.surname);
+    var nameCol = headers.indexOf('name');
+    var fullName = (firstName || surname)
+      ? (firstName + (firstName && surname ? ' ' : '') + surname).trim()
+      : g(nameCol);
+    var rawDate = g(colMap.event_date);
+    rows.push({
+      type:           regType,
+      name:           fullName,
+      name2:          g(colMap.sponsors),
+      officiant:      g(colMap.officiant),
+      notes:          g(colMap.notes),
+      record_type:    g(colMap.record_type),
+      dob:            normalizeRegDate(g(colMap.dob)),
+      place_of_birth: g(colMap.place_of_birth),
+      event_date:     normalizeRegDate(rawDate),
+      baptism_place:  g(colMap.baptism_place),
+      father:         g(colMap.father),
+      mother:         g(colMap.mother),
+      sponsors:       g(colMap.sponsors),
+      pdf_page:       g(colMap.pdf_page)
+    });
+  }
+  return { rows: rows, headers: headers, colMap: colMap, skipped: skipped, missing: missing, delim: delim };
+}
+function normalizeRegDate(s) {
+  if (!s) return '';
+  s = s.trim();
+  // Already ISO
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
+  // MM/DD/YYYY
+  var m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);
+  if (m) return m[3]+'-'+pad2(m[1])+'-'+pad2(m[2]);
+  // Month D, YYYY  (e.g. "July 1, 1928")
+  var MONTHS = {january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',
+                july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'};
+  var m2 = s.match(/^([A-Za-z]+)\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})$/);
+  if (m2) {
+    var mo = MONTHS[m2[1].toLowerCase()];
+    if (mo) return m2[3]+'-'+mo+'-'+pad2(m2[2]);
+  }
+  // D Month YYYY  (e.g. "1 July 1928")
+  var m3 = s.match(/^(\\d{1,2})\\s+([A-Za-z]+)\\.?\\s+(\\d{4})$/);
+  if (m3) {
+    var mo2 = MONTHS[m3[2].toLowerCase()];
+    if (mo2) return m3[3]+'-'+mo2+'-'+pad2(m3[1]);
+  }
+  // Return as-is if we can't parse
+  return s;
+}
+function pad2(n) { return String(n).padStart(2,'0'); }
+function showRegImportPreview(parsed) {
+  var rows = parsed.rows;
+  var cnt = document.getElementById('reg-import-count'); if (cnt) cnt.textContent = rows.length;
+  var sum = document.getElementById('reg-import-summary');
+  if (sum) sum.innerHTML = '<strong>'+rows.length+'</strong> rows detected'
+    + (parsed.skipped ? ' (<em>'+parsed.skipped+' blank rows skipped</em>)' : '')
+    + ' — showing first 5 as preview. '
+    + (parsed.missing.length ? '<span style="color:var(--danger);">Warning: could not find columns: <strong>'+parsed.missing.join(', ')+'</strong></span>' : '');
+  // Build preview table
+  var previewCols = ['name','event_date','dob','father','mother','sponsors','officiant','baptism_place'];
+  var thead = document.getElementById('reg-import-preview-head');
+  var tbody = document.getElementById('reg-import-preview-body');
+  if (thead) thead.innerHTML = '<tr>'+previewCols.map(function(c){ return '<th style="padding:5px 8px;text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">'+c.replace(/_/g,' ')+'</th>'; }).join('')+'</tr>';
+  if (tbody) tbody.innerHTML = rows.slice(0,5).map(function(r) {
+    return '<tr>'+previewCols.map(function(c){
+      return '<td style="padding:5px 8px;border-bottom:1px solid var(--border);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(r[c]?esc(r[c]):'<span style="color:var(--faint);">\u2014</span>')+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  var warn = document.getElementById('reg-import-warn');
+  if (warn) { warn.style.display = parsed.missing.length ? '' : 'none'; warn.textContent = parsed.missing.length ? 'Some columns were not found — those fields will be left blank.' : ''; }
+  showRegImportStep(2);
+}
+function runRegImport() {
+  if (!_regImportRows.length) return;
+  var prog = document.getElementById('reg-import-progress');
+  var btn  = document.querySelector('#reg-import-step2 .btn-primary');
+  if (prog) { prog.style.display = ''; prog.textContent = 'Importing\u2026'; }
+  if (btn) btn.disabled = true;
+  // Send in chunks of 100
+  var allRows = _regImportRows.slice();
+  var CHUNK = 100;
+  var chunks = [];
+  for (var i = 0; i < allRows.length; i += CHUNK) chunks.push(allRows.slice(i, i+CHUNK));
+  var totalImported = 0, totalErrors = 0;
+  function sendChunk(idx) {
+    if (idx >= chunks.length) {
+      if (prog) prog.style.display = 'none';
+      var doneMsg = document.getElementById('reg-import-done-msg');
+      var doneSub = document.getElementById('reg-import-done-sub');
+      if (doneMsg) doneMsg.textContent = totalImported + ' records imported successfully';
+      if (doneSub) doneSub.textContent = totalErrors ? totalErrors+' rows had errors and were skipped.' : 'All records were saved to the register.';
+      showRegImportStep(3);
+      loadRegister();
+      return;
+    }
+    if (prog) prog.textContent = 'Importing '+Math.min((idx+1)*CHUNK, allRows.length)+' of '+allRows.length+'\u2026';
+    api('/admin/api/register/batch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(chunks[idx])
+    }).then(function(r) {
+      totalImported += (r.imported||0);
+      totalErrors   += (r.errors||0);
+      sendChunk(idx+1);
+    }).catch(function() { totalErrors += chunks[idx].length; sendChunk(idx+1); });
+  }
+  sendChunk(0);
 }
 
 // ── HOUSEHOLDS ────────────────────────────────────────────────────────
