@@ -13366,7 +13366,7 @@ async function handleChmsApi(req, env, url, method, seg) {
     ).all()).results || [];
     // Merge with configured types so all types appear (even those with 0 members)
     const cfgRow = await db.prepare("SELECT value FROM chms_config WHERE key='member_types'").first();
-    const DEFAULT_MEMBER_TYPES = ['Member','Associate','Friend','Visitor','Inactive','Organization'];
+    const DEFAULT_MEMBER_TYPES = ['Member','Attender','Visitor','Vietnamese Congregation','Other'];
     const configuredTypes = cfgRow ? JSON.parse(cfgRow.value) : DEFAULT_MEMBER_TYPES;
     const countMap = {};
     for (const r of dbCounts) countMap[(r.member_type||'').toLowerCase()] = { raw: r.member_type, n: r.n };
@@ -14698,16 +14698,17 @@ async function handleChmsApi(req, env, url, method, seg) {
       const ns = names.map(n => n.toLowerCase());
       return allFields.find(f => ns.includes((f.name||'').toLowerCase()));
     };
-    const F_STATUS_FIELD   = findField(['status','member status','membership status']);
-    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth']);
-    const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date']);
-    const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date']);
-    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary']);
-    const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '1076274773';
-    const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '423997769';
-    const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '156119694';
-    const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '724914824';
-    const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '2008692738';
+    const F_STATUS_FIELD   = findField(['status','member status','membership status','fellowship status','church status','member type']);
+    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth','birthday']);
+    const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized']);
+    const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed']);
+    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date']);
+    // Use empty string as fallback so details[''] is always undefined — never accidentally match a real field
+    const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '';
+    const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '';
+    const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '';
+    const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '';
+    const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '';
     // Convert MM/DD/YYYY or YYYY-MM-DD to YYYY-MM-DD
     const toISO = s => {
       if (!s) return '';
@@ -14716,6 +14717,9 @@ async function handleChmsApi(req, env, url, method, seg) {
       if (parts.length === 3) return parts[2] + '-' + parts[0].padStart(2,'0') + '-' + parts[1].padStart(2,'0');
       return '';
     };
+    // Load configured member types for direct matching
+    const mtCfgRow = await db.prepare("SELECT value FROM chms_config WHERE key='member_types'").first();
+    const configuredMemberTypes = mtCfgRow ? JSON.parse(mtCfgRow.value) : ['Member','Attender','Visitor','Vietnamese Congregation','Other'];
     // Skip non-person status types
     const SKIP_STATUSES = new Set(['organization','christmas market','egg hunt','renter','mdo']);
     let imported = 0, updated = 0, skipped = 0;
@@ -14731,15 +14735,12 @@ async function handleChmsApi(req, env, url, method, seg) {
         const statusName = (statusObj && statusObj.name) ? statusObj.name
                          : (typeof statusRaw === 'string' ? statusRaw : '');
         if (SKIP_STATUSES.has(statusName.toLowerCase())) { skipped++; continue; }
-        let memberType = 'visitor';
-        const sn = statusName.toLowerCase();
-        if (sn === 'member') memberType = 'member';
-        else if (sn === 'attender') memberType = 'associate';
-        else if (sn === 'no longer attends') memberType = 'inactive';
-        else if (sn === 'community contact' || sn === 'vietnamese congregation') memberType = 'friend';
+        // Match Breeze status directly to a configured member type (case-insensitive), fall back to 'Other'
+        const matched = statusName ? configuredMemberTypes.find(t => t.toLowerCase() === statusName.toLowerCase()) : null;
+        const memberType = matched || (configuredMemberTypes.includes('Other') ? 'Other' : configuredMemberTypes[0] || 'Other');
         // Dates (stored as plain strings under their field ID key)
         const dob          = toISO(details[F_DOB]          || details['birthdate'] || '');
-        const baptismDate  = toISO(details[F_BAPTISM]       || details['date']      || '');
+        const baptismDate  = toISO(details[F_BAPTISM]       || '');
         const confirmDate  = toISO(details[F_CONFIRMATION]  || '');
         const anniversaryDate = toISO(details[F_ANNIVERSARY] || '');
         // Email, phone, address (from typed arrays)
@@ -17751,7 +17752,7 @@ function deleteTag(id) {
 }
 
 // ── MEMBER TYPES ──────────────────────────────────────────────────────
-var _memberTypes = ['Member','Associate','Friend','Visitor','Inactive','Organization'];
+var _memberTypes = ['Member','Attender','Visitor','Vietnamese Congregation','Other'];
 function loadMemberTypes() {
   api('/admin/api/config/member-types').then(function(d) {
     _memberTypes = d.types || _memberTypes;
