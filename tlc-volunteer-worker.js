@@ -18755,8 +18755,9 @@ function parseRegImportFile(text, filename) {
   }
   var headers = parseLine(lines[0]).map(function(h){ return h.toLowerCase().replace(/[^a-z0-9]/g,' ').trim().replace(/\\s+/g,' '); });
   function col(names) {
+    var norm = function(s) { return s.toLowerCase().replace(/[^a-z0-9]/g,' ').trim().replace(/\\s+/g,' '); };
     for (var ni = 0; ni < names.length; ni++) {
-      var idx = headers.indexOf(names[ni].toLowerCase());
+      var idx = headers.indexOf(norm(names[ni]));
       if (idx >= 0) return idx;
     }
     return -1;
@@ -18786,7 +18787,7 @@ function parseRegImportFile(text, filename) {
   for (var li = 1; li < lines.length; li++) {
     var cols = parseLine(lines[li]);
     if (cols.every(function(c){ return !c; })) { skipped++; continue; }
-    function g(idx) { return (idx >= 0 && idx < cols.length) ? cols[idx] : ''; }
+    var g = function(idx) { return (idx >= 0 && idx < cols.length) ? cols[idx] : ''; };
     var firstName = g(colMap.first_names), surname = g(colMap.surname);
     var nameCol = headers.indexOf('name');
     var fullName = (firstName || surname)
@@ -18842,10 +18843,12 @@ function showRegImportPreview(parsed) {
   var rows = parsed.rows;
   var cnt = document.getElementById('reg-import-count'); if (cnt) cnt.textContent = rows.length;
   var sum = document.getElementById('reg-import-summary');
-  if (sum) sum.innerHTML = '<strong>'+rows.length+'</strong> rows detected'
-    + (parsed.skipped ? ' (<em>'+parsed.skipped+' blank rows skipped</em>)' : '')
-    + ' — showing first 5 as preview. '
-    + (parsed.missing.length ? '<span style="color:var(--danger);">Warning: could not find columns: <strong>'+parsed.missing.join(', ')+'</strong></span>' : '');
+  if (sum) sum.innerHTML = (rows.length === 0
+    ? '<span style="color:var(--danger);font-weight:600;">No data rows detected. Check that the file has a header row and data rows, and that the delimiter is tab or comma.</span>'
+    : '<strong>'+rows.length+'</strong> rows detected'
+      + (parsed.skipped ? ' (<em>'+parsed.skipped+' blank rows skipped</em>)' : '')
+      + ' — showing first 5 as preview. '
+      + (parsed.missing.length ? '<span style="color:var(--danger);">Warning: could not find columns: <strong>'+parsed.missing.join(', ')+'</strong></span>' : ''));
   // Build preview table
   var previewCols = ['name','event_date','dob','father','mother','sponsors','officiant','baptism_place'];
   var thead = document.getElementById('reg-import-preview-head');
@@ -18861,26 +18864,35 @@ function showRegImportPreview(parsed) {
   showRegImportStep(2);
 }
 function runRegImport() {
-  if (!_regImportRows.length) return;
+  if (!_regImportRows.length) {
+    var sum = document.getElementById('reg-import-summary');
+    if (sum) sum.innerHTML = '<span style="color:var(--danger);font-weight:600;">No rows to import — please select a file with data rows first.</span>';
+    return;
+  }
   var prog = document.getElementById('reg-import-progress');
   var btn  = document.querySelector('#reg-import-step2 .btn-primary');
   if (prog) { prog.style.display = ''; prog.textContent = 'Importing\u2026'; }
   if (btn) btn.disabled = true;
-  // Send in chunks of 100
+  // Send in chunks of 50
   var allRows = _regImportRows.slice();
-  var CHUNK = 100;
+  var CHUNK = 50;
   var chunks = [];
   for (var i = 0; i < allRows.length; i += CHUNK) chunks.push(allRows.slice(i, i+CHUNK));
-  var totalImported = 0, totalErrors = 0;
+  var totalImported = 0, totalErrors = 0, lastApiErr = '';
   function sendChunk(idx) {
     if (idx >= chunks.length) {
       if (prog) prog.style.display = 'none';
+      if (btn) btn.disabled = false;
       var doneMsg = document.getElementById('reg-import-done-msg');
       var doneSub = document.getElementById('reg-import-done-sub');
       if (doneMsg) doneMsg.textContent = totalImported + ' records imported successfully';
-      if (doneSub) doneSub.textContent = totalErrors ? totalErrors+' rows had errors and were skipped.' : 'All records were saved to the register.';
+      if (doneSub) {
+        var sub = totalErrors ? totalErrors+' rows had errors and were skipped.' : 'All records were saved to the register.';
+        if (lastApiErr) sub += ' Last API error: ' + lastApiErr;
+        doneSub.textContent = sub;
+      }
       showRegImportStep(3);
-      loadRegister();
+      if (totalImported > 0) loadRegister();
       return;
     }
     if (prog) prog.textContent = 'Importing '+Math.min((idx+1)*CHUNK, allRows.length)+' of '+allRows.length+'\u2026';
@@ -18889,10 +18901,14 @@ function runRegImport() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(chunks[idx])
     }).then(function(r) {
-      totalImported += (r.imported||0);
-      totalErrors   += (r.errors||0);
+      if (r.error) { lastApiErr = r.error; totalErrors += chunks[idx].length; }
+      else { totalImported += (r.imported||0); totalErrors += (r.errors||0); }
       sendChunk(idx+1);
-    }).catch(function() { totalErrors += chunks[idx].length; sendChunk(idx+1); });
+    }).catch(function(err) {
+      lastApiErr = err ? (err.message||String(err)) : 'network error';
+      totalErrors += chunks[idx].length;
+      sendChunk(idx+1);
+    });
   }
   sendChunk(0);
 }
