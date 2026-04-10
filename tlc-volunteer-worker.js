@@ -17343,7 +17343,6 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0;background:var(--white);">
       <button class="pv-tab active" data-rtab="baptism" onclick="showRegisterTab('baptism')" style="font-size:13px;padding:12px 18px;">Baptisms</button>
       <button class="pv-tab" data-rtab="confirmation" onclick="showRegisterTab('confirmation')" style="font-size:13px;padding:12px 18px;">Confirmations</button>
-      <button class="pv-tab" data-rtab="wedding" onclick="showRegisterTab('wedding')" style="font-size:13px;padding:12px 18px;">Weddings</button>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
         <button class="btn-secondary" style="display:none;font-size:.8rem;" id="reg-add-toggle" onclick="toggleRegForm()">+ Add</button>
         <button class="btn-secondary" style="font-size:.8rem;" onclick="openRegImport()">&#8679; Import</button>
@@ -17459,7 +17458,6 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         <select id="reg-import-type" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
           <option value="baptism">Baptisms</option>
           <option value="confirmation">Confirmations</option>
-          <option value="wedding">Weddings</option>
         </select>
       </div>
       <label style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:var(--teal);color:white;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:600;">
@@ -18520,8 +18518,7 @@ var _regEntries = [];   // cached full list for current type
 var _regEditId = null;  // null = add mode, number = edit mode
 var _regLabels = {
   baptism:      { title: 'Baptisms',      nameLbl: 'Name Baptized',  name2Lbl: 'Parent / Sponsor', col2: 'Parent/Sponsor' },
-  confirmation: { title: 'Confirmations', nameLbl: 'Name Confirmed', name2Lbl: 'Class / Year',     col2: 'Class/Year' },
-  wedding:      { title: 'Weddings',      nameLbl: 'Bride',          name2Lbl: 'Groom',            col2: 'Groom' }
+  confirmation: { title: 'Confirmations', nameLbl: 'Name Confirmed', name2Lbl: 'Sponsors / Witnesses', col2: 'Sponsors/Witnesses' }
 };
 function showRegisterTab(type) {
   _regType = type;
