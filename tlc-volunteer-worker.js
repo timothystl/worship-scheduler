@@ -17498,26 +17498,18 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
     <!-- Step 1: file pick -->
     <div id="reg-import-step1">
-      <p style="font-size:.875rem;color:var(--warm-gray);margin:0 0 16px;">
+      <p style="font-size:.875rem;color:var(--warm-gray);margin:0 0 12px;">
         Upload a <strong>tab-separated (.tsv)</strong> or <strong>comma-separated (.csv)</strong> file exported from your spreadsheet.
         The importer auto-detects these column headers:
       </p>
-      <div style="background:var(--linen);border-radius:8px;padding:10px 14px;font-size:.78rem;color:var(--charcoal);margin-bottom:16px;line-height:1.8;">
-        <strong>Entry No.</strong> &nbsp;&#183;&nbsp; <strong>Record Type</strong> &nbsp;&#183;&nbsp;
-        <strong>First Names</strong> &nbsp;&#183;&nbsp; <strong>Surname</strong> &nbsp;&#183;&nbsp;
-        <strong>Date of Birth</strong> &nbsp;&#183;&nbsp; <strong>Place of Birth</strong> &nbsp;&#183;&nbsp;
-        <strong>Baptism Date</strong> &nbsp;&#183;&nbsp; <strong>Baptism Place</strong> &nbsp;&#183;&nbsp;
-        <strong>Father</strong> &nbsp;&#183;&nbsp; <strong>Mother</strong> &nbsp;&#183;&nbsp;
-        <strong>Sponsors / Remarks</strong> &nbsp;&#183;&nbsp; <strong>Officiant</strong> &nbsp;&#183;&nbsp;
-        <strong>Notes</strong> &nbsp;&#183;&nbsp; <strong>PDF Page</strong>
-      </div>
-      <div style="margin-bottom:14px;">
+      <div style="margin-bottom:10px;">
         <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:6px;">Register Type</label>
-        <select id="reg-import-type" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+        <select id="reg-import-type" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;" onchange="updateRegImportHeaders()">
           <option value="baptism">Baptisms</option>
           <option value="confirmation">Confirmations</option>
         </select>
       </div>
+      <div id="reg-import-headers" style="background:var(--linen);border-radius:8px;padding:10px 14px;font-size:.78rem;color:var(--charcoal);margin-bottom:16px;line-height:1.8;"></div>
       <label style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:var(--teal);color:white;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:600;">
         &#8679; Choose File
         <input type="file" id="reg-import-file" accept=".csv,.tsv,.txt" style="display:none;" onchange="regImportFileChosen(this)">
@@ -18975,9 +18967,27 @@ function printRegister() {
 
 // ── REGISTER IMPORT ──────────────────────────────────────────────────
 var _regImportRows = [];   // parsed rows ready to import
+var _regImportHeaders = {
+  baptism: [
+    'Entry No.', 'Record Type', 'First Names', 'Surname',
+    'Date of Birth', 'Place of Birth', 'Baptism Date', 'Baptism Place',
+    'Father', 'Mother', 'Sponsors / Remarks', 'Officiant', 'Notes', 'PDF Page'
+  ],
+  confirmation: [
+    'Entry No.', 'Full Name', 'Confirmation Date', 'Type', 'Remarks / Notes'
+  ]
+};
+function updateRegImportHeaders() {
+  var sel = document.getElementById('reg-import-type');
+  var box = document.getElementById('reg-import-headers');
+  if (!sel || !box) return;
+  var cols = _regImportHeaders[sel.value] || _regImportHeaders.baptism;
+  box.innerHTML = cols.map(function(c) { return '<strong>'+esc(c)+'</strong>'; }).join(' &nbsp;&#183;&nbsp; ');
+}
 function openRegImport() {
   var sel = document.getElementById('reg-import-type');
   if (sel) sel.value = _regType;
+  updateRegImportHeaders();
   showRegImportStep(1);
   document.getElementById('reg-import-modal').style.display = 'flex';
 }
