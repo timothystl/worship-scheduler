@@ -6,6 +6,7 @@ on:
     paths:
       - 'tlc-volunteer-worker.js'
       - 'wrangler.toml'
+      - 'src/**'
 
 jobs:
   deploy:

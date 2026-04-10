@@ -2,6 +2,7 @@
 // Deploy to: volunteer.timothystl.org
 // Admin at: volunteer.timothystl.org/admin
 // Admin password is set via ADMIN_PASSWORD environment variable in Cloudflare Dashboard.
+// v2 — modular build (src/)
 
 // ── Imports ────────────────────────────────────────────────────────────────────
 import { html, json, isAuthed, SCHED_CORS } from './src/auth.js';
