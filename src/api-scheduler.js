@@ -1,0 +1,479 @@
+// ── Scheduler & Volunteer API handlers ────────────────────────────────────────
+import { json, SCHED_CORS } from './auth.js';
+import { XMAS_MARKET_ROLES } from './db.js';
+
+
+// ── XMAS MARKET TIME FALLBACK ─────────────────────────────────────────
+// For roles where D1 has empty start_time, overlay XMAS_MARKET_ROLES data
+// using sort_order as the index. Allows the schedule to show even if the
+// migration hasn't propagated yet in D1's eventual-consistency model.
+export function applyXmasMarketDefaults(evName, roles) {
+  if (evName !== 'Christmas Market') return roles;
+  return roles.map(function(role) {
+    if (role.start_time) return role;
+    const xr = (role.sort_order >= 0 && role.sort_order < XMAS_MARKET_ROLES.length)
+      ? XMAS_MARKET_ROLES[role.sort_order] : null;
+    if (!xr) return role;
+    return Object.assign({}, role, { role_date: role.role_date || xr.role_date, start_time: xr.start_time, end_time: xr.end_time });
+  });
+}
+
+// ── PUBLIC API: GET /api/events ───────────────────────────────────────
+export async function handleApiEvents(env) {
+  const events = await env.DB.prepare(
+    'SELECT * FROM serve_events WHERE hidden=0 ORDER BY sort_order,event_date,id'
+  ).all();
+  const result = [];
+  for (const ev of (events.results || [])) {
+    const roles = await env.DB.prepare(
+      'SELECT * FROM serve_roles WHERE event_id=? ORDER BY role_date,sort_order,id'
+    ).bind(ev.id).all();
+    const rolesWithFill = [];
+    for (const role of (roles.results || [])) {
+      const filled = await env.DB.prepare(
+        'SELECT COUNT(*) as n FROM signup_slots WHERE role_id=?'
+      ).bind(role.id).first();
+      rolesWithFill.push({ ...role, filled_count: filled?.n || 0 });
+    }
+    result.push({ ...ev, roles: applyXmasMarketDefaults(ev.name, rolesWithFill) });
+  }
+  return json({ events: result });
+}
+
+// ── RATE LIMITING ─────────────────────────────────────────────────────
+// Allows max 10 signups per IP per hour using KV as a counter store.
+export async function checkSignupRateLimit(env, req) {
+  if (!env.RSVP_STORE) return true;
+  try {
+    const ip = req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For') || 'unknown';
+    const key = 'rl:signup:' + ip;
+    const current = await env.RSVP_STORE.get(key);
+    const count = current ? parseInt(current, 10) : 0;
+    if (count >= 10) return false;
+    await env.RSVP_STORE.put(key, String(count + 1), { expirationTtl: 3600 });
+    return true;
+  } catch (e) {
+    console.error('Rate limit check error (allowing request):', e);
+    return true; // fail open — don't block signups due to KV errors
+  }
+}
+
+// ── PUBLIC API: POST /volunteer/signup ────────────────────────────────
+export async function handleSignup(req, env) {
+  if (!await checkSignupRateLimit(env, req)) {
+    return json({ ok: false, error: 'Too many submissions. Please try again later.' }, 429);
+  }
+  let data;
+  try { data = await req.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+  const name  = (data.name || '').trim();
+  const email = (data.email || '').trim().toLowerCase();
+  if (!name || !email) return json({ ok: false, error: 'Name and email required' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, error: 'Please enter a valid email address.' }, 400);
+
+  // Duplicate signup check: same email + same event
+  if (data.event_id) {
+    const dup = await env.DB.prepare(
+      'SELECT id FROM signups WHERE email=? AND event_id=? LIMIT 1'
+    ).bind(email, data.event_id).first();
+    if (dup) return json({ ok: false, error: "You've already signed up for this event. Contact us if you need to make changes." }, 409);
+  }
+
+  // Validate slot availability for time-slotted signups
+  const roleIds = Array.isArray(data.role_ids) ? data.role_ids : [];
+  for (const rid of roleIds) {
+    const role   = await env.DB.prepare('SELECT slots FROM serve_roles WHERE id=?').bind(rid).first();
+    const filled = await env.DB.prepare('SELECT COUNT(*) as n FROM signup_slots WHERE role_id=?').bind(rid).first();
+    if (role && role.slots > 0 && (filled?.n || 0) >= role.slots) {
+      return json({ ok: false, error: 'One or more selected shifts are now full. Please refresh and try again.' }, 409);
+    }
+  }
+
+  const r = await env.DB.prepare(
+    `INSERT INTO signups (event_id,role_id,ministry,name,email,phone,roles,service,sundays,shirt_wanted,shirt_size,notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    data.event_id || 0, data.role_id || 0,
+    data.ministry || '', name, email, data.phone || '',
+    JSON.stringify(data.roles || roleIds.map(String)),
+    data.service || '', JSON.stringify(data.sundays || []),
+    data.shirt_wanted ? 1 : 0, data.shirt_size || '', data.notes || ''
+  ).run();
+  const signupId = r.meta?.last_row_id;
+
+  for (const rid of roleIds) {
+    await env.DB.prepare('INSERT INTO signup_slots (signup_id,role_id) VALUES (?,?)')
+      .bind(signupId, rid).run();
+  }
+
+  // Send confirmation email to volunteer (non-fatal if email is not configured)
+  const resendKey = env.RESEND_API_KEY || '';
+  const emailFrom = env.EMAIL_FROM || '';
+  if (resendKey && emailFrom && email) {
+    const ministry = data.ministry || 'general';
+    const ministryLabels = { worship: 'Worship', events: 'Community Events', education: 'Christian Education',
+      acceptance: 'Acceptance Ministry', outreach: 'Outreach', lasm: 'LASM', wol: 'Word of Life',
+      cfna: 'CFNA', general: 'General Interest' };
+    const ministryLabel = ministryLabels[ministry] || ministry;
+    const rolesList = (data.roles && data.roles.length) ? data.roles.join(', ') : '';
+    const rolesLine = rolesList ? `\nRoles/shifts selected: ${rolesList}` : '';
+    const text = `Hi ${name},\n\nThank you for signing up to volunteer at Timothy Lutheran Church!\n\n`
+      + `Ministry: ${ministryLabel}${rolesLine}\n\n`
+      + `We'll be in touch soon with more details. If you have any questions, reply to this email.\n\n`
+      + `God's blessings,\nTimothy Lutheran Church\n6704 Fyler Ave, St. Louis, MO 63139\noffice@timothystl.org`;
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: emailFrom, to: email, reply_to: 'office@timothystl.org',
+        subject: 'Thanks for signing up to serve at Timothy!', text }),
+    }).catch(() => { /* non-fatal */ });
+  }
+
+  return json({ ok: true, signup_id: signupId });
+}
+
+// ── ICAL DOWNLOAD: GET /volunteer/calendar/:id ────────────────────────
+export async function handleCalendar(env, path) {
+  const signupId = parseInt(path.split('/').pop());
+  const signup = await env.DB.prepare('SELECT * FROM signups WHERE id=?').bind(signupId).first();
+  if (!signup) return new Response('Not found', { status: 404 });
+
+  const slots = await env.DB.prepare(`
+    SELECT ss.role_id, r.name as role_name, r.description, r.role_date, r.start_time, r.end_time, e.name as event_name
+    FROM signup_slots ss
+    JOIN serve_roles r ON ss.role_id = r.id
+    JOIN serve_events e ON r.event_id = e.id
+    WHERE ss.signup_id = ?
+  `).bind(signupId).all();
+
+  const ical = generateIcal(signup, slots.results || []);
+  return new Response(ical, {
+    headers: {
+      'Content-Type': 'text/calendar;charset=UTF-8',
+      'Content-Disposition': `attachment; filename="tlc-volunteer-shifts.ics"`
+    }
+  });
+}
+
+function parseIcalTime(dateStr, timeStr) {
+  // dateStr: "2026-12-04", timeStr: "9:00 AM"
+  if (!dateStr || !timeStr) return null;
+  const [y, mo, d] = dateStr.split('-');
+  const parts = timeStr.trim().split(' ');
+  const [hStr, mStr] = parts[0].split(':');
+  const ampm = (parts[1] || '').toUpperCase();
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${y}${mo}${d}T${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}00`;
+}
+
+function generateIcal(signup, slots) {
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'PRODID:-//Timothy Lutheran Church//Volunteer Sign-Up//EN',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'X-WR-TIMEZONE:America/Chicago',
+  ];
+  for (const slot of slots) {
+    const dtstart = parseIcalTime(slot.role_date, slot.start_time);
+    const dtend   = parseIcalTime(slot.role_date, slot.end_time);
+    if (!dtstart || !dtend) continue;
+    const desc = (slot.description || '').replace(/\n/g,'\\n').replace(/,/g,'\\,');
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:tlc-${signup.id}-${slot.role_id}@timothystl.org`,
+      `DTSTART;TZID=America/Chicago:${dtstart}`,
+      `DTEND;TZID=America/Chicago:${dtend}`,
+      `SUMMARY:${slot.event_name} – ${slot.role_name}`,
+      `DESCRIPTION:${desc}`,
+      'LOCATION:Timothy Lutheran Church\\, 6704 Fyler Ave\\, St. Louis\\, MO 63139',
+      `ORGANIZER;CN=Timothy Lutheran Church:mailto:office@timothystl.org`,
+      'END:VEVENT'
+    );
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+// ── SCHEDULER DATA API ────────────────────────────────────────────────
+// All endpoints require vol_auth cookie (same auth as /admin).
+// v2 — redeploy to ensure worker picks up Phase 1 code
+// GET  /admin/api/scheduler/data          → full snapshot as JSON object
+// POST /admin/api/scheduler/data          → bulk upsert (import / full save)
+// GET  /admin/api/scheduler/data/:key     → single key value
+// POST /admin/api/scheduler/data/:key     → save single key { value: ... }
+// GET  /admin/api/scheduler/export        → download full snapshot as file
+
+// ── SCHEDULER BACKEND HANDLERS ──────────────────────────────────────────────
+// Breeze API proxy, email sending, and RSVP for the worship scheduler.
+
+export function schedJson(data, status) {
+  return new Response(JSON.stringify(data), {
+    status: status || 200,
+    headers: { ...SCHED_CORS, 'Content-Type': 'application/json' },
+  });
+}
+
+export function schedHtmlPage(title, bodyContent) {
+  const e = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const content = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>' + e(title) + ' — Timothy Lutheran</title>'
+    + '<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#222;}'
+    + 'h1{color:#2c3e6b;}a{color:#2c3e6b;}</style></head>'
+    + '<body><h1>' + e(title) + '</h1>' + bodyContent + '</body></html>';
+  return new Response(content, { status: 200, headers: { ...SCHED_CORS, 'Content-Type': 'text/html;charset=utf-8' } });
+}
+
+export async function schedKvGet(env, key) {
+  if (!env.RSVP_STORE) return null;
+  try { const raw = await env.RSVP_STORE.get(key); return raw ? JSON.parse(raw) : null; }
+  catch { return null; }
+}
+
+export async function schedKvPut(env, key, value) {
+  if (!env.RSVP_STORE) return;
+  await env.RSVP_STORE.put(key, JSON.stringify(value), { expirationTtl: 31536000 });
+}
+
+// ── /email/send ──────────────────────────────────────────────────────────────
+export async function handleSchedEmailSend(req, env) {
+  const resendKey = req.headers.get('X-Resend-Key') || env.RESEND_API_KEY || '';
+  const emailFrom = req.headers.get('X-Email-From') || env.EMAIL_FROM || '';
+  if (!resendKey) return schedJson({ error: 'Missing Resend API key' }, 400);
+  let body;
+  try { body = await req.json(); } catch { return schedJson({ error: 'Invalid JSON' }, 400); }
+  const payload = { from: emailFrom || body.from || '', to: body.to, subject: body.subject,
+                    text: body.text, html: body.html, reply_to: body.reply_to || undefined };
+  if (body.attachments) payload.attachments = body.attachments;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  return schedJson(data, res.status);
+}
+
+// ── /rsvp/store ──────────────────────────────────────────────────────────────
+export async function handleSchedRsvpStore(req, env) {
+  let body;
+  try { body = await req.json(); } catch { return schedJson({ error: 'Invalid JSON' }, 400); }
+  const { token, name, personId, notifyEmail, assignments } = body;
+  if (!token) return schedJson({ error: 'Missing token' }, 400);
+  const existing = await schedKvGet(env, token);
+  const record = existing || { token, name, personId, notifyEmail: notifyEmail||'', assignments: assignments||[], responses: {} };
+  record.name        = name        || record.name;
+  record.personId    = personId    || record.personId;
+  record.notifyEmail = notifyEmail || record.notifyEmail;
+  record.assignments = assignments || record.assignments;
+  await schedKvPut(env, token, record);
+  return schedJson({ ok: true });
+}
+
+// ── /rsvp/sync ───────────────────────────────────────────────────────────────
+export async function handleSchedRsvpSync(req, env) {
+  let body;
+  try { body = await req.json(); } catch { return schedJson({ error: 'Invalid JSON' }, 400); }
+  const tokens = body.tokens || [];
+  const results = {};
+  await Promise.all(tokens.map(async function(token) {
+    const record = await schedKvGet(env, token);
+    if (!record) return;
+    results[token] = {
+      status:      record.overallStatus || 'pending',
+      name:        record.name          || '',
+      updatedAt:   record.updatedAt     || '',
+      assignments: (record.assignments  || []).map(function(a) {
+        return { dateISO: a.dateISO, svc: a.svc, role: a.role, status: a.status || 'pending' };
+      }),
+    };
+  }));
+  return schedJson(results);
+}
+
+// ── /volunteer/pending ────────────────────────────────────────────────────────
+// Returns worship-role signups (ministry='worship', no specific event)
+export async function handleVolunteerPending(env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, name, email, phone, roles, service, sundays, notes, created_at
+       FROM signups WHERE ministry='worship' AND (event_id IS NULL OR event_id=0)
+       ORDER BY created_at DESC`
+    ).all();
+    const volunteers = (rows.results || []).map(function(r) {
+      return {
+        id: r.id, name: r.name, email: r.email, phone: r.phone || '',
+        roles: safeJsonParse(r.roles, []),
+        service: r.service || 'both',
+        sundays: safeJsonParse(r.sundays, []),
+        notes: r.notes || '',
+        submittedAt: r.created_at,
+      };
+    });
+    return schedJson({ volunteers });
+  } catch(e) {
+    return schedJson({ error: String(e) }, 500);
+  }
+}
+
+// ── /volunteer/general-pending ────────────────────────────────────────────────
+// Returns general/ministry signups (not worship, no specific event)
+export async function handleVolunteerGeneralPending(env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, name, email, phone, roles, ministry, notes, created_at
+       FROM signups WHERE ministry!='worship' AND (event_id IS NULL OR event_id=0)
+       ORDER BY created_at DESC`
+    ).all();
+    const volunteers = (rows.results || []).map(function(r) {
+      return {
+        id: r.id, name: r.name, email: r.email, phone: r.phone || '',
+        roles: safeJsonParse(r.roles, []),
+        ministry: r.ministry || '',
+        notes: r.notes || '',
+        submittedAt: r.created_at,
+      };
+    });
+    return schedJson({ volunteers });
+  } catch(e) {
+    return schedJson({ error: String(e) }, 500);
+  }
+}
+
+// ── /volunteer/event-pending ─────────────────────────────────────────────────
+// Returns event-specific signups (event_id > 0)
+export async function handleVolunteerEventPending(env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT s.id, s.name, s.email, s.phone, s.roles, s.notes, s.created_at,
+              s.event_id, e.name AS event_name
+       FROM signups s
+       LEFT JOIN serve_events e ON e.id = s.event_id
+       WHERE s.event_id IS NOT NULL AND s.event_id > 0
+       ORDER BY s.created_at DESC`
+    ).all();
+    const volunteers = (rows.results || []).map(function(r) {
+      return {
+        id: r.id, name: r.name, email: r.email, phone: r.phone || '',
+        roles: safeJsonParse(r.roles, []),
+        eventId: r.event_id,
+        eventName: r.event_name || '',
+        notes: r.notes || '',
+        submittedAt: r.created_at,
+      };
+    });
+    return schedJson({ volunteers });
+  } catch(e) {
+    return schedJson({ error: String(e) }, 500);
+  }
+}
+
+function safeJsonParse(str, fallback) {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
+// ── /rsvp/portal ─────────────────────────────────────────────────────────────
+export async function handleSchedRsvpPortal(req, env, url) {
+  const token = url.searchParams.get('token') || '';
+  if (!token) return schedHtmlPage('Error', '<p>Missing token.</p>');
+  const record = await schedKvGet(env, token);
+  if (!record) return schedHtmlPage('Not Found', '<p>This link has expired or is invalid.</p>');
+  const e = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const rows = (record.assignments || []).map(function(a, i) {
+    const svcLabel = a.svc==='8am'?'8:00 AM':a.svc==='10:45am'?'10:45 AM':a.svc;
+    const cfUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=confirmed';
+    const ncUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=needs_changes';
+    const dcUrl = url.origin+'/rsvp?token='+encodeURIComponent(token)+'&idx='+i+'&status=declined';
+    const st = a.status||'pending';
+    const stLabel = st==='confirmed'?'✓ Confirmed':st==='needs_changes'?'⚠ Needs Changes':st==='declined'?'✗ Declined':'';
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'+e(a.date)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'+e(svcLabel)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'+e(a.role)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555;">'+e(stLabel)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #eee;">'
+      +'<a href="'+e(cfUrl)+'" style="margin-right:8px;color:#27ae60;">✓ Confirm</a>'
+      +'<a href="'+e(ncUrl)+'" style="margin-right:8px;color:#e67e22;">⚠ Change</a>'
+      +'<a href="'+e(dcUrl)+'" style="color:#c0392b;">✗ Decline</a>'
+      +'</td></tr>';
+  }).join('');
+  const body = '<h2 style="margin-bottom:4px;">Hello, '+e(record.name)+'</h2>'
+    +'<p style="color:#555;margin-bottom:20px;">Your upcoming worship service assignments:</p>'
+    +'<table style="border-collapse:collapse;width:100%;font-size:.9rem;">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:8px 12px;background:#f5f6fa;">Date</th>'
+    +'<th style="text-align:left;padding:8px 12px;background:#f5f6fa;">Service</th>'
+    +'<th style="text-align:left;padding:8px 12px;background:#f5f6fa;">Role</th>'
+    +'<th style="text-align:left;padding:8px 12px;background:#f5f6fa;">Status</th>'
+    +'<th style="text-align:left;padding:8px 12px;background:#f5f6fa;">Response</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>';
+  return schedHtmlPage('Your Worship Schedule', body);
+}
+
+// ── /rsvp ────────────────────────────────────────────────────────────────────
+export async function handleSchedRsvp(req, env, url) {
+  const token  = url.searchParams.get('token')  || '';
+  const status = url.searchParams.get('status') || '';
+  const idx    = url.searchParams.get('idx');
+  if (!token || !status) return schedHtmlPage('Error', '<p>Invalid link.</p>');
+  const record = await schedKvGet(env, token);
+  if (!record) return schedHtmlPage('Not Found', '<p>This link has expired or is invalid.</p>');
+  if (!['confirmed','needs_changes','declined'].includes(status)) return schedHtmlPage('Error', '<p>Unknown status.</p>');
+  if (idx !== null && idx !== undefined) {
+    const i = parseInt(idx, 10);
+    if (!isNaN(i) && record.assignments[i]) record.assignments[i].status = status;
+  } else {
+    record.assignments.forEach(function(a) { a.status = status; });
+  }
+  record.overallStatus = status;
+  record.updatedAt = new Date().toISOString();
+  await schedKvPut(env, token, record);
+  // Notify admin (non-fatal)
+  const notifyEmail = record.notifyEmail || '';
+  if (notifyEmail) {
+    const resendKey = env.RESEND_API_KEY || '';
+    const emailFrom = env.EMAIL_FROM || '';
+    if (resendKey && emailFrom) {
+      const statusLabel = status==='confirmed'?'✓ Confirmed':status==='needs_changes'?'⚠ Needs Changes':'✗ Declined';
+      const assignmentLines = (record.assignments||[]).map(function(a) {
+        return '  • '+a.date+' — '+(a.svc==='8am'?'8:00 AM':a.svc==='10:45am'?'10:45 AM':a.svc)+' — '+a.role;
+      }).join('\n');
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer '+resendKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: emailFrom, to: notifyEmail,
+          subject: 'Worship Scheduler: '+record.name+' — '+statusLabel,
+          text: record.name+' responded to their worship service assignments.\n\nStatus: '+statusLabel+'\n\nAssignments:\n'+assignmentLines,
+        }),
+      }).catch(function(){});
+    }
+  }
+  const msgMap = {
+    confirmed:     { h: 'Thank you!',         b: "You're confirmed. We look forward to serving with you." },
+    needs_changes: { h: 'Got it!',            b: "We'll be in touch to work out the details." },
+    declined:      { h: 'Response recorded.', b: "We'll find someone else for these dates. Thank you for letting us know." },
+  };
+  const msg = msgMap[status] || { h: 'Response recorded.', b: '' };
+  return schedHtmlPage(msg.h, '<p>'+msg.b+'</p>');
+}
+
+// ── Breeze API proxy (/api/* and /breeze/*) ───────────────────────────────────
+export async function handleSchedBreezeProxy(req, env, url) {
+  const breezeSubdomain = env.BREEZE_SUBDOMAIN || req.headers.get('X-Breeze-Subdomain') || '';
+  const breezeApiKey    = env.BREEZE_API_KEY    || req.headers.get('X-Breeze-Api-Key')    || '';
+  if (!breezeSubdomain || !breezeApiKey) return schedJson({ error: 'Breeze not configured' }, 500);
+  const breezePath = url.pathname.replace(/^\/(breeze|api)/, '');
+  const breezeUrl  = 'https://'+breezeSubdomain+'.breezechms.com/api'+breezePath+url.search;
+  const res = await fetch(breezeUrl, {
+    method:  req.method,
+    headers: { 'Api-key': breezeApiKey, 'Content-Type': 'application/json' },
+    body:    req.method !== 'GET' ? req.body : undefined,
+  });
+  const data = await res.text();
+  return new Response(data, {
+    status:  res.status,
+    headers: { ...SCHED_CORS, 'Content-Type': res.headers.get('Content-Type') || 'application/json' },
+  });
+}
