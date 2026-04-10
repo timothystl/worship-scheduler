@@ -17043,19 +17043,17 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-people" class="tab-panel active">
   <div class="toolbar">
     <div class="search-wrap"><input type="search" id="p-search" placeholder="Search name, email, phone…" oninput="debouncePeople()"></div>
-    <div class="filter-pills" id="p-type-pills">
-      <button class="pill active" data-mt="" onclick="setPeopleFilter(this,'')">All</button>
-      <button class="pill" data-mt="member" onclick="setPeopleFilter(this,'member')">Members</button>
-      <button class="pill" data-mt="associate" onclick="setPeopleFilter(this,'associate')">Associates</button>
-      <button class="pill" data-mt="friend" onclick="setPeopleFilter(this,'friend')">Friends</button>
-      <button class="pill" data-mt="visitor" onclick="setPeopleFilter(this,'visitor')">Visitors</button>
-      <button class="pill" data-mt="inactive" onclick="setPeopleFilter(this,'inactive')">Inactive</button>
-    </div>
-    <div class="filter-pills" id="p-tag-pills" style="gap:4px;"></div>
+    <button class="btn-secondary" id="p-filter-btn" onclick="toggleFilterDrawer()" style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      Filters
+      <span id="p-filter-count" style="display:none;background:var(--teal);color:#fff;border-radius:99px;padding:1px 7px;font-size:.72rem;font-weight:700;"></span>
+    </button>
     <button class="btn-secondary" id="p-select-btn" onclick="toggleSelectMode()" style="margin-left:auto;">&#9745; Select</button>
     <button class="btn-secondary" onclick="printDirectory()" title="Print directory">&#128438; Directory</button>
     <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
   </div>
+  <!-- Active filter chips -->
+  <div id="p-active-filters" style="display:none;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
   <!-- Bulk action bar (visible when Select mode is active) -->
   <div id="p-bulk-bar" style="display:none;position:sticky;bottom:0;z-index:500;background:var(--steel-anchor);color:#fff;padding:10px 16px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
     <span id="p-bulk-count" style="font-size:.9rem;font-weight:700;">0 selected</span>
@@ -17486,6 +17484,31 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   </div>
 </div>
 </div><!-- /content-area -->
+
+<!-- ═══ PEOPLE FILTER DRAWER ═══ -->
+<div id="people-filter-overlay" onclick="closeFilterDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:1100;"></div>
+<div id="people-filter-drawer" style="display:none;position:fixed;right:0;top:0;bottom:0;width:300px;max-width:90vw;background:var(--white);box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:1101;flex-direction:column;overflow:hidden;">
+  <div style="display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <span style="font-size:16px;font-weight:700;flex:1;">Filters</span>
+    <button onclick="clearAllFilters()" style="font-size:.78rem;color:var(--teal);background:none;border:none;cursor:pointer;font-weight:600;padding:4px 8px;">Clear All</button>
+    <button onclick="closeFilterDrawer()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--warm-gray);line-height:1;margin-left:4px;">&#215;</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 18px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--warm-gray);margin-bottom:10px;">Member Type</div>
+      <div id="fd-member-types"></div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--warm-gray);margin-bottom:10px;">Tags</div>
+      <div id="fd-tags"></div>
+    </div>
+  </div>
+  <div style="padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0;">
+    <div id="fd-result-count" style="font-size:.78rem;color:var(--warm-gray);margin-bottom:10px;text-align:center;"></div>
+    <button class="btn-primary" style="width:100%;padding:10px;" onclick="closeFilterDrawer()">Done</button>
+  </div>
+</div>
+
 </div><!-- /app-shell -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
@@ -17822,20 +17845,112 @@ function loadTags() {
   });
 }
 function renderTagPills() {
-  var c = document.getElementById('p-tag-pills');
-  c.innerHTML = '<button class="pill pill-tag active" data-tid="" onclick="setPeopleTag(this,&#39;&#39;)" >All Tags</button>'
-    + allTags.map(function(t) {
-      return '<button class="pill pill-tag" data-tid="' + t.id + '" onclick="setPeopleTag(this,&#39;' + t.id + '&#39;)">'
-        + '<span class="tag-dot" style="background:' + esc(t.color) + '"></span>' + esc(t.name) + '</button>';
-    }).join('');
-  // Add manage link
-  c.innerHTML += '<button class="btn-sm" style="font-size:.75rem;padding:4px 10px;" onclick="openTagsManager()">&#9881; Tags</button>';
+  // No-op — pills replaced by filter drawer; drawer is rendered on open
 }
 function setPeopleTag(btn, tid) {
-  document.querySelectorAll('#p-tag-pills .pill').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
+  // Legacy
   peopleFilter.tagId = tid;
   loadPeople(true);
+  renderActiveFilterChips();
+  updateFilterBadge();
+}
+
+// ── FILTER DRAWER ────────────────────────────────────────────────────
+var _filterDrawerOpen = false;
+function toggleFilterDrawer() {
+  if (_filterDrawerOpen) closeFilterDrawer(); else openFilterDrawer();
+}
+function openFilterDrawer() {
+  _filterDrawerOpen = true;
+  renderFilterDrawer();
+  document.getElementById('people-filter-drawer').style.display = 'flex';
+  document.getElementById('people-filter-overlay').style.display = 'block';
+}
+function closeFilterDrawer() {
+  _filterDrawerOpen = false;
+  document.getElementById('people-filter-drawer').style.display = 'none';
+  document.getElementById('people-filter-overlay').style.display = 'none';
+}
+function renderFilterDrawer() {
+  // Member types
+  var mtEl = document.getElementById('fd-member-types');
+  if (mtEl) {
+    mtEl.innerHTML = fdRadio('fd-mt', '', 'All', !peopleFilter.mt, 'setFdMt(\'\')')
+      + _memberTypes.map(function(t) {
+        var v = t.toLowerCase().replace(/\s+/g, '-');
+        return fdRadio('fd-mt', v, t, peopleFilter.mt === v, 'setFdMt(\'' + v + '\')');
+      }).join('');
+  }
+  // Tags
+  var tEl = document.getElementById('fd-tags');
+  if (tEl) {
+    tEl.innerHTML = fdRadio('fd-tag', '', 'All Tags', !peopleFilter.tagId, 'setFdTag(\'\')')
+      + allTags.map(function(t) {
+        return '<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:.9rem;border-radius:6px;">'
+          + '<input type="radio" name="fd-tag" value="' + t.id + '" ' + (String(peopleFilter.tagId) === String(t.id) ? 'checked' : '') + ' onchange="setFdTag(\'' + t.id + '\')" style="flex-shrink:0;">'
+          + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
+          + esc(t.name) + '</label>';
+      }).join('');
+  }
+}
+function fdRadio(name, val, label, checked, onchange) {
+  return '<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:.9rem;border-radius:6px;">'
+    + '<input type="radio" name="' + name + '" value="' + val + '" ' + (checked ? 'checked' : '') + ' onchange="' + onchange + '" style="flex-shrink:0;">'
+    + esc(label) + '</label>';
+}
+function setFdMt(v) {
+  peopleFilter.mt = v;
+  loadPeople(true);
+  renderActiveFilterChips();
+  updateFilterBadge();
+  updateFdCount();
+}
+function setFdTag(v) {
+  peopleFilter.tagId = v;
+  loadPeople(true);
+  renderActiveFilterChips();
+  updateFilterBadge();
+  updateFdCount();
+}
+function clearAllFilters() {
+  peopleFilter.mt = '';
+  peopleFilter.tagId = '';
+  loadPeople(true);
+  renderFilterDrawer();
+  renderActiveFilterChips();
+  updateFilterBadge();
+}
+function updateFilterBadge() {
+  var count = (peopleFilter.mt ? 1 : 0) + (peopleFilter.tagId ? 1 : 0);
+  var badge = document.getElementById('p-filter-count');
+  if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline-flex' : 'none'; }
+}
+function updateFdCount() {
+  var el = document.getElementById('fd-result-count');
+  if (el) el.textContent = _peopleTotal ? _peopleTotal + ' people match' : '';
+}
+function renderActiveFilterChips() {
+  var c = document.getElementById('p-active-filters');
+  if (!c) return;
+  var chips = [];
+  if (peopleFilter.mt) {
+    var label = _memberTypes.find(function(t){ return t.toLowerCase().replace(/\s+/g,'-') === peopleFilter.mt; }) || peopleFilter.mt;
+    chips.push(filterChip(label, 'var(--steel-anchor)', "setFdMt('')"));
+  }
+  if (peopleFilter.tagId) {
+    var tag = allTags.find(function(t){ return String(t.id) === String(peopleFilter.tagId); });
+    if (tag) chips.push(filterChip(tag.name, tag.color, "setFdTag('')"));
+  }
+  c.innerHTML = chips.length
+    ? chips.join('') + (chips.length > 1 ? '<button onclick="clearAllFilters()" style="font-size:.75rem;color:var(--teal);background:none;border:none;cursor:pointer;padding:2px 6px;font-weight:600;">Clear all</button>' : '')
+    : '';
+  c.style.display = chips.length ? 'flex' : 'none';
+}
+function filterChip(label, color, onclick) {
+  return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + color + ';color:#fff;border-radius:99px;padding:3px 11px;font-size:.78rem;font-weight:600;">'
+    + esc(label)
+    + '<span onclick="' + onclick + '" style="cursor:pointer;opacity:.75;font-size:13px;margin-left:2px;line-height:1;">&#215;</span>'
+    + '</span>';
 }
 function openTagsManager() {
   openModal('tags-modal');
@@ -17967,12 +18082,42 @@ function renderSettingsTagsList() {
   if (!c) return;
   if (!allTags.length) { c.innerHTML = '<p style="color:var(--warm-gray);font-size:.85rem;">No tags yet.</p>'; return; }
   c.innerHTML = allTags.map(function(t) {
-    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--linen);">'
-      + '<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
-      + '<span style="flex:1;font-size:.9rem;">' + esc(t.name) + ' <span style="color:var(--warm-gray);font-size:.78rem;">(' + (t.person_count||0) + ')</span></span>'
-      + '<button onclick="deleteTagSettings(' + t.id + ')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.85rem;">&#10005;</button>'
+    return '<div id="tag-row-' + t.id + '" style="border-bottom:1px solid var(--linen);">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">'
+      + '<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;cursor:pointer;" onclick="toggleTagEdit(' + t.id + ')"></span>'
+      + '<span style="flex:1;font-size:.9rem;">' + esc(t.name) + ' <span style="color:var(--warm-gray);font-size:.78rem;">(' + (t.person_count||0) + ' people)</span></span>'
+      + '<button onclick="toggleTagEdit(' + t.id + ')" style="background:none;border:none;color:var(--sky-steel);cursor:pointer;font-size:.82rem;padding:2px 6px;">&#9998; Edit</button>'
+      + '<button onclick="deleteTagSettings(' + t.id + ')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:.85rem;padding:2px 6px;">&#10005;</button>'
+      + '</div>'
+      + '<div id="tag-edit-' + t.id + '" style="display:none;padding:8px 0 12px;display:none;">'
+      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+      + '<input type="color" id="tag-color-' + t.id + '" value="' + esc(t.color) + '" style="width:36px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">'
+      + '<input type="text" id="tag-name-' + t.id + '" value="' + esc(t.name) + '" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;">'
+      + '<button class="btn-primary" style="font-size:.82rem;padding:6px 12px;" onclick="saveTagEdit(' + t.id + ')">Save</button>'
+      + '<button class="btn-secondary" style="font-size:.82rem;padding:6px 12px;" onclick="toggleTagEdit(' + t.id + ')">Cancel</button>'
+      + '</div>'
+      + '</div>'
       + '</div>';
   }).join('');
+}
+function toggleTagEdit(id) {
+  var el = document.getElementById('tag-edit-' + id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function saveTagEdit(id) {
+  var name = (document.getElementById('tag-name-' + id) || {}).value || '';
+  var color = (document.getElementById('tag-color-' + id) || {}).value || '#5C8FA8';
+  name = name.trim();
+  if (!name) { alert('Tag name is required.'); return; }
+  api('/admin/api/tags/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name, color: color })
+  }).then(function(r) {
+    if (r.ok) { loadSettings(); loadTags(); }
+    else alert('Error: ' + (r.error||'unknown'));
+  });
 }
 function createTagSettings() {
   var name = (document.getElementById('st-new-tag-name') || {}).value || '';
@@ -18101,10 +18246,11 @@ function loadFunds() {
 
 // ── PEOPLE ────────────────────────────────────────────────────────────
 function setPeopleFilter(btn, mt) {
-  document.querySelectorAll('#p-type-pills .pill').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
+  // Legacy – still works if called from old code
   peopleFilter.mt = mt;
   loadPeople(true);
+  renderActiveFilterChips();
+  updateFilterBadge();
 }
 function debouncePeople() {
   clearTimeout(_pDebounce);
@@ -18130,6 +18276,7 @@ function loadPeople(resetPage) {
     renderPeopleDesktop(people);
     renderPeopleMobile(people);
     renderPeoplePager();
+    updateFdCount();
   }).catch(function() { setStatus('p-status','Error loading people.','err'); });
 }
 function renderPeoplePager() {
