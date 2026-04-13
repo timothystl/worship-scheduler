@@ -1,5 +1,5 @@
 // ── Admin API handlers ─────────────────────────────────────────────────────────
-import { html, json, isAuthed, authCookieHeader } from './auth.js';
+import { html, json, isAuthed, authCookieHeader, getAuthRole } from './auth.js';
 import { handleChmsApi } from './api-chms.js';
 import { LOGIN_HTML } from './html-templates.js';
 
@@ -89,14 +89,21 @@ export async function handleAdminLogin(req, env) {
   // ── Credential check ────────────────────────────────────────────────
   let body; try { body = await req.text(); } catch { body = ''; }
   const params = new URLSearchParams(body);
-  const adminPassword = env.ADMIN_PASSWORD || '';
+  const adminPassword  = env.ADMIN_PASSWORD  || '';
+  const staffPassword  = env.STAFF_PASSWORD  || '';
+  const viewerPassword = env.VIEWER_PASSWORD || '';
   if (!adminPassword) {
     return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Admin password is not configured. Set the <code>ADMIN_PASSWORD</code> secret in the Cloudflare Dashboard.</p>'));
   }
-  if (params.get('password') === adminPassword) {
-    // Clear rate-limit counter on successful login
+  const submitted = params.get('password') || '';
+  let matchedRole = null;
+  if (submitted === adminPassword)                           matchedRole = 'admin';
+  else if (staffPassword  && submitted === staffPassword)   matchedRole = 'staff';
+  else if (viewerPassword && submitted === viewerPassword)  matchedRole = 'viewer';
+  if (matchedRole) {
     if (env.RSVP_STORE) await env.RSVP_STORE.delete(rlKey).catch(() => {});
-    return new Response('', { status: 302, headers: { Location: '/admin', 'Set-Cookie': await authCookieHeader(env) } });
+    const dest = matchedRole === 'admin' ? '/admin' : '/chms';
+    return new Response('', { status: 302, headers: { Location: dest, 'Set-Cookie': await authCookieHeader(env, matchedRole) } });
   }
   // Increment failed-attempt counter (expires after 20 minutes to clean up)
   if (env.RSVP_STORE) {
@@ -109,6 +116,13 @@ export async function handleAdminLogin(req, env) {
 // ── ADMIN API ─────────────────────────────────────────────────────────
 export async function handleAdminApi(req, env, url, method) {
   const seg = url.pathname.replace('/admin/api/', '');
+
+  // ── Current user info ─────────────────────────────────────────────
+  if (seg === 'me' && method === 'GET') {
+    const role = await getAuthRole(req, env);
+    const labels = { admin: 'Administrator', staff: 'Staff', viewer: 'Viewer' };
+    return json({ role: role || 'unknown', display_name: labels[role] || 'Unknown' });
+  }
 
   if (seg.startsWith('scheduler/')) return handleSchedulerDataApi(req, env, url, method);
 
@@ -278,7 +292,8 @@ export async function handleAdminApi(req, env, url, method) {
       seg === 'dashboard'      || seg === 'board'              ||
       seg === 'directory') {
     try {
-      return await handleChmsApi(req, env, url, method, seg);
+      const role = await getAuthRole(req, env);
+      return await handleChmsApi(req, env, url, method, seg, role || 'admin');
     } catch (e) {
       console.error('ChMS API error [' + method + ' ' + seg + ']:', e?.message, e?.stack);
       return json({ error: 'Internal server error. Please try again.' }, 500);

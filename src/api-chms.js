@@ -1,8 +1,43 @@
 // ── ChMS (People & Giving) API handler ────────────────────────────────────────
 import { html, json } from './auth.js';
 
-export async function handleChmsApi(req, env, url, method, seg) {
+export async function handleChmsApi(req, env, url, method, seg, role = 'admin') {
   const db = env.DB;
+
+  // ── Role-based access control ────────────────────────────────────
+  // Roles: 'admin' > 'staff' > 'viewer'
+  const isAdmin = role === 'admin';
+  const isStaff = role === 'admin' || role === 'staff';
+  // Giving and giving reports — staff+ only (financial PII)
+  if ((seg.startsWith('giving') || seg.startsWith('reports/giving')) && !isStaff) {
+    return json({ error: 'Access denied: giving data requires staff access' }, 403);
+  }
+  // Imports — admin only
+  if (seg.startsWith('import/') && !isAdmin) {
+    return json({ error: 'Access denied: imports require admin access' }, 403);
+  }
+  // Config (settings) — reads allowed for staff, writes admin only
+  if (seg.startsWith('config') && method !== 'GET' && !isAdmin) {
+    return json({ error: 'Access denied: changing settings requires admin access' }, 403);
+  }
+  // Pastoral follow-ups — staff+ only
+  if (seg.startsWith('followup') && !isStaff) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Audit log — staff+ only
+  if (seg.startsWith('audit') && !isStaff) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Dev board — admin only
+  if (seg === 'board' && !isAdmin) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Write operations on people/households/tags/attendance/register — staff+ only
+  if (method !== 'GET' && !isStaff &&
+      (seg.startsWith('people') || seg.startsWith('households') || seg.startsWith('tags') ||
+       seg.startsWith('attendance') || seg.startsWith('register') || seg.startsWith('funds'))) {
+    return json({ error: 'Access denied: editing requires staff access' }, 403);
+  }
 
   // ── Dashboard ────────────────────────────────────────────────────
   if (seg === 'dashboard' && method === 'GET') {
@@ -220,6 +255,7 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
     if (method === 'DELETE') {
       const hard = url.searchParams.get('hard') === 'true';
+      if (hard && !isAdmin) return json({ error: 'Access denied: permanent delete requires admin access' }, 403);
       if (hard) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();
         await db.prepare('DELETE FROM people WHERE id=?').bind(pid).run();
@@ -1552,6 +1588,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
 
   // ── Giving Reset ──────────────────────────────────────────────────
   if (seg === 'giving/all' && method === 'DELETE') {
+    if (!isAdmin) return json({ error: 'Access denied: giving reset requires admin access' }, 403);
     await db.batch([
       db.prepare('DELETE FROM giving_entries'),
       db.prepare('DELETE FROM giving_batches'),

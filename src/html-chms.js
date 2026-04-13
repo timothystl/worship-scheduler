@@ -470,6 +470,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .pv-aside-link:hover{text-decoration:underline;}
 .topbar-back{font-size:13px;color:var(--sky-steel);cursor:pointer;white-space:nowrap;flex-shrink:0;}
 .topbar-back:hover{text-decoration:underline;}
+/* ── ROLE-BASED VISIBILITY ── */
+.role-viewer .require-staff{display:none!important;}
+.role-viewer .require-edit{display:none!important;}
+.role-staff  .require-admin{display:none!important;}
+.role-viewer .require-admin{display:none!important;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
@@ -493,14 +498,14 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item" data-tab="people" onclick="showTab('people')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><span class="s-tip">People</span></div>
   <div class="s-item" data-tab="households" onclick="showTab('households')"><svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg><span class="s-tip">Households</span></div>
   <div class="s-divider"></div>
-  <div class="s-item" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
+  <div class="s-item require-staff" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
   <div class="s-item" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
   <div class="s-item" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
   <div class="s-item" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
-  <div class="s-divider"></div>
-  <div class="s-item" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
+  <div class="s-divider require-admin"></div>
+  <div class="s-item require-admin" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-bottom">
-    <div class="s-item" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
+    <div class="s-item require-admin" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
   </div>
 </nav>
 <div class="content-area">
@@ -509,7 +514,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <span class="topbar-title" id="topbar-title">People</span>
   <div style="display:flex;gap:8px;align-items:center;">
     <span style="font-size:.7rem;color:var(--warm-gray);" id="deploy-ver"></span>
-    <a href="/admin" class="btn-sm">&#8592; Volunteers</a>
+    <span id="topbar-role" style="display:none;font-size:.72rem;padding:2px 8px;border-radius:99px;background:rgba(30,45,74,.12);color:var(--charcoal);font-weight:600;"></span>
+    <a href="/admin" class="btn-sm require-admin">&#8592; Volunteers</a>
     <a href="/admin/logout" class="btn-sm">Sign Out</a>
   </div>
 </div>
@@ -530,7 +536,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </button>
     <button class="btn-secondary" id="p-select-btn" onclick="toggleSelectMode()" style="margin-left:auto;">&#9745; Select</button>
     <button class="btn-secondary" onclick="printDirectory()" title="Print directory">&#128438; Directory</button>
-    <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
+    <button class="btn-primary require-edit" onclick="openPersonEdit(null)">+ Add Person</button>
   </div>
   <!-- Active filter chips -->
   <div id="p-active-filters" style="display:none;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
@@ -568,7 +574,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-households" class="tab-panel">
   <div class="toolbar">
     <div class="search-wrap"><input type="search" id="h-search" placeholder="Search households…" oninput="debounceHouseholds()"></div>
-    <button class="btn-primary" onclick="openHouseholdEdit(null)" style="margin-left:auto;">+ New Household</button>
+    <button class="btn-primary require-edit" onclick="openHouseholdEdit(null)" style="margin-left:auto;">+ New Household</button>
   </div>
   <div id="h-status" class="status-msg"></div>
   <div class="card-grid" id="h-grid"></div>
@@ -926,7 +932,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <span id="pv-topbar-name" style="font-size:15px;font-weight:500;color:var(--charcoal);margin-left:8px;"></span>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn-secondary" onclick="window.print()">Print</button>
-      <button class="btn-secondary" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
+      <button class="btn-secondary require-edit" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
     </div>
   </div>
   <div class="pv-body">
@@ -943,7 +949,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
     <div class="pv-tabs">
       <div class="pv-tab active" data-ptab="info" onclick="showPvTab('info')">Information</div>
-      <div class="pv-tab" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
+      <div class="pv-tab require-staff" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
       <div class="pv-tab" data-ptab="attendance" onclick="showPvTab('attendance')">Attendance</div>
       <div class="pv-tab" data-ptab="timeline" onclick="showPvTab('timeline')">Timeline</div>
     </div>
@@ -1255,6 +1261,7 @@ var _hhOffset = 0, _hhTotal = 0;
 var _currentPvPerson = null;
 var _pvGivingPersonId = null;
 var _pvGivingEntries = [];
+var _userRole = 'admin';
 var _batchSearch = '';
 var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
@@ -1322,6 +1329,11 @@ function initials(first, last) {
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────
 function showTab(name) {
+  // Enforce role-based tab access
+  var isStaffPlus = _userRole === 'admin' || _userRole === 'staff';
+  if (name === 'giving'   && !isStaffPlus) return;
+  if (name === 'import'   && _userRole !== 'admin') return;
+  if (name === 'settings' && _userRole !== 'admin') return;
   var labels = {home:'Home',people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',register:'Register',import:'Import',settings:'Settings'};
   // Exit person-profile view if active
   var ca = document.querySelector('.content-area');
@@ -1409,11 +1421,29 @@ window.addEventListener('load', function() {
   if (dv) dv.textContent = 'v' + DEPLOY_VERSION;
   var bsy = document.getElementById('batch-stmt-year');
   if (bsy) bsy.value = y;
-  loadTags();
-  loadFunds();
-  loadMemberTypes();
-  showTab('home');
+  // Fetch role first so UI restrictions apply before content loads
+  api('/admin/api/me').then(function(d) {
+    applyRoleUI(d && d.role ? d.role : 'admin');
+  }).catch(function() {
+    applyRoleUI('admin');
+  }).finally(function() {
+    loadTags();
+    loadFunds();
+    loadMemberTypes();
+    showTab('home');
+  });
 });
+function applyRoleUI(role) {
+  _userRole = role || 'admin';
+  var body = document.body;
+  body.className = body.className.replace(/\brole-\w+/g, '').trim() + ' role-' + _userRole;
+  var ri = document.getElementById('topbar-role');
+  if (ri) {
+    var labels = { staff: 'Staff', viewer: 'Viewer (read-only)' };
+    if (labels[_userRole]) { ri.textContent = labels[_userRole]; ri.style.display = ''; }
+    else ri.style.display = 'none';
+  }
+}
 
 // ── TAGS ──────────────────────────────────────────────────────────────
 function loadTags() {
@@ -1807,9 +1837,10 @@ function renderDashboard(d) {
   var html = '';
 
   // ── Quick actions ──────────────────────────────────────────────
+  var isStaff = _userRole === 'admin' || _userRole === 'staff';
   html += '<div class="dash-quick">'
-    + dashQBtn('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>', 'Add Person', "openPersonEdit(null);showTab('people')")
-    + dashQBtn('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/>', 'Record Giving', "showTab('giving')")
+    + (_userRole !== 'viewer' ? dashQBtn('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>', 'Add Person', "openPersonEdit(null);showTab('people')") : '')
+    + (isStaff ? dashQBtn('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/>', 'Record Giving', "showTab('giving')") : '')
     + dashQBtn('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/>', 'Attendance', "showTab('attendance')")
     + dashQBtn('<path d="M18 20V10M12 20V4M6 20v-6"/>', 'Reports', "showTab('reports')")
     + '</div>';
@@ -1819,7 +1850,7 @@ function renderDashboard(d) {
   html += '<div class="dash-stats">'
     + dashStat(d.totalPeople, 'Total People', d.addedThisYear + ' added this year')
     + dashStat(d.totalHouseholds, 'Households', d.addedThisMonth + ' new this month')
-    + dashStat('$'+fmt$(d.givingThisYear), yr+' Giving', yr-1+': $'+fmt$(d.givingLastYear))
+    + (isStaff ? dashStat('$'+fmt$(d.givingThisYear), yr+' Giving', yr-1+': $'+fmt$(d.givingLastYear)) : '')
     + dashStat(lastSvc ? lastSvc.attendance : '\u2014', 'Last Service', lastSvc ? esc(lastSvc.service_name)+' \u00b7 '+lastSvc.service_date : 'No attendance yet')
     + '</div>';
 
@@ -2466,6 +2497,7 @@ function openAddToHouseholdModal(householdId) {
   });
 }
 function showPvTab(name) {
+  if (name === 'giving' && _userRole === 'viewer') return; // giving is staff+ only
   document.querySelectorAll('.pv-tab').forEach(function(b){
     b.classList.toggle('active', b.dataset.ptab === name);
   });
