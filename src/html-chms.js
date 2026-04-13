@@ -1091,6 +1091,27 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <input type="hidden" id="pm-hh-id">
     </div>
     <div id="pm-dates-section">
+      <div class="modal-section">Demographics</div>
+      <div class="modal-2col">
+        <div class="field"><label>Gender</label>
+          <select id="pm-gender" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+            <option value="">— not set —</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field"><label>Marital Status</label>
+          <select id="pm-marital" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+            <option value="">— not set —</option>
+            <option value="Single">Single</option>
+            <option value="Married">Married</option>
+            <option value="Widowed">Widowed</option>
+            <option value="Divorced">Divorced</option>
+            <option value="Separated">Separated</option>
+          </select>
+        </div>
+      </div>
       <div class="modal-section">Dates</div>
       <div class="modal-2col">
         <div class="field"><label>Date of Birth</label><input type="date" id="pm-dob"></div>
@@ -2311,6 +2332,8 @@ function showProfile(p) {
       + '<div class="pv-section">'
       + '<div class="pv-section-title">Demographics / Dates</div>'
       + '<div class="pv-field-grid">'
+      + (p.gender        ? pvField('gender',         p.gender)        : '')
+      + (p.marital_status? pvField('marital status', p.marital_status): '')
       + pvField('birthday', p.dob ? fmtDate(p.dob)+calcAge(p.dob) : '')
       + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : '')
       + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : '')
@@ -2563,6 +2586,8 @@ function openPersonEdit(p) {
   updatePersonNameMode();
   if (!isNew && p.member_type === 'organization') document.getElementById('pm-org-name').value = p.first_name||'';
   document.getElementById('pm-role').value = isNew ? '' : (p.family_role||'');
+  document.getElementById('pm-gender').value = isNew ? '' : (p.gender||'');
+  document.getElementById('pm-marital').value = isNew ? '' : (p.marital_status||'');
   document.getElementById('pm-dob').value = isNew ? '' : (p.dob||'');
   document.getElementById('pm-baptism').value = isNew ? '' : (p.baptism_date||'');
   document.getElementById('pm-confirm').value = isNew ? '' : (p.confirmation_date||'');
@@ -2636,6 +2661,8 @@ function savePerson() {
     zip: document.getElementById('pm-zip').value.trim(),
     member_type: document.getElementById('pm-type').value,
     family_role: document.getElementById('pm-role').value,
+    gender: document.getElementById('pm-gender').value,
+    marital_status: document.getElementById('pm-marital').value,
     household_id: document.getElementById('pm-hh-id').value || null,
     dob: document.getElementById('pm-dob').value,
     baptism_date: document.getElementById('pm-baptism').value,

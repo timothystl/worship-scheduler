@@ -434,6 +434,9 @@ export async function initDb(db) {
     'ALTER TABLE people ADD COLUMN envelope_number TEXT NOT NULL DEFAULT ""',
     // people: last-seen date for pastoral tracking
     'ALTER TABLE people ADD COLUMN last_seen_date TEXT NOT NULL DEFAULT ""',
+    // people: gender and marital status (imported from Breeze)
+    'ALTER TABLE people ADD COLUMN gender TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE people ADD COLUMN marital_status TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }

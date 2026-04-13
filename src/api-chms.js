@@ -128,13 +128,14 @@ export async function handleChmsApi(req, env, url, method, seg) {
     const r = await db.prepare(
       `INSERT INTO people (first_name,last_name,email,phone,address1,address2,city,state,zip,
        member_type,dob,baptism_date,confirmation_date,anniversary_date,death_date,deceased,
-       household_id,family_role,photo_url,notes,breeze_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       household_id,family_role,photo_url,notes,breeze_id,gender,marital_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(b.first_name||'',b.last_name||'',b.email||'',b.phone||'',
            b.address1||'',b.address2||'',b.city||'',b.state||'MO',b.zip||'',
            b.member_type||'visitor',b.dob||'',b.baptism_date||'',
            b.confirmation_date||'',b.anniversary_date||'',b.death_date||'',b.deceased?1:0,
-           b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',b.breeze_id||''
+           b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',b.breeze_id||'',
+           b.gender||'',b.marital_status||''
     ).run();
     const personId = r.meta?.last_row_id;
     if (Array.isArray(b.tag_ids)) {
@@ -182,14 +183,14 @@ export async function handleChmsApi(req, env, url, method, seg) {
         `UPDATE people SET first_name=?,last_name=?,email=?,phone=?,address1=?,address2=?,
          city=?,state=?,zip=?,member_type=?,dob=?,baptism_date=?,confirmation_date=?,
          anniversary_date=?,death_date=?,deceased=?,household_id=?,family_role=?,photo_url=?,notes=?,
-         public_directory=?,envelope_number=?,last_seen_date=? WHERE id=?`
+         public_directory=?,envelope_number=?,last_seen_date=?,gender=?,marital_status=? WHERE id=?`
       ).bind(b.first_name||'',b.last_name||'',b.email||'',b.phone||'',
              b.address1||'',b.address2||'',b.city||'',b.state||'MO',b.zip||'',
              b.member_type||'visitor',b.dob||'',b.baptism_date||'',
              b.confirmation_date||'',b.anniversary_date||'',b.death_date||'',b.deceased?1:0,
              b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',
              b.public_directory!=null?(b.public_directory?1:0):1,
-             b.envelope_number||'',b.last_seen_date||'',pid
+             b.envelope_number||'',b.last_seen_date||'',b.gender||'',b.marital_status||'',pid
       ).run();
       if (Array.isArray(b.tag_ids)) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();
@@ -202,7 +203,8 @@ export async function handleChmsApi(req, env, url, method, seg) {
         const personName = [(oldPerson.first_name||b.first_name||''), (oldPerson.last_name||b.last_name||'')].filter(Boolean).join(' ');
         const auditFields = ['first_name','last_name','email','phone','address1','address2','city','state','zip',
           'member_type','dob','baptism_date','confirmation_date','anniversary_date','death_date','deceased',
-          'household_id','family_role','notes','public_directory','envelope_number','last_seen_date'];
+          'household_id','family_role','notes','public_directory','envelope_number','last_seen_date',
+          'gender','marital_status'];
         const auditStmt = db.prepare(
           `INSERT INTO audit_log(action,entity_type,entity_id,person_name,field,old_value,new_value) VALUES(?,?,?,?,?,?,?)`
         );
@@ -1978,12 +1980,16 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized']);
     const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed']);
     const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date']);
+    const F_GENDER_FIELD   = findField(['gender','sex','gender identity']);
+    const F_MARITAL_FIELD  = findField(['marital status','marital','marriage status','civil status','married']);
     // Use empty string as fallback so details[''] is always undefined — never accidentally match a real field
     const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '';
     const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '';
     const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '';
     const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '';
     const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '';
+    const F_GENDER       = F_GENDER_FIELD  ? String(F_GENDER_FIELD.id)  : '';
+    const F_MARITAL      = F_MARITAL_FIELD ? String(F_MARITAL_FIELD.id) : '';
     // Breeze's built-in person-type field ID (not returned by /api/profile).
     // Values 1/2/3 are Breeze's universal numeric IDs for Member/Attender/Visitor.
     const BREEZE_TYPE_FIELD = '1076274773';
@@ -2047,8 +2053,8 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
       if (typeof raw === 'string' && raw) return optionIdToName[raw] || raw;
       return '';
     };
-    // Skip non-person status types
-    const SKIP_STATUSES = new Set(['organization','christmas market','egg hunt','renter','mdo']);
+    // No statuses are skipped — all Breeze records are imported regardless of status.
+    const SKIP_STATUSES = new Set();
     const statusesSeen = new Set();
     let imported = 0, updated = 0, skipped = 0;
     const errors = [];
@@ -2099,8 +2105,14 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         const baptismDate  = toISO(details[F_BAPTISM]       || '');
         const confirmDate  = toISO(details[F_CONFIRMATION]  || '');
         const anniversaryDate = toISO(details[F_ANNIVERSARY] || '');
-        // Photo (Breeze returns thumb at top level)
-        const photoUrl = (p.thumb || p.thumbnail || p.photo || '').trim();
+        // Gender and marital status (stored as {value, name} objects)
+        const gender        = F_GENDER  ? extractName(details[F_GENDER])  : '';
+        const maritalStatus = F_MARITAL ? extractName(details[F_MARITAL]) : '';
+        // Photo: Breeze returns the path in p.path; build full URL and skip generic placeholders
+        let photoUrl = (p.thumb || p.thumbnail || p.photo || '').trim();
+        if (!photoUrl && p.path && !p.path.includes('/generic/')) {
+          photoUrl = `https://${subdomain}.breezechms.com/${p.path}`;
+        }
         // Email, phone, address (from typed arrays)
         let email = '', phone = '';
         let addr = { street: '', city: '', state: '', zip: '' };
@@ -2150,19 +2162,23 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           await db.prepare(
             `UPDATE people SET first_name=?,last_name=?,email=?,phone=?,
              address1=?,city=?,state=?,zip=?,member_type=?,household_id=?,
-             dob=?,baptism_date=?,confirmation_date=?,anniversary_date=?,family_role=?,photo_url=?
+             dob=?,baptism_date=?,confirmation_date=?,anniversary_date=?,family_role=?,photo_url=?,
+             gender=?,marital_status=?
              WHERE breeze_id=?`
           ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,memberType,householdId,
-                 dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,String(p.id)).run();
+                 dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,
+                 gender,maritalStatus,String(p.id)).run();
           updated++;
         } else {
           await db.prepare(
             `INSERT INTO people
              (first_name,last_name,email,phone,address1,city,state,zip,breeze_id,member_type,
-              household_id,dob,baptism_date,confirmation_date,anniversary_date,family_role,photo_url)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+              household_id,dob,baptism_date,confirmation_date,anniversary_date,family_role,photo_url,
+              gender,marital_status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
           ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,String(p.id),memberType,
-                 householdId,dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl).run();
+                 householdId,dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,
+                 gender,maritalStatus).run();
           imported++;
         }
       } catch (e) { errors.push({ breeze_id: p.id, error: e.message }); }
