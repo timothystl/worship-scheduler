@@ -23,6 +23,22 @@ import { CHMS_HTML, CHMS_MANIFEST_JSON, SW_JS, BACKLOG_HTML } from './src/html-c
 export default {
   async fetch(req, env) {
     try {
+      return await _fetch(req, env);
+    } catch (e) {
+      // Last-resort catch: prevents Cloudflare from returning its HTML error page.
+      // All internal handlers have their own try/catch; this only fires for truly
+      // unexpected exceptions (e.g. a broken env binding, or a very rare V8 crash).
+      console.error('Unhandled worker exception:', e?.message, e?.stack);
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+};
+
+async function _fetch(req, env) {
+    try {
       await initDb(env.DB);
     } catch (e) {
       return new Response('DB init error: ' + e.message, { status: 500 });
@@ -125,5 +141,4 @@ export default {
       return new Response(SCHEDULER_HTML, { headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
     }
     return new Response('Not Found', { status: 404 });
-  }
-};
+}
