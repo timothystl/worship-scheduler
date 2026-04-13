@@ -1253,6 +1253,8 @@ var _pDebounce, _hDebounce;
 var _loadedServices = [];
 var _hhOffset = 0, _hhTotal = 0;
 var _currentPvPerson = null;
+var _pvGivingPersonId = null;
+var _pvGivingEntries = [];
 var _batchSearch = '';
 var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
@@ -2340,7 +2342,7 @@ function showProfile(p) {
       + pvField('deceased', p.deceased ? (p.death_date ? fmtDate(p.death_date) : 'Yes') : 'No')
       + '</div>'
       + '</div>'
-      + (tagHtml ? '<div class="pv-section"><div class="pv-section-title">Tags</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+tagHtml+'</div></div>' : '')
+      + '<div class="pv-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Tags</div><button class="btn-secondary" style="font-size:.7rem;padding:2px 8px;" onclick="openPersonEdit(_currentPvPerson)">Edit</button></div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+(tagHtml||'<span style="color:var(--warm-gray);font-size:12px;font-style:italic;">No tags</span>')+'</div></div>'
       + (p.notes ? '<div class="pv-section"><div class="pv-section-title">Notes</div><div style="font-size:13px;color:var(--charcoal);white-space:pre-wrap;line-height:1.5;">'+esc(p.notes)+'</div></div>' : '')
       + '</div>';
     infoEl.innerHTML = '<div class="pv-info-cols">'+leftCol+rightCol+'</div>';
@@ -2477,38 +2479,188 @@ function showPvTab(name) {
 function loadPvGiving(personId) {
   var el = document.getElementById('ptab-giving');
   if (!el) return;
+  _pvGivingPersonId = personId;
+  _pvGivingEntries = [];
   el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Loading...</div>';
-  api('/admin/api/giving?person_id='+personId+'&limit=200').then(function(d) {
-    var entries = (d && d.entries) ? d.entries : (Array.isArray(d) ? d : []);
-    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">No giving records found.</div>'; return; }
-    var total = entries.reduce(function(s,e){return s+(e.amount||0);},0);
-    var byYear = {};
-    entries.forEach(function(e){
-      var yr = (e.contribution_date||'').slice(0,4)||'—';
-      byYear[yr] = (byYear[yr]||0)+(e.amount||0);
-    });
-    var yearRows = Object.keys(byYear).sort().reverse().map(function(yr){
-      return '<tr><td style="padding:6px 12px;">'+yr+'</td><td style="padding:6px 12px;text-align:right;">$'+(byYear[yr]/100).toFixed(2)+'</td></tr>';
+  api('/admin/api/giving?person_id='+personId+'&limit=2000').then(function(d) {
+    _pvGivingEntries = (d && d.entries) ? d.entries : [];
+    renderPvGiving('');
+  }).catch(function() {
+    el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>';
+  });
+}
+function renderPvGiving(filterYear) {
+  var el = document.getElementById('ptab-giving');
+  if (!el) return;
+  var personId = _pvGivingPersonId;
+  var allE = _pvGivingEntries;
+  var entries = filterYear ? allE.filter(function(e){ return (e.contribution_date||'').startsWith(filterYear); }) : allE;
+  var grandTotal = allE.reduce(function(s,e){return s+(e.amount||0);},0);
+  var yearTotal  = entries.reduce(function(s,e){return s+(e.amount||0);},0);
+  // Year list
+  var years = {};
+  allE.forEach(function(e){ var yr=(e.contribution_date||'').slice(0,4); if (yr) years[yr]=1; });
+  var yearList = Object.keys(years).sort().reverse();
+  var yearOpts = '<option value=""'+(filterYear===''?' selected':'')+'>All Years ($'+(grandTotal/100).toFixed(2)+')</option>'
+    + yearList.map(function(y){
+      var yt = allE.filter(function(e){return (e.contribution_date||'').startsWith(y);}).reduce(function(s,e){return s+(e.amount||0);},0);
+      return '<option value="'+y+'"'+(y===filterYear?' selected':'')+'>'+y+' ($'+(yt/100).toFixed(2)+')</option>';
     }).join('');
-    var recentRows = entries.slice(0,20).map(function(e){
-      return '<tr><td style="padding:6px 12px;">'+(e.contribution_date||'—')+'</td>'
-        +'<td style="padding:6px 12px;">'+(e.fund_name||'General')+'</td>'
-        +'<td style="padding:6px 12px;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td></tr>';
+  // Fund options for Add Gift form
+  var activeFunds = allFunds.filter(function(f){return f.active;});
+  if (!activeFunds.length) activeFunds = allFunds;
+  var fundOpts = activeFunds.map(function(f){
+    return '<option value="'+f.id+'">'+esc(f.name)+'</option>';
+  }).join('');
+  // Add Gift form
+  var today = new Date().toISOString().slice(0,10);
+  var addForm = '<div style="background:var(--linen);border-radius:8px;padding:14px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--slate-blue);margin-bottom:10px;">Add Gift</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Date</label><input type="date" id="qg-date" value="'+today+'" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Fund</label><select id="qg-fund" style="width:100%;box-sizing:border-box;">'+(fundOpts||'<option value="">No funds</option>')+'</select></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Amount ($)</label><input type="number" id="qg-amount" step="0.01" min="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Method</label><select id="qg-method" style="width:100%;box-sizing:border-box;"><option value="cash">Cash</option><option value="check" selected>Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="other">Other</option></select></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Check #</label><input type="text" id="qg-check" placeholder="optional" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Notes</label><input type="text" id="qg-notes" placeholder="optional" style="width:100%;box-sizing:border-box;"></div>'
+    + '</div>'
+    + '<button class="btn-primary" style="margin-top:10px;font-size:.8rem;padding:5px 16px;" onclick="submitQuickGift('+personId+')">Add Gift</button>'
+    + '</div>';
+  // Table rows
+  var rows = entries.length ? entries.map(function(e){
+    var canDel = !e.batch_closed;
+    return '<tr>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-size:12px;">'+(e.contribution_date||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;">'+esc(e.fund_name||'General')+'</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;font-size:12px;font-weight:600;">$'+((e.amount||0)/100).toFixed(2)+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc(e.method||'')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc((e.check_number||e.notes||''))+'</td>'
+      + '<td style="padding:6px 8px;text-align:center;">'
+      + (canDel
+          ? '<button onclick="deleteGivingEntry('+e.id+',\''+filterYear+'\')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;" title="Delete">&times;</button>'
+          : '<span style="font-size:10px;color:var(--warm-gray);">closed</span>')
+      + '</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--warm-gray);font-size:13px;">No gifts'+(filterYear?' in '+filterYear:'')+'.</td></tr>';
+  // Statement year for links
+  var statYear = filterYear || new Date().getFullYear().toString();
+  var toolbar = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
+    + '<select style="font-size:.85rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border);" onchange="renderPvGiving(this.value)">'+yearOpts+'</select>'
+    + '<a href="/admin/api/reports/giving-statement?person_id='+personId+'&year='+statYear+'&format=csv" target="_blank" class="btn-secondary" style="font-size:.8rem;padding:5px 12px;text-decoration:none;">&#8595; CSV</a>'
+    + '<button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="sendGivingStatement('+personId+',\''+statYear+'\')">&#9993; Email Statement</button>'
+    + '</div>';
+  el.innerHTML = '<div style="padding:16px;">'
+    + toolbar
+    + addForm
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--slate-blue);">Gifts'+(filterYear?' ('+filterYear+')':'')+'</div>'
+    + '<div style="font-size:13px;font-weight:600;">$'+(yearTotal/100).toFixed(2)+'</div>'
+    + '</div>'
+    + '<div style="overflow-x:auto;">'
+    + '<table style="width:100%;border-collapse:collapse;min-width:480px;">'
+    + '<thead><tr style="background:var(--linen);">'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Date</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Fund</th>'
+    + '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:600;">Amount</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Method</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Note / Check #</th>'
+    + '<th style="padding:6px 8px;"></th>'
+    + '</tr></thead>'
+    + '<tbody>'+rows+'</tbody>'
+    + '</table>'
+    + '</div>'
+    + '</div>';
+}
+function submitQuickGift(personId) {
+  var dateEl   = document.getElementById('qg-date');
+  var fundEl   = document.getElementById('qg-fund');
+  var amtEl    = document.getElementById('qg-amount');
+  var methodEl = document.getElementById('qg-method');
+  var checkEl  = document.getElementById('qg-check');
+  var notesEl  = document.getElementById('qg-notes');
+  if (!dateEl || !fundEl || !amtEl) return;
+  var date   = dateEl.value;
+  var fundId = fundEl.value;
+  var amount = parseFloat(amtEl.value);
+  if (!date || !fundId || !amount || amount <= 0) { alert('Date, fund, and a positive amount are required.'); return; }
+  api('/admin/api/giving/quick-entry', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      person_id:    personId,
+      fund_id:      parseInt(fundId),
+      amount:       amount,
+      method:       methodEl ? methodEl.value : 'cash',
+      date:         date,
+      check_number: checkEl  ? checkEl.value.trim()  : '',
+      notes:        notesEl  ? notesEl.value.trim()  : ''
+    })
+  }).then(function(r) {
+    if (r && r.ok) {
+      loadPvGiving(personId);
+    } else {
+      alert('Error: '+(r && r.error ? r.error : 'Could not save gift'));
+    }
+  }).catch(function(){ alert('Network error saving gift. Please try again.'); });
+}
+function deleteGivingEntry(entryId, filterYear) {
+  if (!confirm('Delete this gift entry? This cannot be undone.')) return;
+  api('/admin/api/giving/entries/'+entryId, {method:'DELETE'}).then(function(r) {
+    if (r && r.ok) {
+      _pvGivingEntries = _pvGivingEntries.filter(function(e){return e.id !== entryId;});
+      renderPvGiving(filterYear);
+      // Refresh aside total
+      var total = _pvGivingEntries.reduce(function(s,e){return s+(e.amount||0);},0);
+      var ag = document.getElementById('pv-aside-giving');
+      if (ag) ag.innerHTML = '<div class="pv-aside-lbl">Total Giving</div>'
+        + '<div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div>'
+        + '<div class="pv-aside-sub">'+_pvGivingEntries.length+' gift'+(_pvGivingEntries.length!==1?'s':'')+'</div>';
+    } else {
+      alert('Error: '+(r && r.error ? r.error : 'Could not delete entry'));
+    }
+  }).catch(function(){ alert('Could not delete gift. Please try again.'); });
+}
+function sendGivingStatement(personId, year) {
+  var p = _currentPvPerson;
+  if (!p || !p.email) { alert('This person does not have an email address on file.'); return; }
+  if (!confirm('Send '+year+' giving statement to '+p.email+'?')) return;
+  api('/admin/api/reports/giving-statement?person_id='+personId+'&year='+year).then(function(d) {
+    if (!d || !d.entries || !d.entries.length) { alert('No giving data found for '+year+'.'); return; }
+    var name = ((p.first_name||'')+' '+(p.last_name||'')).trim() || 'Friend';
+    var total = d.entries.reduce(function(s,e){return s+(e.amount||0);},0);
+    var tRows = d.entries.map(function(e){
+      return '<tr><td style="padding:5px 10px;border-bottom:1px solid #eee;">'+(e.gift_date||'')+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;">'+esc(e.fund_name||'')+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777;">'+esc(e.method||'')+'</td></tr>';
     }).join('');
-    el.innerHTML = '<div style="padding:20px;">'
-      +'<div style="display:flex;gap:16px;margin-bottom:20px;">'
-      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div><div class="pv-card-lbl">Total Given</div></div>'
-      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">'+entries.length+'</div><div class="pv-card-lbl">Gifts</div></div>'
-      +'</div>'
-      +'<div class="pv-card-lbl" style="margin-bottom:8px;">By Year</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">'
-      +'<tbody>'+yearRows+'</tbody></table>'
-      +'<div class="pv-card-lbl" style="margin-bottom:8px;">Recent Gifts</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-      +'<thead><tr style="background:var(--linen);"><th style="padding:6px 12px;text-align:left;font-weight:500;">Date</th><th style="padding:6px 12px;text-align:left;font-weight:500;">Fund</th><th style="padding:6px 12px;text-align:right;font-weight:500;">Amount</th></tr></thead>'
-      +'<tbody>'+recentRows+'</tbody></table>'
-      +'</div>';
-  }).catch(function(){ el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>'; });
+    var htmlBody = '<html><body style="font-family:Georgia,serif;max-width:620px;margin:0 auto;padding:24px;color:#222;">'
+      +'<h2 style="color:#0A3C5C;margin-bottom:4px;">'+esc(year)+' Giving Statement</h2>'
+      +'<p style="color:#555;font-size:13px;">Timothy Lutheran Church &bull; St. Louis, MO</p>'
+      +'<p>Dear '+esc(name)+',</p>'
+      +'<p>Thank you for your generous giving to Timothy Lutheran Church. Below is a summary of your contributions for '+esc(year)+':</p>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;">'
+      +'<thead><tr style="background:#EDF5F8;">'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Date</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Fund</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;">Amount</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Method</th>'
+      +'</tr></thead>'
+      +'<tbody>'+tRows+'</tbody>'
+      +'<tfoot><tr style="font-weight:700;"><td colspan="2" style="padding:8px 10px;border-top:2px solid #ccc;">Total Contributions</td>'
+      +'<td style="padding:8px 10px;border-top:2px solid #ccc;text-align:right;">$'+(total/100).toFixed(2)+'</td><td></td></tr></tfoot>'
+      +'</table>'
+      +'<p style="font-size:12px;color:#666;">No goods or services were provided in exchange for these contributions. Please retain this statement for your tax records.</p>'
+      +'</body></html>';
+    api('/admin/api/giving/send-statement', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ to_email: p.email, to_name: name, subject: year+' Giving Statement \u2014 Timothy Lutheran Church', html_body: htmlBody })
+    }).then(function(r){
+      if (r && r.ok) alert('Statement sent to '+p.email+'.');
+      else alert('Error sending statement: '+(r && r.error ? r.error : 'unknown error'));
+    }).catch(function(){ alert('Network error. Please try again.'); });
+  }).catch(function(){ alert('Could not load giving data. Please try again.'); });
 }
 function loadPvAttendance(personId) {
   var el = document.getElementById('ptab-attendance');

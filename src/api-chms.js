@@ -430,6 +430,31 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
   }
 
+  // ── Giving Entries — list for a person ──────────────────────────
+  if (seg === 'giving' && method === 'GET') {
+    const personId = url.searchParams.get('person_id');
+    const year     = url.searchParams.get('year') || '';
+    const limit    = Math.min(parseInt(url.searchParams.get('limit') || '500'), 2000);
+    if (!personId) return json({ error: 'person_id required' }, 400);
+    let sql = `SELECT ge.id, ge.amount, ge.method, ge.check_number, ge.notes,
+                ge.fund_id, ge.batch_id, gb.closed as batch_closed,
+                COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as contribution_date,
+                f.name as fund_name
+               FROM giving_entries ge
+               JOIN funds f ON ge.fund_id=f.id
+               JOIN giving_batches gb ON ge.batch_id=gb.id
+               WHERE ge.person_id=?`;
+    const binds = [parseInt(personId)];
+    if (year) {
+      sql += ` AND substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4)=?`;
+      binds.push(year);
+    }
+    sql += ` ORDER BY COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) DESC, ge.id DESC LIMIT ?`;
+    binds.push(limit);
+    const entries = (await db.prepare(sql).bind(...binds).all()).results || [];
+    return json({ entries });
+  }
+
   // ── Giving Batches ───────────────────────────────────────────────
   if (seg === 'giving/batches' && method === 'GET') {
     const status = url.searchParams.get('status') || 'all';
@@ -521,6 +546,36 @@ export async function handleChmsApi(req, env, url, method, seg) {
     if (entry.closed) return json({ error: 'Batch is closed.' }, 409);
     await db.prepare('DELETE FROM giving_entries WHERE id=?').bind(eid).run();
     return json({ ok: true });
+  }
+
+  // ── Quick Gift Entry (auto-creates open batch for the month) ─────
+  if (seg === 'giving/quick-entry' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const { person_id, fund_id, amount, method: payMethod, date, notes, check_number } = b;
+    if (!fund_id || !amount || !date) return json({ error: 'fund_id, amount, and date required' }, 400);
+    const amtCents = Math.round(parseFloat(amount) * 100);
+    if (amtCents <= 0) return json({ error: 'Amount must be positive' }, 400);
+    // Find or create an open manual-entry batch for this month
+    const monthKey  = String(date).slice(0, 7);
+    const batchDesc = 'Manual Entry ' + monthKey;
+    let existBatch = await db.prepare(
+      `SELECT id FROM giving_batches WHERE description=? AND closed=0 LIMIT 1`
+    ).bind(batchDesc).first();
+    let batchId;
+    if (existBatch) {
+      batchId = existBatch.id;
+    } else {
+      const br = await db.prepare(
+        `INSERT INTO giving_batches (batch_date, description, closed) VALUES (?,?,0)`
+      ).bind(date, batchDesc).run();
+      batchId = br.meta?.last_row_id;
+    }
+    const er = await db.prepare(
+      `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,contribution_date)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).bind(batchId, person_id ? parseInt(person_id) : null, parseInt(fund_id),
+           amtCents, payMethod || 'cash', check_number || '', notes || '', date).run();
+    return json({ ok: true, id: er.meta?.last_row_id, batch_id: batchId });
   }
 
   // ── Reports ──────────────────────────────────────────────────────
