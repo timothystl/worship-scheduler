@@ -418,12 +418,12 @@ export async function handleChmsApi(req, env, url, method, seg) {
     ).bind(b.name||'New Fund',b.description||'',b.active?1:1,b.sort_order||0).run();
     return json({ ok: true, id: r.meta?.last_row_id });
   }
-  const fmatch = seg.match(/^funds\/(\d+)$/);
-  if (fmatch) {
+  const fundmatch = seg.match(/^funds\/(\d+)$/);
+  if (fundmatch) {
     if (method === 'PUT') {
       let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
       await db.prepare(`UPDATE funds SET name=?,description=?,active=?,sort_order=? WHERE id=?`)
-        .bind(b.name||'',b.description||'',b.active?1:0,b.sort_order||0,parseInt(fmatch[1])).run();
+        .bind(b.name||'',b.description||'',b.active?1:0,b.sort_order||0,parseInt(fundmatch[1])).run();
       return json({ ok: true });
     }
   }
