@@ -1984,6 +1984,9 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '';
     const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '';
     const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '';
+    // Breeze's built-in person-type field ID (not returned by /api/profile).
+    // Values 1/2/3 are Breeze's universal numeric IDs for Member/Attender/Visitor.
+    const BREEZE_TYPE_FIELD = '1076274773';
     // Diagnostic: capture sample details from first real person to debug field key mismatches
     let sampleDetailKeys = null;
     let sampleStatusRaw = null;
@@ -1995,14 +1998,21 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
       sampleDetailKeys = Object.keys(d0).slice(0, 20);
       sampleStatusRaw = F_STATUS ? d0[F_STATUS] : undefined;
       // Capture key→value preview for each detail entry so we can identify the status field
+      // Use String(JSON.stringify(v)) to guard against JSON.stringify returning undefined
+      // for non-serializable values (which would crash .slice).
       sampleDetailEntries = Object.entries(d0).slice(0, 10).map(([k, v]) => ({
         key: k,
-        val: JSON.stringify(v).slice(0, 120)
+        val: (String(JSON.stringify(v) ?? '')).slice(0, 120)
       }));
+      // Also capture the raw built-in person-type field value if present
+      const builtinDiagVal = d0[BREEZE_TYPE_FIELD];
+      if (builtinDiagVal !== undefined) {
+        sampleDetailEntries.unshift({ key: BREEZE_TYPE_FIELD + ' (built-in type)', val: String(JSON.stringify(builtinDiagVal) ?? '').slice(0, 120) });
+      }
       // Capture top-level person keys (excluding details/family which are large)
       sampleTopLevelKeys = Object.entries(firstPerson)
         .filter(([k]) => k !== 'details' && k !== 'family')
-        .map(([k, v]) => ({ key: k, val: JSON.stringify(v).slice(0, 80) }));
+        .map(([k, v]) => ({ key: k, val: (String(JSON.stringify(v) ?? '')).slice(0, 80) }));
     }
     // Convert MM/DD/YYYY or YYYY-MM-DD to YYYY-MM-DD
     const toISO = s => {
@@ -2025,6 +2035,11 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         if (opt.id && opt.name) optionIdToName[String(opt.id)] = opt.name;
       }
     }
+    // Numeric ID → display name for Breeze's built-in person-type field.
+    // Values 1/2/3 are universal; 4 and above are church-specific custom statuses.
+    // Unknown numeric IDs pass through as-is so the admin can map them via
+    // Settings → Breeze Status Mapping → Member Type Map.
+    const BREEZE_TYPE_NUMS  = { '1': 'Member', '2': 'Attender', '3': 'Visitor' };
     // Helper: extract status name from a raw detail value (array, object, or string)
     const extractName = (raw) => {
       const obj = Array.isArray(raw) ? raw[0] : raw;
@@ -2042,12 +2057,26 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         const fn = (p.first_name || '').trim();
         const ln = (p.last_name  || '').trim();
         const details = p.details || {};
-        // Status / member type — try profile-based field ID first, then scan all detail values.
-        // Breeze's built-in person-type field may not appear in /api/profile, so the profile ID
-        // can miss it; scanning finds it regardless of which field ID Breeze uses.
-        let statusName = F_STATUS ? extractName(details[F_STATUS]) : '';
+        // Status / member type — resolution order:
+        // 1. Breeze's hard-coded built-in person-type field (ID 1076274773)
+        // 2. Profile-based field ID lookup (custom "status" field from /api/profile)
+        // 3. Scan all detail values for a name matching a configured member type
+        let statusName = '';
+        // 1. Built-in person-type field
+        const builtinRaw = details[BREEZE_TYPE_FIELD];
+        if (builtinRaw !== undefined) {
+          const builtinStr = extractName(builtinRaw);
+          statusName = BREEZE_TYPE_NUMS[builtinStr]
+                    || memberTypeMap[builtinStr]
+                    || memberTypeMap[builtinStr.toLowerCase()]
+                    || builtinStr;
+        }
+        // 2. Profile-based field (custom status field discovered via /api/profile)
+        if (!statusName && F_STATUS) {
+          statusName = extractName(details[F_STATUS]);
+        }
+        // 3. Scan all detail values for any that look like a configured member type
         if (!statusName) {
-          // Scan all detail values for any that look like a member/status type
           for (const [, val] of Object.entries(details)) {
             const candidate = extractName(val);
             if (!candidate) continue;
