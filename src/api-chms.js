@@ -2047,8 +2047,8 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
       if (typeof raw === 'string' && raw) return optionIdToName[raw] || raw;
       return '';
     };
-    // Skip non-person status types
-    const SKIP_STATUSES = new Set(['organization','christmas market','egg hunt','renter','mdo']);
+    // No statuses are skipped — all Breeze records are imported regardless of status.
+    const SKIP_STATUSES = new Set();
     const statusesSeen = new Set();
     let imported = 0, updated = 0, skipped = 0;
     const errors = [];
