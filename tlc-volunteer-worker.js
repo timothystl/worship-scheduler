@@ -91,15 +91,25 @@ export default {
       });
     }
 
-    // ── Scheduler backend routes (Breeze proxy, email, RSVP) ──────────────────
+    // ── Public volunteer-facing RSVP endpoints (linked directly from emails) ──
+    if (path.startsWith('/rsvp/portal'))               return handleSchedRsvpPortal(req, env, url);
+    if (path === '/rsvp')                              return handleSchedRsvp(req, env, url);
+
+    // ── Scheduler backend routes — require admin cookie OR WORKER_SECRET ──────
+    // These endpoints expose volunteer PII and church database access; they must
+    // never be publicly reachable without authentication.
+    const workerSecret = env.WORKER_SECRET || '';
+    const reqSecret    = req.headers.get('X-Worker-Secret') || '';
+    const schedAuthed  = (workerSecret && reqSecret === workerSecret)
+                         || await isAuthed(req, env);
+    if (!schedAuthed) return json({ error: 'Unauthorized' }, 401);
+
     if (path === '/volunteer/pending'         && method === 'GET') return handleVolunteerPending(env);
     if (path === '/volunteer/general-pending' && method === 'GET') return handleVolunteerGeneralPending(env);
     if (path === '/volunteer/event-pending'   && method === 'GET') return handleVolunteerEventPending(env);
     if (path === '/email/send'   && method === 'POST') return handleSchedEmailSend(req, env);
     if (path === '/rsvp/store'   && method === 'POST') return handleSchedRsvpStore(req, env);
     if (path === '/rsvp/sync'    && method === 'POST') return handleSchedRsvpSync(req, env);
-    if (path.startsWith('/rsvp/portal'))               return handleSchedRsvpPortal(req, env, url);
-    if (path === '/rsvp')                              return handleSchedRsvp(req, env, url);
     // Breeze API proxy: /api/* (except /api/events handled above) and /breeze/*
     if (path.startsWith('/breeze/') || (path.startsWith('/api/') && path !== '/api/events')) {
       return handleSchedBreezeProxy(req, env, url);
