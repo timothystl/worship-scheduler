@@ -285,6 +285,7 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .import-status{font-size:.82rem;margin-top:10px;min-height:20px;}
 .import-status.ok{color:var(--sage);}
 .import-status.err{color:var(--danger);}
+.import-status.warn{color:var(--amber,#b45309);}
 .progress-bar{height:6px;background:var(--ice-blue);border-radius:3px;margin-top:8px;display:none;}
 .progress-fill{height:100%;background:var(--steel-anchor);border-radius:3px;transition:width .3s;}
 /* ── MODAL ── */
@@ -4121,16 +4122,27 @@ function runBreezeImport() {
   bar.style.display = 'block'; fill.style.width = '0%';
   status.textContent = 'Starting import…'; status.className = 'import-status';
   var totalImported = 0, totalUpdated = 0;
+  var lastStatusField = null, allStatusesSeen = new Set();
   function doPage(offset) {
     api('/admin/api/import/breeze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({offset:offset, limit:100})}).then(function(d) {
       if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; bar.style.display = 'none'; return; }
       totalImported += d.imported || 0;
       totalUpdated += d.updated || 0;
+      if (d.status_field) lastStatusField = d.status_field;
+      if (d.statuses_seen) d.statuses_seen.forEach(function(s) { allStatusesSeen.add(s); });
       fill.style.width = d.done ? '100%' : Math.min(95, (d.next_offset / Math.max(d.next_offset + 100, 200)) * 100) + '%';
       status.textContent = 'Imported ' + totalImported + ', updated ' + totalUpdated + '…';
       if (d.done) {
-        status.textContent = 'Done. ' + totalImported + ' new, ' + totalUpdated + ' updated.';
-        status.className = 'import-status ok';
+        var msg = 'Done. ' + totalImported + ' new, ' + totalUpdated + ' updated.';
+        if (!lastStatusField) {
+          msg += ' ⚠ No Breeze status field detected — check Settings › Breeze Status Mapping.';
+        } else if (allStatusesSeen.size === 0) {
+          msg += ' ⚠ Status field "' + lastStatusField.name + '" found but no values seen.';
+        } else {
+          msg += ' Status field: "' + lastStatusField.name + '". Statuses seen: ' + [...allStatusesSeen].join(', ') + '.';
+        }
+        status.textContent = msg;
+        status.className = (lastStatusField && allStatusesSeen.size > 0) ? 'import-status ok' : 'import-status warn';
         fill.style.width = '100%';
         loadPeople();
         return;
