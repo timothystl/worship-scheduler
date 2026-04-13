@@ -1954,18 +1954,26 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
       const pr = await fetch(`https://${subdomain}.breezechms.com/api/profile`, { headers: { 'Api-key': apiKey } });
       if (pr.ok) profileFields = await pr.json();
     } catch {}
-    // Flatten all fields from all sections
+    // Flatten all fields from all sections (handles Breeze sub-sections up to 2 levels deep)
     const allFields = [];
-    for (const section of (Array.isArray(profileFields) ? profileFields : [])) {
-      for (const f of (Array.isArray(section.fields) ? section.fields : [])) {
-        allFields.push(f);
+    const extractFields = (fields) => {
+      for (const f of (Array.isArray(fields) ? fields : [])) {
+        if (Array.isArray(f.fields) && f.fields.length > 0) {
+          // This entry is a sub-section — recurse into it
+          extractFields(f.fields);
+        } else {
+          allFields.push(f);
+        }
       }
+    };
+    for (const section of (Array.isArray(profileFields) ? profileFields : [])) {
+      extractFields(section.fields || []);
     }
     const findField = (names) => {
       const ns = names.map(n => n.toLowerCase());
       return allFields.find(f => ns.includes((f.name||'').toLowerCase()));
     };
-    const F_STATUS_FIELD   = findField(['status','member status','membership status','fellowship status','church status','member type']);
+    const F_STATUS_FIELD   = findField(['status','member status','membership status','fellowship status','church status','member type','church membership','congregational status','person status','participation status','attendance status']);
     const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth','birthday']);
     const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized']);
     const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed']);
@@ -2165,7 +2173,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         }
       } catch (e) { errors.push({ tag_sync_error: e.message }); }
     }
-    return json({ ok: true, imported, updated, skipped, errors, done, next_offset: offset + people.length, tags_synced: tagsSynced, tag_assignments: tagAssignments });
+    return json({ ok: true, imported, updated, skipped, errors, done, next_offset: offset + people.length, tags_synced: tagsSynced, tag_assignments: tagAssignments, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen] });
   }
 
   return json({ error: 'Not found' }, 404);
