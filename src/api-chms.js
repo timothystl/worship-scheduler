@@ -75,15 +75,27 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
        JOIN giving_batches gb ON ge.batch_id=gb.id
        WHERE substr(COALESCE(NULLIF(ge.contribution_date,''),gb.batch_date),1,4)=cast(strftime('%Y','now')-1 as text)`
     ).first())?.total || 0;
-    // Upcoming birthdays — next 60 days
+    // Upcoming birthdays — next 60 days (exclude visitor/inactive)
     const birthdays = (await db.prepare(
       `SELECT id, first_name, last_name, dob FROM people
        WHERE active=1 AND dob != ''
+         AND LOWER(member_type) NOT IN ('visitor','inactive')
          AND cast(strftime('%j', date(substr(dob,1,4)||'-'||substr(dob,6,2)||'-'||substr(dob,9,2))) as integer)
            BETWEEN cast(strftime('%j','now') as integer)
              AND cast(strftime('%j','now') as integer)+60
        ORDER BY cast(strftime('%m%d', dob) as integer)
        LIMIT 15`
+    ).all()).results || [];
+    // Upcoming anniversaries — next 60 days
+    const anniversaries = (await db.prepare(
+      `SELECT id, first_name, last_name, anniversary_date FROM people
+       WHERE active=1 AND anniversary_date != ''
+         AND LOWER(member_type) NOT IN ('visitor','inactive')
+         AND cast(strftime('%j', date(substr(anniversary_date,1,4)||'-'||substr(anniversary_date,6,2)||'-'||substr(anniversary_date,9,2))) as integer)
+           BETWEEN cast(strftime('%j','now') as integer)
+             AND cast(strftime('%j','now') as integer)+60
+       ORDER BY cast(strftime('%m%d', anniversary_date) as integer)
+       LIMIT 10`
     ).all()).results || [];
     // Recent additions
     const recentPeople = (await db.prepare(
@@ -130,7 +142,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       // pastoral data: staff+ only
       followUpItems:   isStaff  ? followUpItems   : [],
       recentAttendance: isStaff ? recentAttendance : [],
-      birthdays, recentPeople, notSeenRecently
+      birthdays, anniversaries, recentPeople, notSeenRecently
     });
   }
 
@@ -141,13 +153,16 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const tagId = url.searchParams.get('tag_id') || '';
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
+    const SORT_COLS = { last_name: 'p.last_name', first_name: 'p.first_name', member_type: 'p.member_type', created_at: 'p.created_at' };
+    const sortCol = SORT_COLS[url.searchParams.get('sort') || ''] || 'p.last_name';
+    const sortDir = url.searchParams.get('dir') === 'desc' ? 'DESC' : 'ASC';
     const like = '%' + q + '%';
-    let where = `p.active=1
+    let where = `p.active=1 AND LOWER(p.member_type) != 'organization'
       AND (p.first_name LIKE ? OR p.last_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)`;
     const binds = [like, like, like, like];
     // Member role can only see people with member_type='member'
     if (role === 'member') { where += ` AND LOWER(p.member_type)='member'`; }
-    if (mt) { where += ' AND p.member_type=?'; binds.push(mt); }
+    if (mt) { where += ' AND LOWER(p.member_type)=LOWER(?)'; binds.push(mt); }
     if (tagId) { where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)'; binds.push(tagId); }
     // Total count
     const countRow = await db.prepare(`SELECT COUNT(*) as n FROM people p WHERE ${where}`).bind(...binds).first();
@@ -156,7 +171,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const rows = (await db.prepare(
       `SELECT p.*, h.name as household_name FROM people p
        LEFT JOIN households h ON p.household_id=h.id
-       WHERE ${where} ORDER BY p.last_name, p.first_name LIMIT ? OFFSET ?`
+       WHERE ${where} ORDER BY ${sortCol} ${sortDir}, p.last_name ASC, p.first_name ASC LIMIT ? OFFSET ?`
     ).bind(...binds, limit, offset).all()).results || [];
     // Batch-load tags for all returned people in a single query (avoids N+1)
     const ids = rows.map(r => r.id);
@@ -2247,6 +2262,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         const memberType = matched || (configuredMemberTypes.includes('Other') ? 'Other' : configuredMemberTypes[0] || 'Other');
         // Dates — Breeze may return as a plain string, an object {date/value:"..."}, or an array.
         // extractDate unwraps all formats before passing to toISO.
+        // Also check p.birth_date top-level field which Breeze exposes directly.
         const extractDate = (raw) => {
           if (!raw) return '';
           if (typeof raw === 'string') return raw;
@@ -2256,7 +2272,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           }
           return '';
         };
-        const dob             = toISO(extractDate(details[F_DOB])          || extractDate(details['birthdate']) || '');
+        const dob             = toISO(p.birth_date || extractDate(details[F_DOB]) || extractDate(details['birthdate']) || '');
         const baptismDate     = toISO(extractDate(details[F_BAPTISM])       || '');
         const confirmDate     = toISO(extractDate(details[F_CONFIRMATION])  || '');
         const anniversaryDate = toISO(extractDate(details[F_ANNIVERSARY])   || '');
