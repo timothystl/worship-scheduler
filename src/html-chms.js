@@ -487,6 +487,21 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .pv-aside-link:hover{text-decoration:underline;}
 .topbar-back{font-size:13px;color:var(--sky-steel);cursor:pointer;white-space:nowrap;flex-shrink:0;}
 .topbar-back:hover{text-decoration:underline;}
+/* ── ROLE-BASED VISIBILITY ── */
+/* .require-finance  = visible only for admin + finance */
+/* .require-staff    = visible only for admin + staff   */
+/* .require-edit     = visible for admin + finance + staff (not member) */
+/* .require-admin    = admin only */
+/* .no-member        = hidden for member role */
+.role-staff  .require-finance{display:none!important;}
+.role-member .require-finance{display:none!important;}
+.role-finance .require-staff{display:none!important;}
+.role-member .require-staff{display:none!important;}
+.role-member .require-edit{display:none!important;}
+.role-member .no-member{display:none!important;}
+.role-finance .require-admin{display:none!important;}
+.role-staff   .require-admin{display:none!important;}
+.role-member  .require-admin{display:none!important;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}
@@ -514,9 +529,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item require-staff" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
   <div class="s-item no-member" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
   <div class="s-item require-staff" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
-  <div class="s-divider"></div>
-  <a href="/admin" class="s-item" title="Volunteers"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg><span class="s-tip">Volunteers</span></a>
-  <a href="/scheduler" class="s-item" title="Scheduler"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg><span class="s-tip">Scheduler</span></a>
+  <div class="s-divider require-admin"></div>
+  <div class="s-item require-admin" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-bottom">
     <div class="s-item require-admin" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
   </div>
@@ -587,11 +601,6 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-households" class="tab-panel">
   <div class="toolbar">
     <div class="search-wrap"><input type="search" id="h-search" placeholder="Search households…" oninput="debounceHouseholds()"></div>
-    <select id="h-sort" onchange="loadHouseholds(true)" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem;background:var(--white);">
-      <option value="name">Sort: A–Z</option>
-      <option value="members_desc">Sort: Most Members</option>
-      <option value="members_asc">Sort: Fewest Members</option>
-    </select>
     <button class="btn-primary require-edit" onclick="openHouseholdEdit(null)" style="margin-left:auto;">+ New Household</button>
   </div>
   <div id="h-status" class="status-msg"></div>
@@ -679,7 +688,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
     </div>
   </div>
-  <div class="report-tiles" style="margin-top:0;padding-top:0;">
+  <div class="report-tiles require-finance" style="margin-top:0;padding-top:0;">
     <div class="report-tile">
       <div class="tile-icon">&#128140;</div>
       <div class="tile-title">Batch Send Statements</div>
@@ -758,6 +767,13 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-settings" class="tab-panel">
   <div style="padding:16px 20px 24px;max-width:900px;">
     <div id="st-status" class="status-msg" style="margin-bottom:8px;"></div>
+    <!-- Users Card (admin only) -->
+    <div class="import-card require-admin" style="margin-bottom:14px;">
+      <h3>&#128100; Users</h3>
+      <p>Create named login accounts. Each user gets their own username and password for their role.</p>
+      <div id="st-users-list" style="margin:12px 0;"></div>
+      <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="openUserForm(null)">+ Add User</button>
+    </div>
     <!-- Church Info Card -->
     <div class="import-card" style="margin-bottom:14px;">
       <h3>&#9962; Church Information</h3>
@@ -1332,6 +1348,9 @@ var _pDebounce, _hDebounce;
 var _loadedServices = [];
 var _hhOffset = 0, _hhTotal = 0;
 var _currentPvPerson = null;
+var _pvGivingPersonId = null;
+var _pvGivingEntries = [];
+var _userRole = 'admin';
 var _batchSearch = '';
 var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
@@ -1408,32 +1427,17 @@ function photoSrc(url) {
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────
 function showTab(name) {
-  var labels = {home:'Home',people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',register:'Register',settings:'Settings'};
   // Enforce role-based tab access
   var isFinancePlus = _userRole === 'admin' || _userRole === 'finance';
   var isStaffPlus   = _userRole === 'admin' || _userRole === 'staff';
-  var isAdmin       = _userRole === 'admin';
-  var _accessDenied = (name === 'giving' && !isFinancePlus) ||
-                      (name === 'attendance' && !isStaffPlus) ||
-                      (name === 'register' && !isStaffPlus) ||
-                      (name === 'import' && !isAdmin) ||
-                      (name === 'settings' && !isAdmin);
-  if (_accessDenied) {
-    document.querySelectorAll('.s-item[data-tab]').forEach(function(b) {
-      b.classList.toggle('active', b.dataset.tab === name);
-    });
-    document.querySelectorAll('.tab-panel').forEach(function(p) {
-      p.classList.toggle('active', p.id === 'tab-' + name);
-    });
-    var _denyEl = document.getElementById('tab-' + name);
-    if (_denyEl) _denyEl.innerHTML = '<div style="padding:60px 40px;text-align:center;color:var(--warm-gray);font-size:.9rem;">'
-      + '<div style="font-size:2rem;margin-bottom:12px;">\uD83D\uDD12</div>'
-      + '<div style="font-weight:600;margin-bottom:6px;">Access restricted</div>'
-      + '<div style="font-size:.82rem;margin-bottom:16px;">Your current role does not have permission to view this section.</div>'
-      + '<a href="/chms" style="color:var(--teal);font-size:.82rem;">Sign in with a different account</a>'
-      + '</div>';
-    return;
-  }
+  var canEdit       = _userRole === 'admin' || _userRole === 'finance' || _userRole === 'staff';
+  if (name === 'giving'     && !isFinancePlus) return;
+  if (name === 'attendance' && !isStaffPlus)   return;
+  if (name === 'register'   && !isStaffPlus)   return;
+  if (name === 'reports'    && !canEdit)        return;
+  if (name === 'import'     && _userRole !== 'admin') return;
+  if (name === 'settings'   && _userRole !== 'admin') return;
+  var labels = {home:'Home',people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',register:'Register',import:'Import',settings:'Settings'};
   // Exit person-profile view if active
   var ca = document.querySelector('.content-area');
   if (ca) ca.classList.remove('pv-mode');
@@ -1520,11 +1524,30 @@ window.addEventListener('load', function() {
   if (dv) dv.textContent = 'v' + DEPLOY_VERSION;
   var bsy = document.getElementById('batch-stmt-year');
   if (bsy) bsy.value = y;
-  loadTags();
-  loadFunds();
-  loadMemberTypes();
-  applyRoleUI();
+  // Fetch role first so UI restrictions apply before content loads
+  api('/admin/api/me').then(function(d) {
+    applyRoleUI(d && d.role ? d.role : 'admin');
+  }).catch(function() {
+    applyRoleUI('admin');
+  }).finally(function() {
+    loadTags();
+    loadFunds();
+    loadMemberTypes();
+    // Members go straight to the people directory; everyone else gets the dashboard
+    showTab(_userRole === 'member' ? 'people' : 'home');
+  });
 });
+function applyRoleUI(role) {
+  _userRole = role || 'admin';
+  var body = document.body;
+  body.className = body.className.replace(/\brole-\w+/g, '').trim() + ' role-' + _userRole;
+  var ri = document.getElementById('topbar-role');
+  if (ri) {
+    var labels = { finance: 'Finance', staff: 'Staff', member: 'Member (read-only)' };
+    if (labels[_userRole]) { ri.textContent = labels[_userRole]; ri.style.display = ''; }
+    else ri.style.display = 'none';
+  }
+}
 
 // ── ROLE UI ──────────────────────────────────────────────────────────────
 function applyRoleUI() {
@@ -1744,8 +1767,101 @@ function saveMemberTypes() {
   });
 }
 
+// ── USERS MANAGEMENT ──────────────────────────────────────────────────
+var _usersData = [];
+var _editingUserId = null;
+function loadUsers() {
+  api('/admin/api/users').then(function(d) {
+    _usersData = d.users || [];
+    renderUsersList();
+  }).catch(function() {});
+}
+function renderUsersList() {
+  var el = document.getElementById('st-users-list');
+  if (!el) return;
+  if (!_usersData.length) {
+    el.innerHTML = '<p style="font-size:.85rem;color:var(--warm-gray);">No user accounts yet. Add one below.</p>';
+    return;
+  }
+  var roleColors = { admin:'#0A3C5C', finance:'#1B4332', staff:'#1E40AF', member:'#4A1D6B' };
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.87rem;">'
+    + '<thead><tr style="border-bottom:1px solid var(--border);">'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Username</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Display Name</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Role</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Status</th>'
+    + '<th style="padding:6px 8px;"></th>'
+    + '</tr></thead><tbody>'
+    + _usersData.map(function(u) {
+        var rc = roleColors[u.role] || '#666';
+        var statusBadge = u.active
+          ? '<span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:#D1FAE5;color:#065F46;font-weight:700;">Active</span>'
+          : '<span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:var(--linen);color:var(--warm-gray);font-weight:700;">Inactive</span>';
+        return '<tr style="border-bottom:1px solid var(--linen);">'
+          + '<td style="padding:8px 8px;font-weight:600;">'+esc(u.username)+'</td>'
+          + '<td style="padding:8px 8px;color:var(--warm-gray);">'+esc(u.display_name||'—')+'</td>'
+          + '<td style="padding:8px 8px;"><span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:'+rc+'18;color:'+rc+';font-weight:700;">'+esc(u.role)+'</span></td>'
+          + '<td style="padding:8px 8px;">'+statusBadge+'</td>'
+          + '<td style="padding:8px 8px;text-align:right;white-space:nowrap;">'
+          + '<button class="btn-secondary" style="font-size:.75rem;padding:3px 8px;" onclick="openUserForm('+u.id+')">Edit</button>'
+          + ' <button class="btn-danger" style="font-size:.75rem;padding:3px 8px;" onclick="deleteUser('+u.id+',\''+esc(u.username)+'\')">Delete</button>'
+          + '</td></tr>';
+      }).join('')
+    + '</tbody></table>';
+}
+function openUserForm(userId) {
+  _editingUserId = userId;
+  var u = userId ? _usersData.find(function(x){return x.id===userId;}) : null;
+  var title = u ? 'Edit User: ' + u.username : 'Add User';
+  var modal = document.getElementById('modal-overlay');
+  var content = document.getElementById('modal-content');
+  if (!modal || !content) return;
+  content.innerHTML = '<h2>'+esc(title)+'</h2>'
+    + (u ? '' : '<div class="field"><label>Username</label><input type="text" id="um-username" placeholder="e.g. jsmith" autocomplete="off" style="width:100%;"></div>')
+    + '<div class="field"><label>Display Name</label><input type="text" id="um-display" placeholder="e.g. Jane Smith" value="'+esc(u?u.display_name:'')+'" style="width:100%;"></div>'
+    + '<div class="field"><label>Role</label><select id="um-role" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.9rem;">'
+    + ['admin','finance','staff','member'].map(function(r){return '<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r.charAt(0).toUpperCase()+r.slice(1)+'</option>';}).join('')
+    + '</select></div>'
+    + '<div class="field"><label>'+(u?'New Password (leave blank to keep)':'Password')+'</label><input type="password" id="um-password" placeholder="At least 8 characters" autocomplete="new-password" style="width:100%;"></div>'
+    + (u ? '<div style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;"><input type="checkbox" id="um-active" '+(u.active?'checked':'')+'>Active</label></div>' : '')
+    + '<div class="modal-actions">'
+    + '<button class="btn-secondary" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn-primary" onclick="saveUser()">'+esc(u?'Save Changes':'Create User')+'</button>'
+    + '</div>';
+  modal.classList.add('open');
+}
+function saveUser() {
+  var display = (document.getElementById('um-display')||{}).value || '';
+  var role    = (document.getElementById('um-role')||{}).value || 'staff';
+  var pass    = (document.getElementById('um-password')||{}).value || '';
+  var activeEl = document.getElementById('um-active');
+  var payload = { display_name: display, role: role };
+  if (pass) payload.password = pass;
+  if (activeEl) payload.active = activeEl.checked;
+  if (!_editingUserId) {
+    var username = ((document.getElementById('um-username')||{}).value||'').trim();
+    if (!username) { alert('Username is required.'); return; }
+    payload.username = username;
+    if (!pass || pass.length < 8) { alert('Password must be at least 8 characters.'); return; }
+  }
+  var url = _editingUserId ? '/admin/api/users/'+_editingUserId : '/admin/api/users';
+  var method = _editingUserId ? 'PUT' : 'POST';
+  fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(function(r){return r.json();}).then(function(r) {
+      if (r.ok) { closeModal(); loadUsers(); }
+      else alert('Error: '+(r.error||'unknown'));
+    });
+}
+function deleteUser(uid, username) {
+  if (!confirm('Delete user "'+username+'"? This cannot be undone.')) return;
+  fetch('/admin/api/users/'+uid, {method:'DELETE'}).then(function(r){return r.json();}).then(function(r){
+    if (r.ok) loadUsers(); else alert('Error: '+(r.error||'unknown'));
+  });
+}
+
 // ── SETTINGS ──────────────────────────────────────────────────────────
 function loadSettings() {
+  if (_userRole === 'admin') loadUsers();
   api('/admin/api/config/church').then(function(d) {
     _churchConfig = d || {};
     var el = document.getElementById('st-church-name');
@@ -1936,11 +2052,14 @@ function renderDashboard(d) {
   var html = '';
 
   // ── Quick actions ──────────────────────────────────────────────
+  var isFinanceRole = _userRole === 'admin' || _userRole === 'finance';
+  var isStaffRole   = _userRole === 'admin' || _userRole === 'staff';
+  var canEditRole   = _userRole === 'admin' || _userRole === 'finance' || _userRole === 'staff';
   html += '<div class="dash-quick">'
-    + dashQBtn('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>', 'Add Person', "openPersonEdit(null);showTab('people')")
-    + dashQBtn('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/>', 'Record Giving', "showTab('giving')")
-    + dashQBtn('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/>', 'Attendance', "showTab('attendance')")
-    + dashQBtn('<path d="M18 20V10M12 20V4M6 20v-6"/>', 'Reports', "showTab('reports')")
+    + (canEditRole ? dashQBtn('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>', 'Add Person', "openPersonEdit(null);showTab('people')") : '')
+    + (isFinanceRole ? dashQBtn('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/>', 'Record Giving', "showTab('giving')") : '')
+    + (isStaffRole ? dashQBtn('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/>', 'Attendance', "showTab('attendance')") : '')
+    + (canEditRole ? dashQBtn('<path d="M18 20V10M12 20V4M6 20v-6"/>', 'Reports', "showTab('reports')") : '')
     + '</div>';
 
   // ── Stat strip ─────────────────────────────────────────────────
@@ -1948,11 +2067,12 @@ function renderDashboard(d) {
   html += '<div class="dash-stats">'
     + dashStat(d.totalPeople, 'Total People', d.addedThisYear + ' added this year')
     + dashStat(d.totalHouseholds, 'Households', d.addedThisMonth + ' new this month')
-    + dashStat('$'+fmt$(d.givingThisYear), yr+' Giving', yr-1+': $'+fmt$(d.givingLastYear))
-    + dashStat(lastSvc ? lastSvc.attendance : '\u2014', 'Last Service', lastSvc ? esc(lastSvc.service_name)+' \u00b7 '+lastSvc.service_date : 'No attendance yet')
+    + (isFinanceRole ? dashStat('$'+fmt$(d.givingThisYear), yr+' Giving', yr-1+': $'+fmt$(d.givingLastYear)) : '')
+    + (isStaffRole ? dashStat(lastSvc ? lastSvc.attendance : '\u2014', 'Last Service', lastSvc ? esc(lastSvc.service_name)+' \u00b7 '+lastSvc.service_date : 'No attendance yet') : '')
     + '</div>';
 
-  // ── Follow-up queue ────────────────────────────────────────────
+  // ── Follow-up queue — staff+ only ─────────────────────────────
+  if (isStaffRole) {
   var fuItems = d.followUpItems || [];
   var fuTypeLabels = { pastoral_call:'Pastoral Call', prayer:'Prayer Follow-up', first_gift:'First Gift', not_seen:'Not Seen', newsletter:'Newsletter', general:'General' };
   var fuTypeColors = { pastoral_call:'#2E7EA6', prayer:'#9B59B6', first_gift:'#C9973A', not_seen:'#E87040', newsletter:'#5A9E6F', general:'#666' };
@@ -1985,9 +2105,10 @@ function renderDashboard(d) {
     html += '<div style="padding:18px;color:var(--faint);font-size:13px;font-style:italic;">No open follow-up items. Enjoy the quiet!</div>';
   }
   html += '</div></div>';
+  } // end isStaffRole follow-up block
 
-  // ── First-time givers ──────────────────────────────────────────
-  var firstGivers = d.firstGivers || [];
+  // ── First-time givers — finance+ only ─────────────────────────
+  var firstGivers = isFinanceRole ? (d.firstGivers || []) : [];
   if (firstGivers.length) {
     html += '<div class="dash-section-hdr"><span>First-Time Givers</span>'
       + '<span style="font-size:12px;color:var(--warm-gray);font-weight:400;">last 60 days</span></div>';
@@ -2471,17 +2592,7 @@ function showProfile(p) {
       + pvField('deceased', p.deceased ? (p.death_date ? fmtDate(p.death_date) : 'Yes') : 'No')
       + '</div>'
       + '</div>'
-      + '<div class="pv-section" id="pv-tags-section">'
-      + '<div class="pv-section-title" style="display:flex;align-items:center;gap:8px;">Tags'
-      + '<button class="require-edit" onclick="togglePvTagEditor()" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--warm-gray);font-size:.78rem;line-height:1;" title="Edit tags">&#9998;</button>'
-      + '</div>'
-      + '<div id="pv-tags-display" style="display:flex;flex-wrap:wrap;gap:6px;min-height:24px;">'+(tagHtml||'<span style="color:var(--warm-gray);font-size:.82rem;font-style:italic;">No tags</span>')+'</div>'
-      + '<div id="pv-tags-editor" style="display:none;margin-top:10px;">'
-      + '<div id="pv-tag-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>'
-      + '<button class="btn-primary require-edit" style="font-size:.8rem;padding:5px 12px;" onclick="savePvTags()">Save Tags</button>'
-      + '<button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;margin-left:6px;" onclick="togglePvTagEditor()">Cancel</button>'
-      + '</div>'
-      + '</div>'
+      + '<div class="pv-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Tags</div><button class="btn-secondary" style="font-size:.7rem;padding:2px 8px;" onclick="openPersonEdit(_currentPvPerson)">Edit</button></div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+(tagHtml||'<span style="color:var(--warm-gray);font-size:12px;font-style:italic;">No tags</span>')+'</div></div>'
       + (p.notes ? '<div class="pv-section"><div class="pv-section-title">Notes</div><div style="font-size:13px;color:var(--charcoal);white-space:pre-wrap;line-height:1.5;">'+esc(p.notes)+'</div></div>' : '')
       + '</div>';
     infoEl.innerHTML = '<div class="pv-info-cols">'+leftCol+rightCol+'</div>';
@@ -2662,6 +2773,7 @@ function openAddToHouseholdModal(householdId) {
   });
 }
 function showPvTab(name) {
+  if (name === 'giving' && _userRole !== 'admin' && _userRole !== 'finance') return; // giving is finance+ only
   document.querySelectorAll('.pv-tab').forEach(function(b){
     b.classList.toggle('active', b.dataset.ptab === name);
   });
@@ -2675,38 +2787,188 @@ function showPvTab(name) {
 function loadPvGiving(personId) {
   var el = document.getElementById('ptab-giving');
   if (!el) return;
+  _pvGivingPersonId = personId;
+  _pvGivingEntries = [];
   el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">Loading...</div>';
-  api('/admin/api/giving?person_id='+personId+'&limit=200').then(function(d) {
-    var entries = (d && d.entries) ? d.entries : (Array.isArray(d) ? d : []);
-    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--warm-gray);">No giving records found.</div>'; return; }
-    var total = entries.reduce(function(s,e){return s+(e.amount||0);},0);
-    var byYear = {};
-    entries.forEach(function(e){
-      var yr = (e.contribution_date||'').slice(0,4)||'—';
-      byYear[yr] = (byYear[yr]||0)+(e.amount||0);
-    });
-    var yearRows = Object.keys(byYear).sort().reverse().map(function(yr){
-      return '<tr><td style="padding:6px 12px;">'+yr+'</td><td style="padding:6px 12px;text-align:right;">$'+(byYear[yr]/100).toFixed(2)+'</td></tr>';
+  api('/admin/api/giving?person_id='+personId+'&limit=2000').then(function(d) {
+    _pvGivingEntries = (d && d.entries) ? d.entries : [];
+    renderPvGiving('');
+  }).catch(function() {
+    el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>';
+  });
+}
+function renderPvGiving(filterYear) {
+  var el = document.getElementById('ptab-giving');
+  if (!el) return;
+  var personId = _pvGivingPersonId;
+  var allE = _pvGivingEntries;
+  var entries = filterYear ? allE.filter(function(e){ return (e.contribution_date||'').startsWith(filterYear); }) : allE;
+  var grandTotal = allE.reduce(function(s,e){return s+(e.amount||0);},0);
+  var yearTotal  = entries.reduce(function(s,e){return s+(e.amount||0);},0);
+  // Year list
+  var years = {};
+  allE.forEach(function(e){ var yr=(e.contribution_date||'').slice(0,4); if (yr) years[yr]=1; });
+  var yearList = Object.keys(years).sort().reverse();
+  var yearOpts = '<option value=""'+(filterYear===''?' selected':'')+'>All Years ($'+(grandTotal/100).toFixed(2)+')</option>'
+    + yearList.map(function(y){
+      var yt = allE.filter(function(e){return (e.contribution_date||'').startsWith(y);}).reduce(function(s,e){return s+(e.amount||0);},0);
+      return '<option value="'+y+'"'+(y===filterYear?' selected':'')+'>'+y+' ($'+(yt/100).toFixed(2)+')</option>';
     }).join('');
-    var recentRows = entries.slice(0,20).map(function(e){
-      return '<tr><td style="padding:6px 12px;">'+(e.contribution_date||'—')+'</td>'
-        +'<td style="padding:6px 12px;">'+(e.fund_name||'General')+'</td>'
-        +'<td style="padding:6px 12px;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td></tr>';
+  // Fund options for Add Gift form
+  var activeFunds = allFunds.filter(function(f){return f.active;});
+  if (!activeFunds.length) activeFunds = allFunds;
+  var fundOpts = activeFunds.map(function(f){
+    return '<option value="'+f.id+'">'+esc(f.name)+'</option>';
+  }).join('');
+  // Add Gift form
+  var today = new Date().toISOString().slice(0,10);
+  var addForm = '<div style="background:var(--linen);border-radius:8px;padding:14px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--slate-blue);margin-bottom:10px;">Add Gift</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Date</label><input type="date" id="qg-date" value="'+today+'" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Fund</label><select id="qg-fund" style="width:100%;box-sizing:border-box;">'+(fundOpts||'<option value="">No funds</option>')+'</select></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Amount ($)</label><input type="number" id="qg-amount" step="0.01" min="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Method</label><select id="qg-method" style="width:100%;box-sizing:border-box;"><option value="cash">Cash</option><option value="check" selected>Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="other">Other</option></select></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Check #</label><input type="text" id="qg-check" placeholder="optional" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="field" style="margin:0;"><label style="font-size:11px;">Notes</label><input type="text" id="qg-notes" placeholder="optional" style="width:100%;box-sizing:border-box;"></div>'
+    + '</div>'
+    + '<button class="btn-primary" style="margin-top:10px;font-size:.8rem;padding:5px 16px;" onclick="submitQuickGift('+personId+')">Add Gift</button>'
+    + '</div>';
+  // Table rows
+  var rows = entries.length ? entries.map(function(e){
+    var canDel = !e.batch_closed;
+    return '<tr>'
+      + '<td style="padding:6px 8px;white-space:nowrap;font-size:12px;">'+(e.contribution_date||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;">'+esc(e.fund_name||'General')+'</td>'
+      + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;font-size:12px;font-weight:600;">$'+((e.amount||0)/100).toFixed(2)+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc(e.method||'')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc((e.check_number||e.notes||''))+'</td>'
+      + '<td style="padding:6px 8px;text-align:center;">'
+      + (canDel
+          ? '<button onclick="deleteGivingEntry('+e.id+',\''+filterYear+'\')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;" title="Delete">&times;</button>'
+          : '<span style="font-size:10px;color:var(--warm-gray);">closed</span>')
+      + '</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--warm-gray);font-size:13px;">No gifts'+(filterYear?' in '+filterYear:'')+'.</td></tr>';
+  // Statement year for links
+  var statYear = filterYear || new Date().getFullYear().toString();
+  var toolbar = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
+    + '<select style="font-size:.85rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border);" onchange="renderPvGiving(this.value)">'+yearOpts+'</select>'
+    + '<a href="/admin/api/reports/giving-statement?person_id='+personId+'&year='+statYear+'&format=csv" target="_blank" class="btn-secondary" style="font-size:.8rem;padding:5px 12px;text-decoration:none;">&#8595; CSV</a>'
+    + '<button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="sendGivingStatement('+personId+',\''+statYear+'\')">&#9993; Email Statement</button>'
+    + '</div>';
+  el.innerHTML = '<div style="padding:16px;">'
+    + toolbar
+    + addForm
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--slate-blue);">Gifts'+(filterYear?' ('+filterYear+')':'')+'</div>'
+    + '<div style="font-size:13px;font-weight:600;">$'+(yearTotal/100).toFixed(2)+'</div>'
+    + '</div>'
+    + '<div style="overflow-x:auto;">'
+    + '<table style="width:100%;border-collapse:collapse;min-width:480px;">'
+    + '<thead><tr style="background:var(--linen);">'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Date</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Fund</th>'
+    + '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:600;">Amount</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Method</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Note / Check #</th>'
+    + '<th style="padding:6px 8px;"></th>'
+    + '</tr></thead>'
+    + '<tbody>'+rows+'</tbody>'
+    + '</table>'
+    + '</div>'
+    + '</div>';
+}
+function submitQuickGift(personId) {
+  var dateEl   = document.getElementById('qg-date');
+  var fundEl   = document.getElementById('qg-fund');
+  var amtEl    = document.getElementById('qg-amount');
+  var methodEl = document.getElementById('qg-method');
+  var checkEl  = document.getElementById('qg-check');
+  var notesEl  = document.getElementById('qg-notes');
+  if (!dateEl || !fundEl || !amtEl) return;
+  var date   = dateEl.value;
+  var fundId = fundEl.value;
+  var amount = parseFloat(amtEl.value);
+  if (!date || !fundId || !amount || amount <= 0) { alert('Date, fund, and a positive amount are required.'); return; }
+  api('/admin/api/giving/quick-entry', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      person_id:    personId,
+      fund_id:      parseInt(fundId),
+      amount:       amount,
+      method:       methodEl ? methodEl.value : 'cash',
+      date:         date,
+      check_number: checkEl  ? checkEl.value.trim()  : '',
+      notes:        notesEl  ? notesEl.value.trim()  : ''
+    })
+  }).then(function(r) {
+    if (r && r.ok) {
+      loadPvGiving(personId);
+    } else {
+      alert('Error: '+(r && r.error ? r.error : 'Could not save gift'));
+    }
+  }).catch(function(){ alert('Network error saving gift. Please try again.'); });
+}
+function deleteGivingEntry(entryId, filterYear) {
+  if (!confirm('Delete this gift entry? This cannot be undone.')) return;
+  api('/admin/api/giving/entries/'+entryId, {method:'DELETE'}).then(function(r) {
+    if (r && r.ok) {
+      _pvGivingEntries = _pvGivingEntries.filter(function(e){return e.id !== entryId;});
+      renderPvGiving(filterYear);
+      // Refresh aside total
+      var total = _pvGivingEntries.reduce(function(s,e){return s+(e.amount||0);},0);
+      var ag = document.getElementById('pv-aside-giving');
+      if (ag) ag.innerHTML = '<div class="pv-aside-lbl">Total Giving</div>'
+        + '<div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div>'
+        + '<div class="pv-aside-sub">'+_pvGivingEntries.length+' gift'+(_pvGivingEntries.length!==1?'s':'')+'</div>';
+    } else {
+      alert('Error: '+(r && r.error ? r.error : 'Could not delete entry'));
+    }
+  }).catch(function(){ alert('Could not delete gift. Please try again.'); });
+}
+function sendGivingStatement(personId, year) {
+  var p = _currentPvPerson;
+  if (!p || !p.email) { alert('This person does not have an email address on file.'); return; }
+  if (!confirm('Send '+year+' giving statement to '+p.email+'?')) return;
+  api('/admin/api/reports/giving-statement?person_id='+personId+'&year='+year).then(function(d) {
+    if (!d || !d.entries || !d.entries.length) { alert('No giving data found for '+year+'.'); return; }
+    var name = ((p.first_name||'')+' '+(p.last_name||'')).trim() || 'Friend';
+    var total = d.entries.reduce(function(s,e){return s+(e.amount||0);},0);
+    var tRows = d.entries.map(function(e){
+      return '<tr><td style="padding:5px 10px;border-bottom:1px solid #eee;">'+(e.gift_date||'')+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;">'+esc(e.fund_name||'')+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right;">$'+((e.amount||0)/100).toFixed(2)+'</td>'
+        +'<td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777;">'+esc(e.method||'')+'</td></tr>';
     }).join('');
-    el.innerHTML = '<div style="padding:20px;">'
-      +'<div style="display:flex;gap:16px;margin-bottom:20px;">'
-      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">$'+(total/100).toFixed(2)+'</div><div class="pv-card-lbl">Total Given</div></div>'
-      +'<div class="pv-card" style="flex:1;"><div class="pv-aside-big">'+entries.length+'</div><div class="pv-card-lbl">Gifts</div></div>'
-      +'</div>'
-      +'<div class="pv-card-lbl" style="margin-bottom:8px;">By Year</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">'
-      +'<tbody>'+yearRows+'</tbody></table>'
-      +'<div class="pv-card-lbl" style="margin-bottom:8px;">Recent Gifts</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-      +'<thead><tr style="background:var(--linen);"><th style="padding:6px 12px;text-align:left;font-weight:500;">Date</th><th style="padding:6px 12px;text-align:left;font-weight:500;">Fund</th><th style="padding:6px 12px;text-align:right;font-weight:500;">Amount</th></tr></thead>'
-      +'<tbody>'+recentRows+'</tbody></table>'
-      +'</div>';
-  }).catch(function(){ el.innerHTML = '<div style="padding:20px;color:var(--danger);">Could not load giving.</div>'; });
+    var htmlBody = '<html><body style="font-family:Georgia,serif;max-width:620px;margin:0 auto;padding:24px;color:#222;">'
+      +'<h2 style="color:#0A3C5C;margin-bottom:4px;">'+esc(year)+' Giving Statement</h2>'
+      +'<p style="color:#555;font-size:13px;">Timothy Lutheran Church &bull; St. Louis, MO</p>'
+      +'<p>Dear '+esc(name)+',</p>'
+      +'<p>Thank you for your generous giving to Timothy Lutheran Church. Below is a summary of your contributions for '+esc(year)+':</p>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;">'
+      +'<thead><tr style="background:#EDF5F8;">'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Date</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Fund</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;">Amount</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;">Method</th>'
+      +'</tr></thead>'
+      +'<tbody>'+tRows+'</tbody>'
+      +'<tfoot><tr style="font-weight:700;"><td colspan="2" style="padding:8px 10px;border-top:2px solid #ccc;">Total Contributions</td>'
+      +'<td style="padding:8px 10px;border-top:2px solid #ccc;text-align:right;">$'+(total/100).toFixed(2)+'</td><td></td></tr></tfoot>'
+      +'</table>'
+      +'<p style="font-size:12px;color:#666;">No goods or services were provided in exchange for these contributions. Please retain this statement for your tax records.</p>'
+      +'</body></html>';
+    api('/admin/api/giving/send-statement', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ to_email: p.email, to_name: name, subject: year+' Giving Statement \u2014 Timothy Lutheran Church', html_body: htmlBody })
+    }).then(function(r){
+      if (r && r.ok) alert('Statement sent to '+p.email+'.');
+      else alert('Error sending statement: '+(r && r.error ? r.error : 'unknown error'));
+    }).catch(function(){ alert('Network error. Please try again.'); });
+  }).catch(function(){ alert('Could not load giving data. Please try again.'); });
 }
 function togglePvQuickGift() {
   var box = document.getElementById('pv-quick-gift');
