@@ -1,8 +1,53 @@
 // ── ChMS (People & Giving) API handler ────────────────────────────────────────
 import { html, json } from './auth.js';
 
-export async function handleChmsApi(req, env, url, method, seg) {
+export async function handleChmsApi(req, env, url, method, seg, role = 'admin') {
   const db = env.DB;
+
+  // ── Role-based access control ────────────────────────────────────
+  // Roles: admin | finance | staff | member
+  //   admin   — full access
+  //   finance — people CRUD + full giving; no attendance/register/followups
+  //   staff   — people CRUD + attendance/register/followups/tags; no giving
+  //   member  — GET people filtered to member_type='member' only
+  const isAdmin   = role === 'admin';
+  const isFinance = role === 'admin' || role === 'finance';
+  const isStaff   = role === 'admin' || role === 'staff';
+  const canEdit   = role === 'admin' || role === 'finance' || role === 'staff';
+
+  // Giving and giving reports — finance+ only
+  if ((seg.startsWith('giving') || seg.startsWith('reports/giving')) && !isFinance) {
+    return json({ error: 'Access denied: giving data requires finance access' }, 403);
+  }
+  // Attendance, register, follow-ups, audit — staff+ only (NOT finance)
+  if ((seg.startsWith('attendance') || seg.startsWith('register') ||
+       seg.startsWith('followup') || seg.startsWith('audit')) && !isStaff) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Config (settings) — reads blocked for member; writes admin only
+  if (seg.startsWith('config') && method !== 'GET' && !isAdmin) {
+    return json({ error: 'Access denied: changing settings requires admin access' }, 403);
+  }
+  // Imports — admin only
+  if (seg.startsWith('import/') && !isAdmin) {
+    return json({ error: 'Access denied: imports require admin access' }, 403);
+  }
+  // Dev board — admin only
+  if (seg === 'board' && !isAdmin) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Member role — GET people (filtered) + tags + member-types only; all writes blocked
+  if (role === 'member') {
+    const allowedSegs = seg.startsWith('people') || seg === 'tags' || seg === 'member-types';
+    if (!allowedSegs) return json({ error: 'Access denied' }, 403);
+    if (method !== 'GET') return json({ error: 'Access denied' }, 403);
+  }
+  // Write operations — require canEdit (not member)
+  if (method !== 'GET' && !canEdit &&
+      (seg.startsWith('people') || seg.startsWith('households') || seg.startsWith('tags') ||
+       seg.startsWith('attendance') || seg.startsWith('register') || seg.startsWith('funds'))) {
+    return json({ error: 'Access denied: editing requires staff or finance access' }, 403);
+  }
 
   // ── Dashboard ────────────────────────────────────────────────────
   if (seg === 'dashboard' && method === 'GET') {
@@ -77,9 +122,15 @@ export async function handleChmsApi(req, env, url, method, seg) {
     ).all()).results || [];
     return json({
       totalPeople, totalHouseholds, addedThisMonth, addedThisYear,
-      typeCounts, givingThisYear, givingLastYear,
-      birthdays, recentPeople, recentAttendance,
-      followUpItems, firstGivers, notSeenRecently
+      typeCounts,
+      // giving data: finance+ only
+      givingThisYear:  isFinance ? givingThisYear  : undefined,
+      givingLastYear:  isFinance ? givingLastYear  : undefined,
+      firstGivers:     isFinance ? firstGivers     : [],
+      // pastoral data: staff+ only
+      followUpItems:   isStaff  ? followUpItems   : [],
+      recentAttendance: isStaff ? recentAttendance : [],
+      birthdays, recentPeople, notSeenRecently
     });
   }
 
@@ -94,6 +145,8 @@ export async function handleChmsApi(req, env, url, method, seg) {
     let where = `p.active=1
       AND (p.first_name LIKE ? OR p.last_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)`;
     const binds = [like, like, like, like];
+    // Member role can only see people with member_type='member'
+    if (role === 'member') { where += ` AND LOWER(p.member_type)='member'`; }
     if (mt) { where += ' AND p.member_type=?'; binds.push(mt); }
     if (tagId) { where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)'; binds.push(tagId); }
     // Total count
@@ -165,15 +218,23 @@ export async function handleChmsApi(req, env, url, method, seg) {
          LEFT JOIN households h ON p.household_id=h.id WHERE p.id=?`
       ).bind(pid).first();
       if (!p) return json({ error: 'Not found' }, 404);
+      // Member role can only view actual members
+      if (role === 'member' && (p.member_type || '').toLowerCase() !== 'member') {
+        return json({ error: 'Not found' }, 404);
+      }
       const tags = (await db.prepare(
         `SELECT t.id,t.name,t.color FROM tags t JOIN person_tags pt ON pt.tag_id=t.id WHERE pt.person_id=?`
       ).bind(pid).all()).results || [];
-      const giving12 = await db.prepare(
-        `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         WHERE ge.person_id=? AND gb.batch_date >= date('now','-12 months')`
-      ).bind(pid).first();
-      return json({ ...p, tags, giving_12mo: giving12?.total || 0 });
+      let giving12mo = 0;
+      if (isFinance) {
+        const giving12 = await db.prepare(
+          `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
+           JOIN giving_batches gb ON ge.batch_id=gb.id
+           WHERE ge.person_id=? AND gb.batch_date >= date('now','-12 months')`
+        ).bind(pid).first();
+        giving12mo = giving12?.total || 0;
+      }
+      return json({ ...p, tags, giving_12mo: giving12mo });
     }
     if (method === 'PUT') {
       let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
@@ -220,6 +281,7 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
     if (method === 'DELETE') {
       const hard = url.searchParams.get('hard') === 'true';
+      if (hard && !isAdmin) return json({ error: 'Access denied: permanent delete requires admin access' }, 403);
       if (hard) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();
         await db.prepare('DELETE FROM people WHERE id=?').bind(pid).run();
@@ -430,6 +492,31 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
   }
 
+  // ── Giving Entries — list for a person ──────────────────────────
+  if (seg === 'giving' && method === 'GET') {
+    const personId = url.searchParams.get('person_id');
+    const year     = url.searchParams.get('year') || '';
+    const limit    = Math.min(parseInt(url.searchParams.get('limit') || '500'), 2000);
+    if (!personId) return json({ error: 'person_id required' }, 400);
+    let sql = `SELECT ge.id, ge.amount, ge.method, ge.check_number, ge.notes,
+                ge.fund_id, ge.batch_id, gb.closed as batch_closed,
+                COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as contribution_date,
+                f.name as fund_name
+               FROM giving_entries ge
+               JOIN funds f ON ge.fund_id=f.id
+               JOIN giving_batches gb ON ge.batch_id=gb.id
+               WHERE ge.person_id=?`;
+    const binds = [parseInt(personId)];
+    if (year) {
+      sql += ` AND substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4)=?`;
+      binds.push(year);
+    }
+    sql += ` ORDER BY COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) DESC, ge.id DESC LIMIT ?`;
+    binds.push(limit);
+    const entries = (await db.prepare(sql).bind(...binds).all()).results || [];
+    return json({ entries });
+  }
+
   // ── Giving Batches ───────────────────────────────────────────────
   if (seg === 'giving/batches' && method === 'GET') {
     const status = url.searchParams.get('status') || 'all';
@@ -521,6 +608,36 @@ export async function handleChmsApi(req, env, url, method, seg) {
     if (entry.closed) return json({ error: 'Batch is closed.' }, 409);
     await db.prepare('DELETE FROM giving_entries WHERE id=?').bind(eid).run();
     return json({ ok: true });
+  }
+
+  // ── Quick Gift Entry (auto-creates open batch for the month) ─────
+  if (seg === 'giving/quick-entry' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const { person_id, fund_id, amount, method: payMethod, date, notes, check_number } = b;
+    if (!fund_id || !amount || !date) return json({ error: 'fund_id, amount, and date required' }, 400);
+    const amtCents = Math.round(parseFloat(amount) * 100);
+    if (amtCents <= 0) return json({ error: 'Amount must be positive' }, 400);
+    // Find or create an open manual-entry batch for this month
+    const monthKey  = String(date).slice(0, 7);
+    const batchDesc = 'Manual Entry ' + monthKey;
+    let existBatch = await db.prepare(
+      `SELECT id FROM giving_batches WHERE description=? AND closed=0 LIMIT 1`
+    ).bind(batchDesc).first();
+    let batchId;
+    if (existBatch) {
+      batchId = existBatch.id;
+    } else {
+      const br = await db.prepare(
+        `INSERT INTO giving_batches (batch_date, description, closed) VALUES (?,?,0)`
+      ).bind(date, batchDesc).run();
+      batchId = br.meta?.last_row_id;
+    }
+    const er = await db.prepare(
+      `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,contribution_date)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).bind(batchId, person_id ? parseInt(person_id) : null, parseInt(fund_id),
+           amtCents, payMethod || 'cash', check_number || '', notes || '', date).run();
+    return json({ ok: true, id: er.meta?.last_row_id, batch_id: batchId });
   }
 
   // ── Reports ──────────────────────────────────────────────────────
@@ -1497,6 +1614,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
 
   // ── Giving Reset ──────────────────────────────────────────────────
   if (seg === 'giving/all' && method === 'DELETE') {
+    if (!isAdmin) return json({ error: 'Access denied: giving reset requires admin access' }, 403);
     await db.batch([
       db.prepare('DELETE FROM giving_entries'),
       db.prepare('DELETE FROM giving_batches'),
