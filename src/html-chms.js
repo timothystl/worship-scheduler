@@ -3491,7 +3491,9 @@ function renderHouseholds(rows) {
   c.innerHTML = rows.map(function(h) {
     var addr = [h.address1, h.city, h.state].filter(Boolean).join(', ');
     var photo = h.photo_url ? '<img src="'+esc(photoSrc(h.photo_url))+'" alt="" style="width:100%;height:80px;object-fit:cover;border-radius:6px 6px 0 0;display:block;" onerror="this.style.display=\'none\'">' : '';
-    return '<div class="h-card" onclick="openHouseholdDetail(' + h.id + ')" style="padding:0;overflow:hidden;">'
+    var navId = h.head_person_id || h.first_person_id;
+    var clickAction = navId ? 'openPersonDetail(' + navId + ')' : 'editHouseholdById(' + h.id + ')';
+    return '<div class="h-card" onclick="' + clickAction + '" style="padding:0;overflow:hidden;cursor:pointer;">'
       + photo
       + '<div style="padding:10px 12px;">'
       + '<div class="h-name">' + esc(h.name) + '</div>'
@@ -4202,29 +4204,29 @@ function doSendBatch(yr, checks, status) {
 // ── GENERATE REGISTER FROM PEOPLE ─────────────────────────────────────
 // Called from the Register tab toolbar — uses the current register type
 function openRegFromPeoplePrompt() {
-  var type = _regType; // 'baptism' or 'confirmation'
+  var type  = _regType;
   var label = type === 'baptism' ? 'Baptisms' : 'Confirmations';
-  var cutoff = prompt(
-    'Generate ' + label + ' register entries from people records.\n\n'
-    + 'Enter earliest date to include (YYYY-MM-DD), or leave blank for all dates:',
-    ''
-  );
-  if (cutoff === null) return; // cancelled
-  cutoff = cutoff.trim() || '1900-01-01';
-  var btn = document.querySelector('[onclick="openRegFromPeoplePrompt()"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  var btn   = document.querySelector('[onclick="openRegFromPeoplePrompt()"]');
+  var stat  = document.getElementById('reg-stat-txt');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating\u2026'; }
+  if (stat) stat.textContent = 'Generating\u2026';
   api('/admin/api/import/register-from-people', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ cutoff: cutoff, types: [type] })
+    body: JSON.stringify({ cutoff: '1900-01-01', types: [type] })
   }).then(function(d) {
     if (btn) { btn.disabled = false; btn.innerHTML = '&#128100; From People'; }
-    if (d.error) { alert('Error: ' + d.error); return; }
-    alert('Done. ' + d.imported + ' ' + label.toLowerCase() + ' entries created' + (d.skipped ? ', ' + d.skipped + ' already existed' : '') + '.');
-    loadRegister();
+    if (d.error) {
+      if (stat) stat.textContent = 'Error: ' + d.error;
+      return;
+    }
+    var msg = d.imported + ' ' + label.toLowerCase() + ' added';
+    if (d.skipped) msg += ', ' + d.skipped + ' already existed';
+    if (stat) stat.textContent = msg;
+    if (d.imported > 0) loadRegister();
   }).catch(function(e) {
     if (btn) { btn.disabled = false; btn.innerHTML = '&#128100; From People'; }
-    alert('Error: ' + e.message);
+    if (stat) stat.textContent = 'Error: ' + e.message;
   });
 }
 function generateRegisterFromPeople() {

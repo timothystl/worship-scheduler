@@ -306,7 +306,10 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     ).bind(q,q,q).first();
     const total = countRow?.n || 0;
     const rows = (await db.prepare(
-      `SELECT h.*, COUNT(p.id) as member_count FROM households h
+      `SELECT h.*, COUNT(p.id) as member_count,
+        (SELECT p2.id FROM people p2 WHERE p2.household_id=h.id AND p2.active=1 AND p2.family_role='head' LIMIT 1) as head_person_id,
+        (SELECT p3.id FROM people p3 WHERE p3.household_id=h.id AND p3.active=1 ORDER BY p3.id LIMIT 1) as first_person_id
+       FROM households h
        LEFT JOIN people p ON p.household_id=h.id AND p.active=1
        WHERE h.name LIKE ? OR h.address1 LIKE ? OR h.city LIKE ?
        GROUP BY h.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`
