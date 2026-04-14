@@ -1,8 +1,53 @@
 // ── ChMS (People & Giving) API handler ────────────────────────────────────────
 import { html, json } from './auth.js';
 
-export async function handleChmsApi(req, env, url, method, seg) {
+export async function handleChmsApi(req, env, url, method, seg, role = 'admin') {
   const db = env.DB;
+
+  // ── Role-based access control ────────────────────────────────────
+  // Roles: admin | finance | staff | member
+  //   admin   — full access
+  //   finance — people CRUD + full giving; no attendance/register/followups
+  //   staff   — people CRUD + attendance/register/followups/tags; no giving
+  //   member  — GET people filtered to member_type='member' only
+  const isAdmin   = role === 'admin';
+  const isFinance = role === 'admin' || role === 'finance';
+  const isStaff   = role === 'admin' || role === 'staff';
+  const canEdit   = role === 'admin' || role === 'finance' || role === 'staff';
+
+  // Giving and giving reports — finance+ only
+  if ((seg.startsWith('giving') || seg.startsWith('reports/giving')) && !isFinance) {
+    return json({ error: 'Access denied: giving data requires finance access' }, 403);
+  }
+  // Attendance, register, follow-ups, audit — staff+ only (NOT finance)
+  if ((seg.startsWith('attendance') || seg.startsWith('register') ||
+       seg.startsWith('followup') || seg.startsWith('audit')) && !isStaff) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Config (settings) — reads blocked for member; writes admin only
+  if (seg.startsWith('config') && method !== 'GET' && !isAdmin) {
+    return json({ error: 'Access denied: changing settings requires admin access' }, 403);
+  }
+  // Imports — admin only
+  if (seg.startsWith('import/') && !isAdmin) {
+    return json({ error: 'Access denied: imports require admin access' }, 403);
+  }
+  // Dev board — admin only
+  if (seg === 'board' && !isAdmin) {
+    return json({ error: 'Access denied' }, 403);
+  }
+  // Member role — GET people (filtered) + tags + member-types only; all writes blocked
+  if (role === 'member') {
+    const allowedSegs = seg.startsWith('people') || seg === 'tags' || seg === 'member-types';
+    if (!allowedSegs) return json({ error: 'Access denied' }, 403);
+    if (method !== 'GET') return json({ error: 'Access denied' }, 403);
+  }
+  // Write operations — require canEdit (not member)
+  if (method !== 'GET' && !canEdit &&
+      (seg.startsWith('people') || seg.startsWith('households') || seg.startsWith('tags') ||
+       seg.startsWith('attendance') || seg.startsWith('register') || seg.startsWith('funds'))) {
+    return json({ error: 'Access denied: editing requires staff or finance access' }, 403);
+  }
 
   // ── Dashboard ────────────────────────────────────────────────────
   if (seg === 'dashboard' && method === 'GET') {
@@ -77,9 +122,15 @@ export async function handleChmsApi(req, env, url, method, seg) {
     ).all()).results || [];
     return json({
       totalPeople, totalHouseholds, addedThisMonth, addedThisYear,
-      typeCounts, givingThisYear, givingLastYear,
-      birthdays, recentPeople, recentAttendance,
-      followUpItems, firstGivers, notSeenRecently
+      typeCounts,
+      // giving data: finance+ only
+      givingThisYear:  isFinance ? givingThisYear  : undefined,
+      givingLastYear:  isFinance ? givingLastYear  : undefined,
+      firstGivers:     isFinance ? firstGivers     : [],
+      // pastoral data: staff+ only
+      followUpItems:   isStaff  ? followUpItems   : [],
+      recentAttendance: isStaff ? recentAttendance : [],
+      birthdays, recentPeople, notSeenRecently
     });
   }
 
@@ -94,6 +145,8 @@ export async function handleChmsApi(req, env, url, method, seg) {
     let where = `p.active=1
       AND (p.first_name LIKE ? OR p.last_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)`;
     const binds = [like, like, like, like];
+    // Member role can only see people with member_type='member'
+    if (role === 'member') { where += ` AND LOWER(p.member_type)='member'`; }
     if (mt) { where += ' AND p.member_type=?'; binds.push(mt); }
     if (tagId) { where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)'; binds.push(tagId); }
     // Total count
@@ -128,13 +181,14 @@ export async function handleChmsApi(req, env, url, method, seg) {
     const r = await db.prepare(
       `INSERT INTO people (first_name,last_name,email,phone,address1,address2,city,state,zip,
        member_type,dob,baptism_date,confirmation_date,anniversary_date,death_date,deceased,
-       household_id,family_role,photo_url,notes,breeze_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       household_id,family_role,photo_url,notes,breeze_id,gender,marital_status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(b.first_name||'',b.last_name||'',b.email||'',b.phone||'',
            b.address1||'',b.address2||'',b.city||'',b.state||'MO',b.zip||'',
            b.member_type||'visitor',b.dob||'',b.baptism_date||'',
            b.confirmation_date||'',b.anniversary_date||'',b.death_date||'',b.deceased?1:0,
-           b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',b.breeze_id||''
+           b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',b.breeze_id||'',
+           b.gender||'',b.marital_status||''
     ).run();
     const personId = r.meta?.last_row_id;
     if (Array.isArray(b.tag_ids)) {
@@ -164,15 +218,23 @@ export async function handleChmsApi(req, env, url, method, seg) {
          LEFT JOIN households h ON p.household_id=h.id WHERE p.id=?`
       ).bind(pid).first();
       if (!p) return json({ error: 'Not found' }, 404);
+      // Member role can only view actual members
+      if (role === 'member' && (p.member_type || '').toLowerCase() !== 'member') {
+        return json({ error: 'Not found' }, 404);
+      }
       const tags = (await db.prepare(
         `SELECT t.id,t.name,t.color FROM tags t JOIN person_tags pt ON pt.tag_id=t.id WHERE pt.person_id=?`
       ).bind(pid).all()).results || [];
-      const giving12 = await db.prepare(
-        `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         WHERE ge.person_id=? AND gb.batch_date >= date('now','-12 months')`
-      ).bind(pid).first();
-      return json({ ...p, tags, giving_12mo: giving12?.total || 0 });
+      let giving12mo = 0;
+      if (isFinance) {
+        const giving12 = await db.prepare(
+          `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
+           JOIN giving_batches gb ON ge.batch_id=gb.id
+           WHERE ge.person_id=? AND gb.batch_date >= date('now','-12 months')`
+        ).bind(pid).first();
+        giving12mo = giving12?.total || 0;
+      }
+      return json({ ...p, tags, giving_12mo: giving12mo });
     }
     if (method === 'PUT') {
       let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
@@ -182,14 +244,14 @@ export async function handleChmsApi(req, env, url, method, seg) {
         `UPDATE people SET first_name=?,last_name=?,email=?,phone=?,address1=?,address2=?,
          city=?,state=?,zip=?,member_type=?,dob=?,baptism_date=?,confirmation_date=?,
          anniversary_date=?,death_date=?,deceased=?,household_id=?,family_role=?,photo_url=?,notes=?,
-         public_directory=?,envelope_number=?,last_seen_date=? WHERE id=?`
+         public_directory=?,envelope_number=?,last_seen_date=?,gender=?,marital_status=? WHERE id=?`
       ).bind(b.first_name||'',b.last_name||'',b.email||'',b.phone||'',
              b.address1||'',b.address2||'',b.city||'',b.state||'MO',b.zip||'',
              b.member_type||'visitor',b.dob||'',b.baptism_date||'',
              b.confirmation_date||'',b.anniversary_date||'',b.death_date||'',b.deceased?1:0,
              b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',
              b.public_directory!=null?(b.public_directory?1:0):1,
-             b.envelope_number||'',b.last_seen_date||'',pid
+             b.envelope_number||'',b.last_seen_date||'',b.gender||'',b.marital_status||'',pid
       ).run();
       if (Array.isArray(b.tag_ids)) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();
@@ -202,7 +264,8 @@ export async function handleChmsApi(req, env, url, method, seg) {
         const personName = [(oldPerson.first_name||b.first_name||''), (oldPerson.last_name||b.last_name||'')].filter(Boolean).join(' ');
         const auditFields = ['first_name','last_name','email','phone','address1','address2','city','state','zip',
           'member_type','dob','baptism_date','confirmation_date','anniversary_date','death_date','deceased',
-          'household_id','family_role','notes','public_directory','envelope_number','last_seen_date'];
+          'household_id','family_role','notes','public_directory','envelope_number','last_seen_date',
+          'gender','marital_status'];
         const auditStmt = db.prepare(
           `INSERT INTO audit_log(action,entity_type,entity_id,person_name,field,old_value,new_value) VALUES(?,?,?,?,?,?,?)`
         );
@@ -218,6 +281,7 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
     if (method === 'DELETE') {
       const hard = url.searchParams.get('hard') === 'true';
+      if (hard && !isAdmin) return json({ error: 'Access denied: permanent delete requires admin access' }, 403);
       if (hard) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();
         await db.prepare('DELETE FROM people WHERE id=?').bind(pid).run();
@@ -428,6 +492,31 @@ export async function handleChmsApi(req, env, url, method, seg) {
     }
   }
 
+  // ── Giving Entries — list for a person ──────────────────────────
+  if (seg === 'giving' && method === 'GET') {
+    const personId = url.searchParams.get('person_id');
+    const year     = url.searchParams.get('year') || '';
+    const limit    = Math.min(parseInt(url.searchParams.get('limit') || '500'), 2000);
+    if (!personId) return json({ error: 'person_id required' }, 400);
+    let sql = `SELECT ge.id, ge.amount, ge.method, ge.check_number, ge.notes,
+                ge.fund_id, ge.batch_id, gb.closed as batch_closed,
+                COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as contribution_date,
+                f.name as fund_name
+               FROM giving_entries ge
+               JOIN funds f ON ge.fund_id=f.id
+               JOIN giving_batches gb ON ge.batch_id=gb.id
+               WHERE ge.person_id=?`;
+    const binds = [parseInt(personId)];
+    if (year) {
+      sql += ` AND substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4)=?`;
+      binds.push(year);
+    }
+    sql += ` ORDER BY COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) DESC, ge.id DESC LIMIT ?`;
+    binds.push(limit);
+    const entries = (await db.prepare(sql).bind(...binds).all()).results || [];
+    return json({ entries });
+  }
+
   // ── Giving Batches ───────────────────────────────────────────────
   if (seg === 'giving/batches' && method === 'GET') {
     const status = url.searchParams.get('status') || 'all';
@@ -519,6 +608,36 @@ export async function handleChmsApi(req, env, url, method, seg) {
     if (entry.closed) return json({ error: 'Batch is closed.' }, 409);
     await db.prepare('DELETE FROM giving_entries WHERE id=?').bind(eid).run();
     return json({ ok: true });
+  }
+
+  // ── Quick Gift Entry (auto-creates open batch for the month) ─────
+  if (seg === 'giving/quick-entry' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch {}
+    const { person_id, fund_id, amount, method: payMethod, date, notes, check_number } = b;
+    if (!fund_id || !amount || !date) return json({ error: 'fund_id, amount, and date required' }, 400);
+    const amtCents = Math.round(parseFloat(amount) * 100);
+    if (amtCents <= 0) return json({ error: 'Amount must be positive' }, 400);
+    // Find or create an open manual-entry batch for this month
+    const monthKey  = String(date).slice(0, 7);
+    const batchDesc = 'Manual Entry ' + monthKey;
+    let existBatch = await db.prepare(
+      `SELECT id FROM giving_batches WHERE description=? AND closed=0 LIMIT 1`
+    ).bind(batchDesc).first();
+    let batchId;
+    if (existBatch) {
+      batchId = existBatch.id;
+    } else {
+      const br = await db.prepare(
+        `INSERT INTO giving_batches (batch_date, description, closed) VALUES (?,?,0)`
+      ).bind(date, batchDesc).run();
+      batchId = br.meta?.last_row_id;
+    }
+    const er = await db.prepare(
+      `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,contribution_date)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).bind(batchId, person_id ? parseInt(person_id) : null, parseInt(fund_id),
+           amtCents, payMethod || 'cash', check_number || '', notes || '', date).run();
+    return json({ ok: true, id: er.meta?.last_row_id, batch_id: batchId });
   }
 
   // ── Reports ──────────────────────────────────────────────────────
@@ -1495,6 +1614,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
 
   // ── Giving Reset ──────────────────────────────────────────────────
   if (seg === 'giving/all' && method === 'DELETE') {
+    if (!isAdmin) return json({ error: 'Access denied: giving reset requires admin access' }, 403);
     await db.batch([
       db.prepare('DELETE FROM giving_entries'),
       db.prepare('DELETE FROM giving_batches'),
@@ -1978,19 +2098,45 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized']);
     const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed']);
     const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date']);
+    const F_GENDER_FIELD   = findField(['gender','sex','gender identity']);
+    const F_MARITAL_FIELD  = findField(['marital status','marital','marriage status','civil status','married']);
     // Use empty string as fallback so details[''] is always undefined — never accidentally match a real field
     const F_STATUS       = F_STATUS_FIELD  ? String(F_STATUS_FIELD.id)  : '';
     const F_DOB          = F_DOB_FIELD     ? String(F_DOB_FIELD.id)     : '';
     const F_BAPTISM      = F_BAPTISM_FIELD ? String(F_BAPTISM_FIELD.id) : '';
     const F_CONFIRMATION = F_CONFIRM_FIELD ? String(F_CONFIRM_FIELD.id) : '';
     const F_ANNIVERSARY  = F_ANNIV_FIELD   ? String(F_ANNIV_FIELD.id)   : '';
+    const F_GENDER       = F_GENDER_FIELD  ? String(F_GENDER_FIELD.id)  : '';
+    const F_MARITAL      = F_MARITAL_FIELD ? String(F_MARITAL_FIELD.id) : '';
+    // Breeze's built-in person-type field ID (not returned by /api/profile).
+    // Values 1/2/3 are Breeze's universal numeric IDs for Member/Attender/Visitor.
+    const BREEZE_TYPE_FIELD = '1076274773';
     // Diagnostic: capture sample details from first real person to debug field key mismatches
     let sampleDetailKeys = null;
     let sampleStatusRaw = null;
+    let sampleDetailEntries = null;
+    let sampleTopLevelKeys = null;
     const firstPerson = people.find(p => p.last_name && p.last_name.trim());
     if (firstPerson && offset === 0) {
-      sampleDetailKeys = Object.keys(firstPerson.details || {}).slice(0, 20);
-      sampleStatusRaw = F_STATUS ? (firstPerson.details || {})[F_STATUS] : undefined;
+      const d0 = firstPerson.details || {};
+      sampleDetailKeys = Object.keys(d0).slice(0, 20);
+      sampleStatusRaw = F_STATUS ? d0[F_STATUS] : undefined;
+      // Capture key→value preview for each detail entry so we can identify the status field
+      // Use String(JSON.stringify(v)) to guard against JSON.stringify returning undefined
+      // for non-serializable values (which would crash .slice).
+      sampleDetailEntries = Object.entries(d0).slice(0, 10).map(([k, v]) => ({
+        key: k,
+        val: (String(JSON.stringify(v) ?? '')).slice(0, 120)
+      }));
+      // Also capture the raw built-in person-type field value if present
+      const builtinDiagVal = d0[BREEZE_TYPE_FIELD];
+      if (builtinDiagVal !== undefined) {
+        sampleDetailEntries.unshift({ key: BREEZE_TYPE_FIELD + ' (built-in type)', val: String(JSON.stringify(builtinDiagVal) ?? '').slice(0, 120) });
+      }
+      // Capture top-level person keys (excluding details/family which are large)
+      sampleTopLevelKeys = Object.entries(firstPerson)
+        .filter(([k]) => k !== 'details' && k !== 'family')
+        .map(([k, v]) => ({ key: k, val: (String(JSON.stringify(v) ?? '')).slice(0, 80) }));
     }
     // Convert MM/DD/YYYY or YYYY-MM-DD to YYYY-MM-DD
     const toISO = s => {
@@ -2006,8 +2152,27 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     // Load user-defined Breeze status → local member type map
     const mtMapRow = await db.prepare("SELECT value FROM chms_config WHERE key='member_type_map'").first();
     const memberTypeMap = mtMapRow ? JSON.parse(mtMapRow.value) : {};
-    // Skip non-person status types
-    const SKIP_STATUSES = new Set(['organization','christmas market','egg hunt','renter','mdo']);
+    // Build option-ID → name map from ALL profile field options (handles numeric option IDs like 1=Member)
+    const optionIdToName = {};
+    for (const f of allFields) {
+      for (const opt of (Array.isArray(f.options) ? f.options : [])) {
+        if (opt.id && opt.name) optionIdToName[String(opt.id)] = opt.name;
+      }
+    }
+    // Numeric ID → display name for Breeze's built-in person-type field.
+    // Values 1/2/3 are universal; 4 and above are church-specific custom statuses.
+    // Unknown numeric IDs pass through as-is so the admin can map them via
+    // Settings → Breeze Status Mapping → Member Type Map.
+    const BREEZE_TYPE_NUMS  = { '1': 'Member', '2': 'Attender', '3': 'Visitor' };
+    // Helper: extract status name from a raw detail value (array, object, or string)
+    const extractName = (raw) => {
+      const obj = Array.isArray(raw) ? raw[0] : raw;
+      if (obj && typeof obj === 'object') return obj.name || obj.value || '';
+      if (typeof raw === 'string' && raw) return optionIdToName[raw] || raw;
+      return '';
+    };
+    // No statuses are skipped — all Breeze records are imported regardless of status.
+    const SKIP_STATUSES = new Set();
     const statusesSeen = new Set();
     let imported = 0, updated = 0, skipped = 0;
     const errors = [];
@@ -2016,11 +2181,37 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         const fn = (p.first_name || '').trim();
         const ln = (p.last_name  || '').trim();
         const details = p.details || {};
-        // Status / member type — Breeze returns as object, array, or string
-        const statusRaw = details[F_STATUS];
-        const statusObj = Array.isArray(statusRaw) ? statusRaw[0] : statusRaw;
-        const statusName = (statusObj && statusObj.name) ? statusObj.name
-                         : (typeof statusRaw === 'string' ? statusRaw : '');
+        // Status / member type — resolution order:
+        // 1. Breeze's hard-coded built-in person-type field (ID 1076274773)
+        // 2. Profile-based field ID lookup (custom "status" field from /api/profile)
+        // 3. Scan all detail values for a name matching a configured member type
+        let statusName = '';
+        // 1. Built-in person-type field
+        const builtinRaw = details[BREEZE_TYPE_FIELD];
+        if (builtinRaw !== undefined) {
+          const builtinStr = extractName(builtinRaw);
+          statusName = BREEZE_TYPE_NUMS[builtinStr]
+                    || memberTypeMap[builtinStr]
+                    || memberTypeMap[builtinStr.toLowerCase()]
+                    || builtinStr;
+        }
+        // 2. Profile-based field (custom status field discovered via /api/profile)
+        if (!statusName && F_STATUS) {
+          statusName = extractName(details[F_STATUS]);
+        }
+        // 3. Scan all detail values for any that look like a configured member type
+        if (!statusName) {
+          for (const [, val] of Object.entries(details)) {
+            const candidate = extractName(val);
+            if (!candidate) continue;
+            const cl = candidate.toLowerCase();
+            if (configuredMemberTypes.some(t => t.toLowerCase() === cl) ||
+                memberTypeMap[candidate] || memberTypeMap[cl]) {
+              statusName = candidate;
+              break;
+            }
+          }
+        }
         if (SKIP_STATUSES.has(statusName.toLowerCase())) { skipped++; continue; }
         if (statusName) statusesSeen.add(statusName);
         // Use user-defined map first, then direct name match, then 'Other'
@@ -2032,8 +2223,14 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         const baptismDate  = toISO(details[F_BAPTISM]       || '');
         const confirmDate  = toISO(details[F_CONFIRMATION]  || '');
         const anniversaryDate = toISO(details[F_ANNIVERSARY] || '');
-        // Photo (Breeze returns thumb at top level)
-        const photoUrl = (p.thumb || p.thumbnail || p.photo || '').trim();
+        // Gender and marital status (stored as {value, name} objects)
+        const gender        = F_GENDER  ? extractName(details[F_GENDER])  : '';
+        const maritalStatus = F_MARITAL ? extractName(details[F_MARITAL]) : '';
+        // Photo: Breeze returns the path in p.path; build full URL and skip generic placeholders
+        let photoUrl = (p.thumb || p.thumbnail || p.photo || '').trim();
+        if (!photoUrl && p.path && !p.path.includes('/generic/')) {
+          photoUrl = `https://${subdomain}.breezechms.com/${p.path}`;
+        }
         // Email, phone, address (from typed arrays)
         let email = '', phone = '';
         let addr = { street: '', city: '', state: '', zip: '' };
@@ -2083,19 +2280,23 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           await db.prepare(
             `UPDATE people SET first_name=?,last_name=?,email=?,phone=?,
              address1=?,city=?,state=?,zip=?,member_type=?,household_id=?,
-             dob=?,baptism_date=?,confirmation_date=?,anniversary_date=?,family_role=?,photo_url=?
+             dob=?,baptism_date=?,confirmation_date=?,anniversary_date=?,family_role=?,photo_url=?,
+             gender=?,marital_status=?
              WHERE breeze_id=?`
           ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,memberType,householdId,
-                 dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,String(p.id)).run();
+                 dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,
+                 gender,maritalStatus,String(p.id)).run();
           updated++;
         } else {
           await db.prepare(
             `INSERT INTO people
              (first_name,last_name,email,phone,address1,city,state,zip,breeze_id,member_type,
-              household_id,dob,baptism_date,confirmation_date,anniversary_date,family_role,photo_url)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+              household_id,dob,baptism_date,confirmation_date,anniversary_date,family_role,photo_url,
+              gender,marital_status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
           ).bind(fn,ln,email,phone,addr.street,addr.city,addr.state,addr.zip,String(p.id),memberType,
-                 householdId,dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl).run();
+                 householdId,dob,baptismDate,confirmDate,anniversaryDate,familyRole,photoUrl,
+                 gender,maritalStatus).run();
           imported++;
         }
       } catch (e) { errors.push({ breeze_id: p.id, error: e.message }); }
@@ -2181,7 +2382,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         }
       } catch (e) { errors.push({ tag_sync_error: e.message }); }
     }
-    return json({ ok: true, imported, updated, skipped, errors, done, next_offset: offset + people.length, tags_synced: tagsSynced, tag_assignments: tagAssignments, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
+    return json({ ok: true, imported, updated, skipped, errors, done, next_offset: offset + people.length, tags_synced: tagsSynced, tag_assignments: tagAssignments, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, sample_detail_entries: sampleDetailEntries, sample_top_level_keys: sampleTopLevelKeys, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
   }
 
   return json({ error: 'Not found' }, 404);

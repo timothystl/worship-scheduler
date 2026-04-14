@@ -116,6 +116,21 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .s-bottom{margin-top:auto;display:flex;flex-direction:column;align-items:stretch;gap:4px;}
 .s-tip{position:static;transform:none;background:transparent;border:none;padding:0;font-size:13px;color:rgba(255,255,255,.7);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:auto;}
 .sidebar:hover .s-tip{opacity:1;}
+/* ── ROLE-BASED VISIBILITY ── */
+/* .require-finance = visible only for admin + finance */
+/* .require-staff   = visible only for admin + staff   */
+/* .require-edit    = visible for admin + finance + staff (not member) */
+/* .require-admin   = admin only */
+/* .no-member       = hidden for member role */
+.role-staff  .require-finance{display:none!important;}
+.role-member .require-finance{display:none!important;}
+.role-finance .require-staff{display:none!important;}
+.role-member .require-staff{display:none!important;}
+.role-member .require-edit{display:none!important;}
+.role-member .no-member{display:none!important;}
+.role-finance .require-admin{display:none!important;}
+.role-staff   .require-admin{display:none!important;}
+.role-member  .require-admin{display:none!important;}
 /* ── CONTENT AREA ── */
 .content-area{flex:1;display:flex;flex-direction:column;overflow:hidden;margin-left:54px;}
 /* ── TOPBAR ── */
@@ -495,17 +510,17 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item" data-tab="people" onclick="showTab('people')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg><span class="s-tip">People</span></div>
   <div class="s-item" data-tab="households" onclick="showTab('households')"><svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/></svg><span class="s-tip">Households</span></div>
   <div class="s-divider"></div>
-  <div class="s-item" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
-  <div class="s-item" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
-  <div class="s-item" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
-  <div class="s-item" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
-  <div class="s-divider"></div>
-  <div class="s-item" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
+  <div class="s-item require-finance" data-tab="giving" onclick="showTab('giving')"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/></svg><span class="s-tip">Giving</span></div>
+  <div class="s-item require-staff" data-tab="attendance" onclick="showTab('attendance')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg><span class="s-tip">Attendance</span></div>
+  <div class="s-item no-member" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
+  <div class="s-item require-staff" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
+  <div class="s-divider require-admin"></div>
+  <div class="s-item require-admin" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-divider"></div>
   <a href="/admin" class="s-item" title="Volunteers"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg><span class="s-tip">Volunteers</span></a>
   <a href="/scheduler" class="s-item" title="Scheduler"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg><span class="s-tip">Scheduler</span></a>
   <div class="s-bottom">
-    <div class="s-item" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
+    <div class="s-item require-admin" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="s-tip">Settings</span></div>
   </div>
 </nav>
 <div class="content-area">
@@ -514,6 +529,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <span class="topbar-title" id="topbar-title">People</span>
   <div style="display:flex;gap:8px;align-items:center;">
     <span style="font-size:.7rem;color:var(--warm-gray);" id="deploy-ver"></span>
+    <span id="topbar-role" style="display:none;font-size:.72rem;padding:2px 8px;border-radius:99px;background:rgba(30,45,74,.12);color:var(--charcoal);font-weight:600;"></span>
+    <a href="/admin" class="btn-sm require-admin">&#8592; Volunteers</a>
     <a href="/admin/logout" class="btn-sm">Sign Out</a>
   </div>
 </div>
@@ -534,7 +551,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </button>
     <button class="btn-secondary" id="p-select-btn" onclick="toggleSelectMode()" style="margin-left:auto;">&#9745; Select</button>
     <button class="btn-secondary" onclick="printDirectory()" title="Print directory">&#128438; Directory</button>
-    <button class="btn-primary" onclick="openPersonEdit(null)">+ Add Person</button>
+    <button class="btn-primary require-edit" onclick="openPersonEdit(null)">+ Add Person</button>
   </div>
   <!-- Active filter chips -->
   <div id="p-active-filters" style="display:none;padding:0 16px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
@@ -572,7 +589,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-households" class="tab-panel">
   <div class="toolbar">
     <div class="search-wrap"><input type="search" id="h-search" placeholder="Search households…" oninput="debounceHouseholds()"></div>
-    <button class="btn-primary" onclick="openHouseholdEdit(null)" style="margin-left:auto;">+ New Household</button>
+    <button class="btn-primary require-edit" onclick="openHouseholdEdit(null)" style="margin-left:auto;">+ New Household</button>
   </div>
   <div id="h-status" class="status-msg"></div>
   <div class="card-grid" id="h-grid"></div>
@@ -616,7 +633,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="tile-title">Membership Summary</div>
       <div class="tile-desc">Counts by member type</div>
     </div>
-    <div class="report-tile">
+    <div class="report-tile require-finance">
       <div class="tile-icon">&#128200;</div>
       <div class="tile-title">Giving by Fund</div>
       <div class="tile-desc">
@@ -625,7 +642,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         <button class="btn-primary" style="margin-top:8px;font-size:.8rem;padding:5px 12px;" onclick="runGivingSummary()">Run Report</button>
       </div>
     </div>
-    <div class="report-tile">
+    <div class="report-tile require-finance">
       <div class="tile-icon">&#128179;</div>
       <div class="tile-title">Giving by Method</div>
       <div class="tile-desc">
@@ -634,7 +651,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         <button class="btn-primary" style="margin-top:8px;font-size:.8rem;padding:5px 12px;" onclick="runGivingByMethod()">Run Report</button>
       </div>
     </div>
-    <div class="report-tile">
+    <div class="report-tile require-finance">
       <div class="tile-icon">&#128196;</div>
       <div class="tile-title">Giving Statement</div>
       <div class="tile-desc">
@@ -929,7 +946,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <span id="pv-topbar-name" style="font-size:15px;font-weight:500;color:var(--charcoal);margin-left:8px;"></span>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn-secondary" onclick="window.print()">Print</button>
-      <button class="btn-secondary" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
+      <button class="btn-secondary require-edit" onclick="openPersonEdit(_currentPvPerson)">Edit</button>
     </div>
   </div>
   <div class="pv-body">
@@ -946,7 +963,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
     <div class="pv-tabs">
       <div class="pv-tab active" data-ptab="info" onclick="showPvTab('info')">Information</div>
-      <div class="pv-tab" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
+      <div class="pv-tab require-finance" data-ptab="giving" onclick="showPvTab('giving')">Giving</div>
       <div class="pv-tab" data-ptab="attendance" onclick="showPvTab('attendance')">Attendance</div>
       <div class="pv-tab" data-ptab="timeline" onclick="showPvTab('timeline')">Timeline</div>
     </div>
@@ -1119,6 +1136,27 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="field"><label>Envelope #</label><input type="text" id="pm-envelope" placeholder="e.g. 42" maxlength="20"></div>
       <div class="field"><label>Last Seen</label><input type="date" id="pm-last-seen"></div>
     </div>
+    <div class="modal-section">Demographics</div>
+    <div class="modal-2col">
+      <div class="field"><label>Gender</label>
+        <select id="pm-gender" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+          <option value="">— not set —</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field"><label>Marital Status</label>
+        <select id="pm-marital" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+          <option value="">— not set —</option>
+          <option value="Single">Single</option>
+          <option value="Married">Married</option>
+          <option value="Widowed">Widowed</option>
+          <option value="Divorced">Divorced</option>
+          <option value="Separated">Separated</option>
+        </select>
+      </div>
+    </div>
     <div class="modal-section">Notes</div>
     <div class="field"><textarea id="pm-notes" rows="2" style="resize:vertical;"></textarea></div>
     <div class="modal-actions">
@@ -1240,6 +1278,7 @@ var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line';
 var _selectMode = false, _selectedPeople = new Set();
 var _churchConfig = {};
 var DEFAULT_LETTER_TEMPLATE = 'Dear {{name}},\\n\\nThank you for your generous contributions to Timothy Lutheran Church during {{year}}. Your gifts make a difference in our ministry and community.\\n\\nBelow is a summary of your giving for {{year}}:\\n\\n{{gift_table}}\\n\\nTotal Contributions: {{total}}\\n\\n{{#if_ein}}Our EIN/Tax ID is {{ein}}. No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.{{/if_ein}}\\n\\nWith gratitude,\\n\\nTimothy Lutheran Church\\n\\nDate: {{date}}';
+var _userRole = 'admin';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
 function api(path, opts) {
@@ -1303,6 +1342,15 @@ function initials(first, last) {
 // ── TAB SWITCHING ─────────────────────────────────────────────────────
 function showTab(name) {
   var labels = {home:'Home',people:'People',households:'Households',giving:'Giving',reports:'Reports',attendance:'Attendance',register:'Register',import:'Import',settings:'Settings'};
+  // Enforce role-based tab access
+  var isFinancePlus = _userRole === 'admin' || _userRole === 'finance';
+  var isStaffPlus   = _userRole === 'admin' || _userRole === 'staff';
+  var isAdmin       = _userRole === 'admin';
+  if (name === 'giving'     && !isFinancePlus) return;
+  if (name === 'attendance' && !isStaffPlus)   return;
+  if (name === 'register'   && !isStaffPlus)   return;
+  if (name === 'import'     && !isAdmin)        return;
+  if (name === 'settings'   && !isAdmin)        return;
   // Exit person-profile view if active
   var ca = document.querySelector('.content-area');
   if (ca) ca.classList.remove('pv-mode');
@@ -1392,8 +1440,25 @@ window.addEventListener('load', function() {
   loadTags();
   loadFunds();
   loadMemberTypes();
-  showTab('home');
+  applyRoleUI();
 });
+
+// ── ROLE UI ──────────────────────────────────────────────────────────────
+function applyRoleUI() {
+  fetch('/admin/api/me').then(function(r){ return r.json(); }).then(function(d) {
+    _userRole = d.role || 'admin';
+    document.body.classList.remove('role-admin','role-finance','role-staff','role-member');
+    document.body.classList.add('role-' + _userRole);
+    var badge = document.getElementById('topbar-role');
+    if (badge && _userRole !== 'admin') {
+      badge.textContent = d.display_name || _userRole;
+      badge.style.display = 'inline-block';
+    }
+    // Member users land on People tab (no dashboard access)
+    if (_userRole === 'member') { showTab('people'); }
+    else { showTab('home'); }
+  }).catch(function() { showTab('home'); });
+}
 
 // ── TAGS ──────────────────────────────────────────────────────────────
 function loadTags() {
@@ -2576,6 +2641,8 @@ function openPersonEdit(p) {
   document.getElementById('pm-envelope').value = isNew ? '' : (p.envelope_number||'');
   document.getElementById('pm-last-seen').value = isNew ? '' : (p.last_seen_date||'');
   document.getElementById('pm-notes').value = isNew ? '' : (p.notes||'');
+  var genderEl = document.getElementById('pm-gender'); if (genderEl) genderEl.value = isNew ? '' : (p.gender||'');
+  var maritalEl = document.getElementById('pm-marital'); if (maritalEl) maritalEl.value = isNew ? '' : (p.marital_status||'');
   document.getElementById('pm-hh-search').value = isNew ? '' : (p.household_name||'');
   document.getElementById('pm-hh-id').value = isNew ? '' : (p.household_id||'');
   // Tag picker
@@ -2649,6 +2716,8 @@ function savePerson() {
     envelope_number: document.getElementById('pm-envelope').value.trim(),
     last_seen_date: document.getElementById('pm-last-seen').value,
     notes: document.getElementById('pm-notes').value,
+    gender: (document.getElementById('pm-gender') || {value:''}).value,
+    marital_status: (document.getElementById('pm-marital') || {value:''}).value,
     tag_ids: getSelectedTagIds()
   };
   if (!data.first_name || (!isOrg && !data.last_name)) { alert(isOrg ? 'Name is required.' : 'First and last name are required.'); return; }

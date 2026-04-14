@@ -1,33 +1,46 @@
 // ── AUTH ─────────────────────────────────────────────────────────────
-// Uses HMAC-SHA256 to sign a timestamp. The cookie value is `<timestamp>.<base64url-sig>`.
-// This prevents the cookie from being forged without knowing env.ADMIN_PASSWORD.
-export async function isAuthed(req, env) {
+// Cookie format: `<timestamp>.<role>.<base64url-sig>`
+// The sig covers `timestamp.role` so role cannot be forged without knowing env.ADMIN_PASSWORD.
+// Old 2-part cookies `<ts>.<sig>` are accepted and treated as `admin` for backward compat.
+export async function getAuthRole(req, env) {
   const cookie = req.headers.get('cookie') || '';
   const m = cookie.match(/vol_auth=([^;\s]+)/);
-  if (!m) return false;
-  const [ts, sig] = m[1].split('.');
-  if (!ts || !sig) return false;
-  if (Date.now() - parseInt(ts, 10) > 8 * 60 * 60 * 1000) return false;
+  if (!m) return null;
+  const parts = m[1].split('.');
+  let ts, role, sig;
+  if (parts.length === 3) {
+    [ts, role, sig] = parts;
+  } else if (parts.length === 2) {
+    [ts, sig] = parts; role = 'admin';
+  } else { return null; }
+  if (!ts || !sig) return null;
+  if (Date.now() - parseInt(ts, 10) > 8 * 60 * 60 * 1000) return null;
   try {
     const key = await crypto.subtle.importKey(
       'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
     );
+    const payload = parts.length === 3 ? `${ts}.${role}` : ts;
     const sigBytes = Uint8Array.from(atob(sig.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-    return await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(ts));
-  } catch { return false; }
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(payload));
+    return valid ? role : null;
+  } catch { return null; }
 }
-export async function authCookieHeader(env) {
+export async function isAuthed(req, env) {
+  return (await getAuthRole(req, env)) !== null;
+}
+export async function authCookieHeader(env, role = 'admin') {
   const ts = Date.now().toString();
+  const payload = `${ts}.${role}`;
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ts));
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   const b64url = btoa(String.fromCharCode(...new Uint8Array(sig)))
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const exp = new Date(Date.now() + 8 * 60 * 60 * 1000).toUTCString();
-  return `vol_auth=${ts}.${b64url}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
+  return `vol_auth=${ts}.${role}.${b64url}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────
