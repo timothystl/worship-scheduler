@@ -1342,7 +1342,7 @@ window.onerror = function(msg, src, line, col, err) {
   return false;
 };
 // ── STATE ────────────────────────────────────────────────────────────
-var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagId:'',offset:0,limit:100};
+var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagId:'',offset:0,limit:100,sort:'last_name',dir:'asc'};
 var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
@@ -2230,23 +2230,27 @@ function markSeenToday(personId) {
   });
 }
 function saveFollowUpModal() {
+  var btn = document.querySelector('#followup-modal .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   var pid = document.getElementById('fu-modal-pid').value;
   var nameSearch = document.getElementById('fu-modal-name').value.trim();
   var type = document.getElementById('fu-modal-type').value;
   var notes = document.getElementById('fu-modal-notes').value.trim();
+  function reEnable() { if (btn) { btn.disabled = false; btn.textContent = 'Save'; } }
   // If name was typed, search for person first
   if (nameSearch && !pid) {
     api('/admin/api/people?q='+encodeURIComponent(nameSearch)+'&limit=1').then(function(d) {
       var p = d.people && d.people[0];
-      saveFollowUpItem(p ? p.id : null, type, notes);
-    });
+      saveFollowUpItem(p ? p.id : null, type, notes, reEnable);
+    }).catch(reEnable);
   } else {
-    saveFollowUpItem(pid ? parseInt(pid) : null, type, notes);
+    saveFollowUpItem(pid ? parseInt(pid) : null, type, notes, reEnable);
   }
 }
-function saveFollowUpItem(pid, type, notes) {
+function saveFollowUpItem(pid, type, notes, onErr) {
   api('/admin/api/followup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({person_id:pid||null,type:type,notes:notes}) })
-    .then(function() { closeModal('followup-modal'); loadDashboard(); });
+    .then(function() { closeModal('followup-modal'); loadDashboard(); })
+    .catch(function() { if (onErr) onErr(); });
 }
 function dashStat(val, lbl, sub) {
   return '<div class="dash-stat">'
@@ -2293,6 +2297,8 @@ function loadPeople(resetPage) {
   if (peopleFilter.tagId) params.set('tag_id', peopleFilter.tagId);
   params.set('limit', peopleFilter.limit);
   params.set('offset', peopleFilter.offset);
+  params.set('sort', peopleFilter.sort || 'last_name');
+  params.set('dir', peopleFilter.dir || 'asc');
   setStatus('p-status', 'Loading…');
   api('/admin/api/people?' + params).then(function(d) {
     setStatus('p-status', '');
@@ -2303,7 +2309,13 @@ function loadPeople(resetPage) {
     renderPeopleMobile(people);
     renderPeoplePager();
     updateFdCount();
-  }).catch(function() { setStatus('p-status','Error loading people.','err'); });
+  }).catch(function() {
+    _peopleTotal = 0;
+    renderPeopleDesktop([]);
+    renderPeopleMobile([]);
+    renderPeoplePager();
+    setStatus('p-status','Error loading people.','err');
+  });
 }
 function renderPeoplePager() {
   var el = document.getElementById('p-pager');
@@ -2323,6 +2335,15 @@ function renderPeoplePager() {
 function peoplePage(dir) {
   peopleFilter.offset = Math.max(0, peopleFilter.offset + dir * peopleFilter.limit);
   loadPeople();
+}
+function sortPeople(col) {
+  if (peopleFilter.sort === col) {
+    peopleFilter.dir = peopleFilter.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    peopleFilter.sort = col;
+    peopleFilter.dir = 'asc';
+  }
+  loadPeople(true);
 }
 function renderPeopleDesktop(people) {
   _loadedPeople = people;
@@ -2359,9 +2380,14 @@ function renderPeopleDesktop(people) {
       + '</tr>';
   }).join('');
   var cbAll = '<input type="checkbox" id="p-check-all" style="' + (_selectMode ? '' : 'display:none;') + '" onchange="selectAllVisible(this.checked)">';
+  function sortTh(label, col) {
+    var active = peopleFilter.sort === col;
+    var arrow = active ? (peopleFilter.dir === 'asc' ? ' &#9650;' : ' &#9660;') : ' <span style="opacity:.3;">&#9650;</span>';
+    return '<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="sortPeople(\'' + col + '\')">' + label + arrow + '</th>';
+  }
   c.innerHTML = '<table class="dir-table"><thead><tr>'
     + '<th>' + cbAll + '</th>'
-    + '<th>Name</th><th>Status</th><th>Contact</th><th>Household</th><th>Tags</th>'
+    + sortTh('Name','last_name') + sortTh('Status','member_type') + '<th>Contact</th><th>Household</th><th>Tags</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 // ── MULTI-SELECT ──────────────────────────────────────────────────────
@@ -3188,6 +3214,9 @@ function savePerson() {
     tag_ids: getSelectedTagIds()
   };
   if (!data.first_name || (!isOrg && !data.last_name)) { alert(isOrg ? 'Name is required.' : 'First and last name are required.'); return; }
+  var saveBtn = document.querySelector('#person-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  function reEnablePersonSave() { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; } }
   var url = id ? '/admin/api/people/' + id : '/admin/api/people';
   var meth = id ? 'PUT' : 'POST';
   api(url, {method:meth, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(r) {
@@ -3198,8 +3227,8 @@ function savePerson() {
         api('/admin/api/people/' + pvId).then(function(p) { showProfile(p); });
       }
       loadPeople();
-    } else alert('Error saving: ' + (r.error||'unknown'));
-  });
+    } else { reEnablePersonSave(); alert('Error saving: ' + (r.error||'unknown')); }
+  }).catch(function() { reEnablePersonSave(); alert('Error saving. Please try again.'); });
 }
 function deletePerson() {
   var id = document.getElementById('pm-id').value;

@@ -128,9 +128,8 @@ export async function handleAdminLogin(req, env) {
 
   if (matchedRole) {
     if (env.RSVP_STORE) await env.RSVP_STORE.delete(rlKey).catch(() => {});
-    const dest = matchedRole === 'admin' ? '/admin' : '/chms';
     return new Response('', { status: 302, headers: {
-      Location: dest,
+      Location: '/chms',
       'Set-Cookie': await authCookieHeader(env, matchedRole, matchedUsername)
     }});
   }

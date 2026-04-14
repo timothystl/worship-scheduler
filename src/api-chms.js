@@ -141,13 +141,16 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const tagId = url.searchParams.get('tag_id') || '';
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
+    const SORT_COLS = { last_name: 'p.last_name', first_name: 'p.first_name', member_type: 'p.member_type', created_at: 'p.created_at' };
+    const sortCol = SORT_COLS[url.searchParams.get('sort') || ''] || 'p.last_name';
+    const sortDir = url.searchParams.get('dir') === 'desc' ? 'DESC' : 'ASC';
     const like = '%' + q + '%';
-    let where = `p.active=1
+    let where = `p.active=1 AND LOWER(p.member_type) != 'organization'
       AND (p.first_name LIKE ? OR p.last_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)`;
     const binds = [like, like, like, like];
     // Member role can only see people with member_type='member'
     if (role === 'member') { where += ` AND LOWER(p.member_type)='member'`; }
-    if (mt) { where += ' AND p.member_type=?'; binds.push(mt); }
+    if (mt) { where += ' AND LOWER(p.member_type)=LOWER(?)'; binds.push(mt); }
     if (tagId) { where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)'; binds.push(tagId); }
     // Total count
     const countRow = await db.prepare(`SELECT COUNT(*) as n FROM people p WHERE ${where}`).bind(...binds).first();
@@ -156,7 +159,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const rows = (await db.prepare(
       `SELECT p.*, h.name as household_name FROM people p
        LEFT JOIN households h ON p.household_id=h.id
-       WHERE ${where} ORDER BY p.last_name, p.first_name LIMIT ? OFFSET ?`
+       WHERE ${where} ORDER BY ${sortCol} ${sortDir}, p.last_name ASC, p.first_name ASC LIMIT ? OFFSET ?`
     ).bind(...binds, limit, offset).all()).results || [];
     // Batch-load tags for all returned people in a single query (avoids N+1)
     const ids = rows.map(r => r.id);
