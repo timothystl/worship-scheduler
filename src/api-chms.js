@@ -2145,6 +2145,159 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     return json({ field_types_in_members: fieldMap, tag_endpoints: tagResults, family_member_sample: familyMember ? { id: familyMember.id, name: familyMember.first_name+' '+familyMember.last_name, family: familyMember.family } : null });
   }
 
+  // ── Breeze Per-Person Sync ───────────────────────────────────────
+  // Forces a demographic re-sync for a single person identified by their Breeze ID.
+  // Returns detailed diagnostics: which profile fields matched, raw Breeze values,
+  // and what was written to the database — useful for debugging field-mapping issues.
+  if (seg === 'import/breeze-sync-person' && method === 'POST') {
+    const subdomain = env.BREEZE_SUBDOMAIN;
+    const apiKey    = env.BREEZE_API_KEY;
+    if (!subdomain || !apiKey) return json({ error: 'Breeze not configured (BREEZE_SUBDOMAIN / BREEZE_API_KEY missing)' }, 503);
+    let b = {}; try { b = await req.json(); } catch {}
+    const breezeId = String(b.breeze_id || '').trim();
+    if (!breezeId) return json({ error: 'breeze_id is required' }, 400);
+
+    const hdrs = { 'Api-key': apiKey };
+
+    // Fetch the individual person from Breeze (/api/people/{id}?details=1)
+    const pRes = await fetch(`https://${subdomain}.breezechms.com/api/people/${breezeId}?details=1`, { headers: hdrs });
+    if (!pRes.ok) return json({ error: `Breeze API error: ${pRes.status}` }, 502);
+    let p; try { p = await pRes.json(); } catch { return json({ error: 'Breeze returned invalid JSON' }, 502); }
+    // Breeze returns a single object for individual fetch
+    if (!p || !p.id) return json({ error: 'Person not found in Breeze', breezeId }, 404);
+
+    // Fetch profile field definitions to discover field IDs
+    let profileFields = [];
+    try {
+      const pr = await fetch(`https://${subdomain}.breezechms.com/api/profile`, { headers: hdrs });
+      if (pr.ok) profileFields = await pr.json();
+    } catch {}
+
+    // Flatten all fields (same logic as bulk import)
+    const allFields = [];
+    const extractFieldsPS = (fields) => {
+      for (const f of (Array.isArray(fields) ? fields : [])) {
+        if (Array.isArray(f.fields) && f.fields.length > 0) extractFieldsPS(f.fields);
+        else allFields.push(f);
+      }
+    };
+    for (const section of (Array.isArray(profileFields) ? profileFields : [])) extractFieldsPS(section.fields || []);
+
+    // Smart field finder — same logic as bulk import (prefers date fields in fallback)
+    const findFieldPS = (names, fallbackSubstrings = []) => {
+      const ns = names.map(n => n.toLowerCase());
+      let found = allFields.find(f => ns.includes((f.name||'').toLowerCase()));
+      if (!found && fallbackSubstrings.length) {
+        found = allFields.find(f => {
+          const fn = (f.name||'').toLowerCase();
+          return fallbackSubstrings.some(s => fn.includes(s)) && fn.includes('date');
+        });
+        if (!found) found = allFields.find(f => fallbackSubstrings.some(s => (f.name||'').toLowerCase().includes(s)));
+      }
+      return found;
+    };
+
+    const F_DOB_FIELD      = findFieldPS(['birthdate','birth date','dob','date of birth','birthday'], ['birth','birthday']);
+    const F_BAPTISM_FIELD  = findFieldPS(['baptism date','baptismal date','date of baptism','baptized date','date baptized','baptism (date)','baptism (adult)','baptism (infant)','baptism_date','baptism','baptized'], ['baptism','baptized','baptismal']);
+    const F_CONFIRM_FIELD  = findFieldPS(['confirmation date','affirmation date','date of confirmation','date affirmed','date confirmed','date of affirmation','affirmation of baptism','confirmation (date)','confirmation_date','affirmation','confirmation','confirmed'], ['confirmation','confirmed','affirm']);
+    const F_ANNIV_FIELD    = findFieldPS(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date'], ['anniversary','wedding']);
+    const F_GENDER_FIELD   = findFieldPS(['gender','sex','gender identity'], ['gender','sex']);
+    const F_MARITAL_FIELD  = findFieldPS(['marital status','marital','marriage status','civil status','married']);
+
+    const F_DOB          = F_DOB_FIELD      ? String(F_DOB_FIELD.id)      : '';
+    const F_BAPTISM      = F_BAPTISM_FIELD  ? String(F_BAPTISM_FIELD.id)  : '';
+    const F_CONFIRMATION = F_CONFIRM_FIELD  ? String(F_CONFIRM_FIELD.id)  : '';
+    const F_ANNIVERSARY  = F_ANNIV_FIELD    ? String(F_ANNIV_FIELD.id)    : '';
+    const F_GENDER       = F_GENDER_FIELD   ? String(F_GENDER_FIELD.id)   : '';
+    const F_MARITAL      = F_MARITAL_FIELD  ? String(F_MARITAL_FIELD.id)  : '';
+
+    const toISOPS = s => {
+      if (!s || typeof s !== 'string') return '';
+      const clean = s.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+      const slash = clean.split('/');
+      if (slash.length === 3 && slash[2].length === 4)
+        return slash[2] + '-' + slash[0].padStart(2,'0') + '-' + slash[1].padStart(2,'0');
+      try { const d = new Date(clean); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch {}
+      return '';
+    };
+    const extractDatePS = (raw) => {
+      if (!raw) return '';
+      if (typeof raw === 'string') return raw;
+      const obj = Array.isArray(raw) ? raw[0] : raw;
+      if (obj && typeof obj === 'object') return obj.date || obj.value || obj.name || '';
+      return '';
+    };
+    const optionIdToNamePS = {};
+    for (const f of allFields) {
+      for (const opt of (Array.isArray(f.options) ? f.options : [])) {
+        if (opt.id && opt.name) optionIdToNamePS[String(opt.id)] = opt.name;
+      }
+    }
+    const extractNamePS = (raw) => {
+      const obj = Array.isArray(raw) ? raw[0] : raw;
+      if (obj && typeof obj === 'object') return obj.name || obj.value || '';
+      if (typeof raw === 'string' && raw) return optionIdToNamePS[raw] || raw;
+      return '';
+    };
+
+    const details = p.details || {};
+    const dob             = toISOPS(p.birth_date || extractDatePS(details[F_DOB]) || '');
+    const baptismDate     = toISOPS(extractDatePS(details[F_BAPTISM]) || '');
+    const confirmDate     = toISOPS(extractDatePS(details[F_CONFIRMATION]) || '');
+    const anniversaryDate = toISOPS(extractDatePS(details[F_ANNIVERSARY]) || '');
+    const gender          = F_GENDER  ? extractNamePS(details[F_GENDER])  : '';
+    const maritalStatus   = F_MARITAL ? extractNamePS(details[F_MARITAL]) : '';
+
+    // Find this person in the local DB
+    const localPerson = await db.prepare(
+      'SELECT id,first_name,last_name,dob,baptism_date,confirmation_date,anniversary_date,gender,marital_status FROM people WHERE breeze_id=?'
+    ).bind(breezeId).first();
+
+    // Build diagnostic payload (visible to admin even if update fails)
+    const diag = {
+      breeze_person: { id: p.id, name: ((p.first_name||'')+' '+(p.last_name||'')).trim() },
+      profile_fields_total: allFields.length,
+      all_profile_field_names: allFields.map(f => ({ id: String(f.id), name: f.name })),
+      field_matches: {
+        dob:           { field: F_DOB_FIELD      ? { id: F_DOB_FIELD.id,      name: F_DOB_FIELD.name      } : null, raw: details[F_DOB]          ?? null, extracted: dob },
+        baptism:       { field: F_BAPTISM_FIELD  ? { id: F_BAPTISM_FIELD.id,  name: F_BAPTISM_FIELD.name  } : null, raw: details[F_BAPTISM]      ?? null, extracted: baptismDate },
+        confirmation:  { field: F_CONFIRM_FIELD  ? { id: F_CONFIRM_FIELD.id,  name: F_CONFIRM_FIELD.name  } : null, raw: details[F_CONFIRMATION] ?? null, extracted: confirmDate },
+        anniversary:   { field: F_ANNIV_FIELD    ? { id: F_ANNIV_FIELD.id,    name: F_ANNIV_FIELD.name    } : null, raw: details[F_ANNIVERSARY]  ?? null, extracted: anniversaryDate },
+        gender:        { field: F_GENDER_FIELD   ? { id: F_GENDER_FIELD.id,   name: F_GENDER_FIELD.name   } : null, raw: details[F_GENDER]       ?? null, extracted: gender },
+        marital_status:{ field: F_MARITAL_FIELD  ? { id: F_MARITAL_FIELD.id,  name: F_MARITAL_FIELD.name  } : null, raw: details[F_MARITAL]      ?? null, extracted: maritalStatus },
+      },
+      detail_keys_in_breeze: Object.keys(details),
+      detail_sample: Object.entries(details).slice(0, 20).map(([k,v]) => ({ key: k, val: String(JSON.stringify(v) ?? '').slice(0, 120) })),
+      local_before: localPerson || null,
+    };
+
+    if (!localPerson) return json({ ok: false, error: 'Person not found in local database — run a full Breeze import first', diag });
+
+    // Update fields where Breeze provided a non-empty value.
+    // Uses CASE to only overwrite when we have a real value, preserving manual edits otherwise.
+    await db.prepare(
+      `UPDATE people SET
+       dob              = CASE WHEN ? != '' THEN ? ELSE dob               END,
+       baptism_date     = CASE WHEN ? != '' THEN ? ELSE baptism_date      END,
+       confirmation_date= CASE WHEN ? != '' THEN ? ELSE confirmation_date END,
+       anniversary_date = CASE WHEN ? != '' THEN ? ELSE anniversary_date  END,
+       gender           = CASE WHEN ? != '' THEN ? ELSE gender            END,
+       marital_status   = CASE WHEN ? != '' THEN ? ELSE marital_status    END
+       WHERE breeze_id=?`
+    ).bind(
+      dob,dob, baptismDate,baptismDate, confirmDate,confirmDate,
+      anniversaryDate,anniversaryDate, gender,gender, maritalStatus,maritalStatus,
+      breezeId
+    ).run();
+
+    return json({
+      ok: true,
+      updated: { dob, baptismDate, confirmDate, anniversaryDate, gender, maritalStatus },
+      diag
+    });
+  }
+
   // ── Breeze Import ────────────────────────────────────────────────
   if (seg === 'import/breeze' && method === 'POST') {
     const subdomain = env.BREEZE_SUBDOMAIN;
@@ -2185,18 +2338,29 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
       const ns = names.map(n => n.toLowerCase());
       // 1. Exact name match
       let found = allFields.find(f => ns.includes((f.name||'').toLowerCase()));
-      // 2. Substring fallback (catches "LCMS Baptism Date", "Date Baptized", etc.)
+      // 2. Substring fallback — prefer fields whose name also contains "date" to avoid
+      //    matching notes/checkbox fields (e.g. "Baptism Notes" when seeking baptism date)
       if (!found && fallbackSubstrings.length) {
-        found = allFields.find(f => fallbackSubstrings.some(s => (f.name||'').toLowerCase().includes(s)));
+        found = allFields.find(f => {
+          const fn = (f.name||'').toLowerCase();
+          return fallbackSubstrings.some(s => fn.includes(s)) && fn.includes('date');
+        });
+        // 3. Any field containing the fallback substring (last resort)
+        if (!found) {
+          found = allFields.find(f => fallbackSubstrings.some(s => (f.name||'').toLowerCase().includes(s)));
+        }
       }
       return found;
     };
     const F_STATUS_FIELD   = findField(['status','member status','membership status','fellowship status','church status','member type','church membership','congregational status','person status','participation status','attendance status'], ['status','membership']);
-    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth','birthday','date of birth'], ['birth','birthday']);
-    const F_BAPTISM_FIELD  = findField(['baptism date','baptism','baptism_date','date of baptism','baptized','date baptized','date of baptism','baptism (date)'], ['baptism','baptized']);
-    const F_CONFIRM_FIELD  = findField(['confirmation date','confirmation','confirmation_date','date of confirmation','confirmed','date confirmed','date of confirmation','confirmation (date)'], ['confirmation','confirmed']);
-    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date']);
-    const F_GENDER_FIELD   = findField(['gender','sex','gender identity']);
+    const F_DOB_FIELD      = findField(['birthdate','birth date','dob','date of birth','birthday'], ['birth','birthday']);
+    // LCMS-specific: "Baptismal Date", "Date Baptized", "Baptism (Adult/Infant)"
+    const F_BAPTISM_FIELD  = findField(['baptism date','baptismal date','date of baptism','baptized date','date baptized','baptism (date)','baptism (adult)','baptism (infant)','baptism_date','baptism','baptized'], ['baptism','baptized','baptismal']);
+    // LCMS-specific: "Affirmation of Baptism", "Date Affirmed", "Affirmation Date"
+    const F_CONFIRM_FIELD  = findField(['confirmation date','affirmation date','date of confirmation','date affirmed','date confirmed','date of affirmation','affirmation of baptism','confirmation (date)','confirmation_date','affirmation','confirmation','confirmed'], ['confirmation','confirmed','affirm']);
+    const F_ANNIV_FIELD    = findField(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date'], ['anniversary','wedding']);
+    // Gender needs substring fallback — some Breeze instances label it "M/F", "Sex", etc.
+    const F_GENDER_FIELD   = findField(['gender','sex','gender identity'], ['gender','sex']);
     const F_MARITAL_FIELD  = findField(['marital status','marital','marriage status','civil status','married']);
     const F_DECEASED_FIELD = findField(['deceased','is deceased','date deceased','date of death','death'], ['deceased','death']);
     const F_DEATH_FIELD    = findField(['death date','date of death','date deceased','died'], ['death date','date of death','died']);
