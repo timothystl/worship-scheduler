@@ -752,7 +752,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 
 <!-- (import content moved into Settings tab) -->
-<div id="tab-import" style="display:none!important;">
+<div id="tab-import" style="display:none!important;"></div>
 
 <!-- ═══ SETTINGS TAB ═══ -->
 <div id="tab-settings" class="tab-panel">
