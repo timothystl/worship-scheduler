@@ -1,18 +1,22 @@
 // ── AUTH ─────────────────────────────────────────────────────────────
-// Cookie format: `<timestamp>.<role>.<base64url-sig>`
-// The sig covers `timestamp.role` so role cannot be forged.
-// Old format `<timestamp>.<sig>` (no role) is accepted and treated as `admin`
-// for backward compat during the transition period.
-export async function getAuthRole(req, env) {
+// Cookie formats (all HMAC-SHA256 signed with ADMIN_PASSWORD):
+//   4-part: `<ts>.<role>.<username>.<sig>`  sig covers `ts.role.username`
+//   3-part: `<ts>.<role>.<sig>`             sig covers `ts.role`
+//   2-part: `<ts>.<sig>`                    sig covers `ts`  (legacy admin)
+// Username may be empty string for env-var logins.
+
+// Parse and verify the auth cookie. Returns { role, username } or null.
+export async function getAuthInfo(req, env) {
   const cookie = req.headers.get('cookie') || '';
   const m = cookie.match(/vol_auth=([^;\s]+)/);
   if (!m) return null;
   const parts = m[1].split('.');
-  let ts, role, sig;
-  if (parts.length === 3) {
+  let ts, role, username = '', sig;
+  if (parts.length === 4) {
+    [ts, role, username, sig] = parts;
+  } else if (parts.length === 3) {
     [ts, role, sig] = parts;
   } else if (parts.length === 2) {
-    // Old two-part cookie — treat as admin for backward compat
     [ts, sig] = parts;
     role = 'admin';
   } else {
@@ -25,19 +29,26 @@ export async function getAuthRole(req, env) {
       'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
     );
-    // Old format: payload was just `ts`; new format: `ts.role`
-    const payload = parts.length === 3 ? `${ts}.${role}` : ts;
+    const payload = parts.length === 4 ? `${ts}.${role}.${username}`
+                  : parts.length === 3 ? `${ts}.${role}`
+                  : ts;
     const sigBytes = Uint8Array.from(atob(sig.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
     const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(payload));
-    return valid ? role : null;
+    return valid ? { role, username } : null;
   } catch { return null; }
 }
-export async function isAuthed(req, env) {
-  return (await getAuthRole(req, env)) !== null;
+export async function getAuthRole(req, env) {
+  const info = await getAuthInfo(req, env);
+  return info ? info.role : null;
 }
-export async function authCookieHeader(env, role = 'admin') {
+export async function isAuthed(req, env) {
+  return (await getAuthInfo(req, env)) !== null;
+}
+// username must be alphanumeric/underscore/hyphen only (no dots)
+export async function authCookieHeader(env, role = 'admin', username = '') {
   const ts = Date.now().toString();
-  const payload = `${ts}.${role}`;
+  const safeUser = username.replace(/[^a-zA-Z0-9_-]/g, '');
+  const payload = safeUser ? `${ts}.${role}.${safeUser}` : `${ts}.${role}`;
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(env.ADMIN_PASSWORD || ''),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
@@ -45,8 +56,44 @@ export async function authCookieHeader(env, role = 'admin') {
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   const b64url = btoa(String.fromCharCode(...new Uint8Array(sig)))
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const cookieVal = safeUser ? `${ts}.${role}.${safeUser}.${b64url}` : `${ts}.${role}.${b64url}`;
   const exp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
-  return `vol_auth=${ts}.${role}.${b64url}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
+  return `vol_auth=${cookieVal}; Path=/; Expires=${exp}; HttpOnly; Secure; SameSite=Strict`;
+}
+
+// ── PASSWORD HASHING (PBKDF2-SHA256) ────────────────────────────────
+// Stored format: `pbkdf2:<saltHex>:<hashHex>`
+export async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 },
+    keyMaterial, 256
+  );
+  const toHex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `pbkdf2:${toHex(salt)}:${toHex(bits)}`;
+}
+export async function verifyPassword(password, stored) {
+  try {
+    const [, saltHex, hashHex] = stored.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = new Uint8Array(saltHex.match(/../g).map(h => parseInt(h, 16)));
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 },
+      keyMaterial, 256
+    );
+    const testHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+    // Constant-time comparison
+    if (testHex.length !== hashHex.length) return false;
+    let diff = 0;
+    for (let i = 0; i < testHex.length; i++) diff |= testHex.charCodeAt(i) ^ hashHex.charCodeAt(i);
+    return diff === 0;
+  } catch { return false; }
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────

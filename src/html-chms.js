@@ -834,6 +834,13 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div id="tab-settings" class="tab-panel">
   <div style="padding:16px 20px 24px;max-width:900px;">
     <div id="st-status" class="status-msg" style="margin-bottom:8px;"></div>
+    <!-- Users Card (admin only) -->
+    <div class="import-card require-admin" style="margin-bottom:14px;">
+      <h3>&#128100; Users</h3>
+      <p>Create named login accounts. Each user gets their own username and password for their role.</p>
+      <div id="st-users-list" style="margin:12px 0;"></div>
+      <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="openUserForm(null)">+ Add User</button>
+    </div>
     <!-- Church Info Card -->
     <div class="import-card" style="margin-bottom:14px;">
       <h3>&#9962; Church Information</h3>
@@ -1661,8 +1668,101 @@ function saveMemberTypes() {
   });
 }
 
+// ── USERS MANAGEMENT ──────────────────────────────────────────────────
+var _usersData = [];
+var _editingUserId = null;
+function loadUsers() {
+  api('/admin/api/users').then(function(d) {
+    _usersData = d.users || [];
+    renderUsersList();
+  }).catch(function() {});
+}
+function renderUsersList() {
+  var el = document.getElementById('st-users-list');
+  if (!el) return;
+  if (!_usersData.length) {
+    el.innerHTML = '<p style="font-size:.85rem;color:var(--warm-gray);">No user accounts yet. Add one below.</p>';
+    return;
+  }
+  var roleColors = { admin:'#0A3C5C', finance:'#1B4332', staff:'#1E40AF', member:'#4A1D6B' };
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.87rem;">'
+    + '<thead><tr style="border-bottom:1px solid var(--border);">'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Username</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Display Name</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Role</th>'
+    + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Status</th>'
+    + '<th style="padding:6px 8px;"></th>'
+    + '</tr></thead><tbody>'
+    + _usersData.map(function(u) {
+        var rc = roleColors[u.role] || '#666';
+        var statusBadge = u.active
+          ? '<span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:#D1FAE5;color:#065F46;font-weight:700;">Active</span>'
+          : '<span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:var(--linen);color:var(--warm-gray);font-weight:700;">Inactive</span>';
+        return '<tr style="border-bottom:1px solid var(--linen);">'
+          + '<td style="padding:8px 8px;font-weight:600;">'+esc(u.username)+'</td>'
+          + '<td style="padding:8px 8px;color:var(--warm-gray);">'+esc(u.display_name||'—')+'</td>'
+          + '<td style="padding:8px 8px;"><span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:'+rc+'18;color:'+rc+';font-weight:700;">'+esc(u.role)+'</span></td>'
+          + '<td style="padding:8px 8px;">'+statusBadge+'</td>'
+          + '<td style="padding:8px 8px;text-align:right;white-space:nowrap;">'
+          + '<button class="btn-secondary" style="font-size:.75rem;padding:3px 8px;" onclick="openUserForm('+u.id+')">Edit</button>'
+          + ' <button class="btn-danger" style="font-size:.75rem;padding:3px 8px;" onclick="deleteUser('+u.id+',\''+esc(u.username)+'\')">Delete</button>'
+          + '</td></tr>';
+      }).join('')
+    + '</tbody></table>';
+}
+function openUserForm(userId) {
+  _editingUserId = userId;
+  var u = userId ? _usersData.find(function(x){return x.id===userId;}) : null;
+  var title = u ? 'Edit User: ' + u.username : 'Add User';
+  var modal = document.getElementById('modal-overlay');
+  var content = document.getElementById('modal-content');
+  if (!modal || !content) return;
+  content.innerHTML = '<h2>'+esc(title)+'</h2>'
+    + (u ? '' : '<div class="field"><label>Username</label><input type="text" id="um-username" placeholder="e.g. jsmith" autocomplete="off" style="width:100%;"></div>')
+    + '<div class="field"><label>Display Name</label><input type="text" id="um-display" placeholder="e.g. Jane Smith" value="'+esc(u?u.display_name:'')+'" style="width:100%;"></div>'
+    + '<div class="field"><label>Role</label><select id="um-role" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.9rem;">'
+    + ['admin','finance','staff','member'].map(function(r){return '<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r.charAt(0).toUpperCase()+r.slice(1)+'</option>';}).join('')
+    + '</select></div>'
+    + '<div class="field"><label>'+(u?'New Password (leave blank to keep)':'Password')+'</label><input type="password" id="um-password" placeholder="At least 8 characters" autocomplete="new-password" style="width:100%;"></div>'
+    + (u ? '<div style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;"><input type="checkbox" id="um-active" '+(u.active?'checked':'')+'>Active</label></div>' : '')
+    + '<div class="modal-actions">'
+    + '<button class="btn-secondary" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn-primary" onclick="saveUser()">'+esc(u?'Save Changes':'Create User')+'</button>'
+    + '</div>';
+  modal.classList.add('open');
+}
+function saveUser() {
+  var display = (document.getElementById('um-display')||{}).value || '';
+  var role    = (document.getElementById('um-role')||{}).value || 'staff';
+  var pass    = (document.getElementById('um-password')||{}).value || '';
+  var activeEl = document.getElementById('um-active');
+  var payload = { display_name: display, role: role };
+  if (pass) payload.password = pass;
+  if (activeEl) payload.active = activeEl.checked;
+  if (!_editingUserId) {
+    var username = ((document.getElementById('um-username')||{}).value||'').trim();
+    if (!username) { alert('Username is required.'); return; }
+    payload.username = username;
+    if (!pass || pass.length < 8) { alert('Password must be at least 8 characters.'); return; }
+  }
+  var url = _editingUserId ? '/admin/api/users/'+_editingUserId : '/admin/api/users';
+  var method = _editingUserId ? 'PUT' : 'POST';
+  fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(function(r){return r.json();}).then(function(r) {
+      if (r.ok) { closeModal(); loadUsers(); }
+      else alert('Error: '+(r.error||'unknown'));
+    });
+}
+function deleteUser(uid, username) {
+  if (!confirm('Delete user "'+username+'"? This cannot be undone.')) return;
+  fetch('/admin/api/users/'+uid, {method:'DELETE'}).then(function(r){return r.json();}).then(function(r){
+    if (r.ok) loadUsers(); else alert('Error: '+(r.error||'unknown'));
+  });
+}
+
 // ── SETTINGS ──────────────────────────────────────────────────────────
 function loadSettings() {
+  if (_userRole === 'admin') loadUsers();
   api('/admin/api/config/church').then(function(d) {
     _churchConfig = d || {};
     var el = document.getElementById('st-church-name');

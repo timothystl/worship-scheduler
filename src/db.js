@@ -181,7 +181,19 @@ export const DB_INIT = [
     new_value   TEXT    NOT NULL DEFAULT ''
   )`,
   `CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)`
+  `CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)`,
+  // App users — named login accounts with roles
+  `CREATE TABLE IF NOT EXISTS app_users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    display_name  TEXT    NOT NULL DEFAULT '',
+    role          TEXT    NOT NULL DEFAULT 'staff',
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    last_login    TEXT    NOT NULL DEFAULT ''
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_app_users_username ON app_users(username)`
 ];
 
 

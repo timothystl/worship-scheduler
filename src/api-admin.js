@@ -1,5 +1,5 @@
 // ── Admin API handlers ─────────────────────────────────────────────────────────
-import { html, json, isAuthed, authCookieHeader, getAuthRole } from './auth.js';
+import { html, json, isAuthed, authCookieHeader, getAuthRole, getAuthInfo, hashPassword, verifyPassword } from './auth.js';
 import { handleChmsApi } from './api-chms.js';
 import { LOGIN_HTML } from './html-templates.js';
 
@@ -89,23 +89,46 @@ export async function handleAdminLogin(req, env) {
   // ── Credential check ────────────────────────────────────────────────
   let body; try { body = await req.text(); } catch { body = ''; }
   const params = new URLSearchParams(body);
-  const adminPassword   = env.ADMIN_PASSWORD   || '';
-  const financePassword = env.FINANCE_PASSWORD || '';
-  const staffPassword   = env.STAFF_PASSWORD   || '';
-  const memberPassword  = env.MEMBER_PASSWORD  || '';
+  const adminPassword = env.ADMIN_PASSWORD || '';
   if (!adminPassword) {
     return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Admin password is not configured. Set the <code>ADMIN_PASSWORD</code> secret in the Cloudflare Dashboard.</p>'));
   }
-  const submitted = params.get('password') || '';
+  const submittedUser = (params.get('username') || '').trim().toLowerCase();
+  const submittedPass = params.get('password') || '';
   let matchedRole = null;
-  if      (submitted === adminPassword)                          matchedRole = 'admin';
-  else if (financePassword && submitted === financePassword)     matchedRole = 'finance';
-  else if (staffPassword   && submitted === staffPassword)       matchedRole = 'staff';
-  else if (memberPassword  && submitted === memberPassword)      matchedRole = 'member';
+  let matchedUsername = '';
+
+  // ── 1. Check app_users table ─────────────────────────────────────
+  if (submittedUser && env.DB) {
+    const dbUser = await env.DB.prepare(
+      `SELECT id, username, password_hash, role, active FROM app_users WHERE LOWER(username)=? LIMIT 1`
+    ).bind(submittedUser).first().catch(() => null);
+    if (dbUser && dbUser.active && await verifyPassword(submittedPass, dbUser.password_hash)) {
+      matchedRole     = dbUser.role;
+      matchedUsername = dbUser.username;
+      await env.DB.prepare(`UPDATE app_users SET last_login=datetime('now') WHERE id=?`)
+        .bind(dbUser.id).run().catch(() => {});
+    }
+  }
+
+  // ── 2. Fall back to env-var passwords (break-glass / initial setup) ──
+  if (!matchedRole) {
+    const financePassword = env.FINANCE_PASSWORD || '';
+    const staffPassword   = env.STAFF_PASSWORD   || '';
+    const memberPassword  = env.MEMBER_PASSWORD  || '';
+    if      (submittedPass === adminPassword)                             matchedRole = 'admin';
+    else if (financePassword && submittedPass === financePassword)        matchedRole = 'finance';
+    else if (staffPassword   && submittedPass === staffPassword)          matchedRole = 'staff';
+    else if (memberPassword  && submittedPass === memberPassword)         matchedRole = 'member';
+  }
+
   if (matchedRole) {
     if (env.RSVP_STORE) await env.RSVP_STORE.delete(rlKey).catch(() => {});
     const dest = matchedRole === 'admin' ? '/admin' : '/chms';
-    return new Response('', { status: 302, headers: { Location: dest, 'Set-Cookie': await authCookieHeader(env, matchedRole) } });
+    return new Response('', { status: 302, headers: {
+      Location: dest,
+      'Set-Cookie': await authCookieHeader(env, matchedRole, matchedUsername)
+    }});
   }
   // Increment failed-attempt counter (expires after 20 minutes to clean up)
   if (env.RSVP_STORE) {
@@ -121,12 +144,83 @@ export async function handleAdminApi(req, env, url, method) {
 
   // ── Current user info ─────────────────────────────────────────────
   if (seg === 'me' && method === 'GET') {
-    const role = await getAuthRole(req, env);
-    const labels = { admin: 'Administrator', finance: 'Finance', staff: 'Staff', member: 'Member (read-only)' };
-    return json({ role: role || 'unknown', display_name: labels[role] || 'Unknown' });
+    const info = await getAuthInfo(req, env);
+    const role = info ? info.role : null;
+    const username = info ? info.username : '';
+    const roleLabels = { admin: 'Administrator', finance: 'Finance', staff: 'Staff', member: 'Member (read-only)' };
+    // Try to get display_name from DB if we have a username
+    let displayName = roleLabels[role] || 'Unknown';
+    if (username && env.DB) {
+      const u = await env.DB.prepare(`SELECT display_name FROM app_users WHERE LOWER(username)=?`)
+        .bind(username.toLowerCase()).first().catch(() => null);
+      if (u && u.display_name) displayName = u.display_name;
+    }
+    return json({ role: role || 'unknown', username, display_name: displayName });
   }
 
   if (seg.startsWith('scheduler/')) return handleSchedulerDataApi(req, env, url, method);
+
+  // ── Users management (admin only) ────────────────────────────────
+  if (seg.startsWith('users')) {
+    const reqRole = await getAuthRole(req, env);
+    if (reqRole !== 'admin') return json({ error: 'Access denied' }, 403);
+
+    // GET /admin/api/users — list all users
+    if (seg === 'users' && method === 'GET') {
+      const rows = (await env.DB.prepare(
+        `SELECT id, username, display_name, role, active, created_at, last_login FROM app_users ORDER BY username`
+      ).all()).results || [];
+      return json({ users: rows });
+    }
+
+    // POST /admin/api/users — create user
+    if (seg === 'users' && method === 'POST') {
+      let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+      const username = (b.username || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (!username) return json({ error: 'Username is required' }, 400);
+      if (!b.password || b.password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400);
+      const validRoles = ['admin', 'finance', 'staff', 'member'];
+      const role = validRoles.includes(b.role) ? b.role : 'staff';
+      const existing = await env.DB.prepare(`SELECT id FROM app_users WHERE LOWER(username)=?`).bind(username).first();
+      if (existing) return json({ error: 'Username already exists' }, 409);
+      const hash = await hashPassword(b.password);
+      const r = await env.DB.prepare(
+        `INSERT INTO app_users (username, password_hash, display_name, role) VALUES (?,?,?,?)`
+      ).bind(username, hash, b.display_name || '', role).run();
+      return json({ ok: true, id: r.meta?.last_row_id });
+    }
+
+    // PUT /admin/api/users/:id — update user
+    const umatch = seg.match(/^users\/(\d+)$/);
+    if (umatch && method === 'PUT') {
+      const uid = parseInt(umatch[1]);
+      let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+      const validRoles = ['admin', 'finance', 'staff', 'member'];
+      const role = validRoles.includes(b.role) ? b.role : undefined;
+      // Build update
+      const fields = [];
+      const vals = [];
+      if (b.display_name !== undefined) { fields.push('display_name=?'); vals.push(b.display_name || ''); }
+      if (role)                          { fields.push('role=?');         vals.push(role); }
+      if (b.active !== undefined)        { fields.push('active=?');       vals.push(b.active ? 1 : 0); }
+      if (b.password) {
+        if (b.password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400);
+        fields.push('password_hash=?');
+        vals.push(await hashPassword(b.password));
+      }
+      if (!fields.length) return json({ error: 'Nothing to update' }, 400);
+      vals.push(uid);
+      await env.DB.prepare(`UPDATE app_users SET ${fields.join(',')} WHERE id=?`).bind(...vals).run();
+      return json({ ok: true });
+    }
+
+    // DELETE /admin/api/users/:id
+    if (umatch && method === 'DELETE') {
+      const uid = parseInt(umatch[1]);
+      await env.DB.prepare(`DELETE FROM app_users WHERE id=?`).bind(uid).run();
+      return json({ ok: true });
+    }
+  }
 
   if (seg === 'signups' && method === 'GET') {
     const ministry = url.searchParams.get('ministry') || '';
