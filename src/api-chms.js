@@ -2159,12 +2159,42 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
 
     const hdrs = { 'Api-key': apiKey };
 
-    // Fetch the individual person from Breeze (/api/people/{id}?details=1)
-    const pRes = await fetch(`https://${subdomain}.breezechms.com/api/people/${breezeId}?details=1`, { headers: hdrs });
-    if (!pRes.ok) return json({ error: `Breeze API error: ${pRes.status}` }, 502);
-    let p; try { p = await pRes.json(); } catch { return json({ error: 'Breeze returned invalid JSON' }, 502); }
-    // Breeze returns a single object for individual fetch
-    if (!p || !p.id) return json({ error: 'Person not found in Breeze', breezeId }, 404);
+    // Fetch the individual person from Breeze.
+    // Try /api/people/{id}?details=1 first (standard RESTful form).
+    // Breeze may return a single object OR an array with one element depending on version.
+    // Fall back to the list endpoint with a filter if the individual fetch returns no details.
+    let p = null;
+    let fetchDebug = {};
+    {
+      const pRes = await fetch(`https://${subdomain}.breezechms.com/api/people/${breezeId}?details=1`, { headers: hdrs });
+      fetchDebug.single_status = pRes.status;
+      if (pRes.ok) {
+        let raw; try { raw = await pRes.json(); } catch { raw = null; }
+        fetchDebug.single_type = Array.isArray(raw) ? 'array' : typeof raw;
+        // Normalise: handle both single-object and wrapped-array responses
+        if (Array.isArray(raw)) p = raw[0] || null;
+        else if (raw && raw.id) p = raw;
+        else if (raw && raw.person) p = raw.person; // some versions wrap in {person: {...}}
+        fetchDebug.single_has_id = !!(p && p.id);
+        fetchDebug.single_detail_keys = p ? Object.keys(p.details || {}).length : 0;
+      }
+    }
+    // If individual fetch returned no usable details, try the list endpoint filtered by Breeze ID.
+    // This is the same call as the bulk import and is known to include details.
+    if (!p || Object.keys(p.details || {}).length === 0) {
+      const listRes = await fetch(
+        `https://${subdomain}.breezechms.com/api/people?details=1&limit=1&filter_json=${encodeURIComponent(JSON.stringify({person_id:breezeId}))}`,
+        { headers: hdrs }
+      );
+      fetchDebug.list_status = listRes.status;
+      if (listRes.ok) {
+        let listRaw; try { listRaw = await listRes.json(); } catch { listRaw = null; }
+        const arr = Array.isArray(listRaw) ? listRaw : [];
+        fetchDebug.list_count = arr.length;
+        if (arr.length > 0 && arr[0].id) p = arr[0];
+      }
+    }
+    if (!p || !p.id) return json({ error: 'Person not found in Breeze', breezeId, fetchDebug }, 404);
 
     // Fetch profile field definitions to discover field IDs
     let profileFields = [];
@@ -2256,7 +2286,8 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
 
     // Build diagnostic payload (visible to admin even if update fails)
     const diag = {
-      breeze_person: { id: p.id, name: ((p.first_name||'')+' '+(p.last_name||'')).trim() },
+      fetch_debug: fetchDebug,
+      breeze_person: { id: p.id, name: ((p.first_name||'')+' '+(p.last_name||'')).trim(), birth_date: p.birth_date || null },
       profile_fields_total: allFields.length,
       all_profile_field_names: allFields.map(f => ({ id: String(f.id), name: f.name })),
       field_matches: {
@@ -2268,7 +2299,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         marital_status:{ field: F_MARITAL_FIELD  ? { id: F_MARITAL_FIELD.id,  name: F_MARITAL_FIELD.name  } : null, raw: details[F_MARITAL]      ?? null, extracted: maritalStatus },
       },
       detail_keys_in_breeze: Object.keys(details),
-      detail_sample: Object.entries(details).slice(0, 20).map(([k,v]) => ({ key: k, val: String(JSON.stringify(v) ?? '').slice(0, 120) })),
+      detail_sample: Object.entries(details).slice(0, 30).map(([k,v]) => ({ key: k, val: String(JSON.stringify(v) ?? '').slice(0, 200) })),
       local_before: localPerson || null,
     };
 
