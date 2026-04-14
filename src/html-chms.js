@@ -979,7 +979,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         <div id="ptab-giving" class="ptab-panel">
           <div style="padding:16px 0 0;" class="require-finance">
             <button class="btn-primary" onclick="togglePvQuickGift()" id="pv-gift-btn">+ Add Gift</button>
-            <div id="pv-quick-gift" style="display:none;margin-top:12px;background:var(--linen);border-radius:10px;padding:16px;display:none;">
+            <div id="pv-quick-gift" style="display:none;margin-top:12px;background:var(--linen);border-radius:10px;padding:16px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
                 <div class="field"><label>Date</label><input type="date" id="pv-gift-date" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
                 <div class="field"><label>Amount ($)</label><input type="number" id="pv-gift-amount" min="0.01" step="0.01" placeholder="0.00" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
@@ -4157,7 +4157,7 @@ function openRegFromPeoplePrompt() {
 }
 function generateRegisterFromPeople() {
   var status = document.getElementById('reg-gen-status');
-  var cutoff = document.getElementById('reg-gen-cutoff').value || '2020-01-01';
+  var cutoff = document.getElementById('reg-gen-cutoff').value || '1900-01-01';
   var inclBaptism = document.getElementById('reg-gen-baptism').checked;
   var inclConfirm = document.getElementById('reg-gen-confirm').checked;
   if (!inclBaptism && !inclConfirm) { status.textContent = 'Select at least one type.'; status.className = 'import-status err'; return; }
