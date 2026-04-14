@@ -2230,10 +2230,17 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
         // Gender and marital status (stored as {value, name} objects)
         const gender        = F_GENDER  ? extractName(details[F_GENDER])  : '';
         const maritalStatus = F_MARITAL ? extractName(details[F_MARITAL]) : '';
-        // Photo: Breeze returns the path in p.path; build full URL and skip generic placeholders
-        let photoUrl = (p.thumb || p.thumbnail || p.photo || '').trim();
-        if (!photoUrl && p.path && !p.path.includes('/generic/')) {
+        // Photo: build full URL from p.path (relative path on Breeze CDN).
+        // Ignore p.thumb/p.photo — they may be blob/data URLs or generic placeholders.
+        // Skip any path that looks like a generic/default avatar.
+        const GENERIC_PAT = ['/generic/', 'silhouette', 'no-photo', 'placeholder', 'default-avatar', 'profile-generic'];
+        let photoUrl = '';
+        if (p.path && !GENERIC_PAT.some(pat => p.path.toLowerCase().includes(pat))) {
           photoUrl = `https://${subdomain}.breezechms.com/${p.path}`;
+        } else if (typeof p.thumb === 'string' && p.thumb.startsWith('https://') &&
+                   p.thumb.includes('breezechms.com') &&
+                   !GENERIC_PAT.some(pat => p.thumb.toLowerCase().includes(pat))) {
+          photoUrl = p.thumb;
         }
         // Email, phone, address (from typed arrays)
         let email = '', phone = '';
@@ -2277,6 +2284,12 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
               ).bind(hhName, addr.street, addr.city, addr.state, addr.zip, bFamilyId).run();
               householdId = r.meta?.last_row_id;
             }
+          }
+          // If this person is the head of household and has a photo, set it as the household photo
+          if (householdId && familyRole === 'head' && photoUrl) {
+            await db.prepare(
+              `UPDATE households SET photo_url=? WHERE id=? AND (photo_url IS NULL OR photo_url='')`
+            ).bind(photoUrl, householdId).run();
           }
         }
         const existing = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(String(p.id)).first();
