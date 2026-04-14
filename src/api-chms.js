@@ -2272,12 +2272,14 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     };
 
     const details = p.details || {};
-    const dob             = toISOPS(p.birth_date || extractDatePS(details[F_DOB]) || '');
-    const baptismDate     = toISOPS(extractDatePS(details[F_BAPTISM]) || '');
-    const confirmDate     = toISOPS(extractDatePS(details[F_CONFIRMATION]) || '');
-    const anniversaryDate = toISOPS(extractDatePS(details[F_ANNIVERSARY]) || '');
-    const gender          = F_GENDER  ? extractNamePS(details[F_GENDER])  : '';
-    const maritalStatus   = F_MARITAL ? extractNamePS(details[F_MARITAL]) : '';
+    // Breeze stores some built-in fields with literal string keys (not numeric profile field IDs).
+    // Always check literal keys as a fallback alongside the profile-field-ID-based lookup.
+    const dob             = toISOPS(p.birth_date || extractDatePS(details[F_DOB]) || extractDatePS(details['birthdate']) || '');
+    const baptismDate     = toISOPS(extractDatePS(details[F_BAPTISM]) || extractDatePS(details['baptism_date']) || extractDatePS(details['baptism']) || '');
+    const confirmDate     = toISOPS(extractDatePS(details[F_CONFIRMATION]) || extractDatePS(details['confirmation_date']) || extractDatePS(details['confirmation']) || '');
+    const anniversaryDate = toISOPS(extractDatePS(details[F_ANNIVERSARY]) || extractDatePS(details['anniversary_date']) || extractDatePS(details['anniversary']) || '');
+    const gender          = (F_GENDER  ? extractNamePS(details[F_GENDER])  : '') || extractNamePS(details['gender'])  || extractNamePS(details['sex']) || '';
+    const maritalStatus   = (F_MARITAL ? extractNamePS(details[F_MARITAL]) : '') || extractNamePS(details['marital_status']) || extractNamePS(details['marital']) || '';
 
     // Find this person in the local DB
     const localPerson = await db.prepare(
@@ -2558,9 +2560,9 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           return '';
         };
         const dob             = toISO(p.birth_date || extractDate(details[F_DOB]) || extractDate(details['birthdate']) || '');
-        const baptismDate     = toISO(extractDate(details[F_BAPTISM])       || '');
-        const confirmDate     = toISO(extractDate(details[F_CONFIRMATION])  || '');
-        const anniversaryDate = toISO(extractDate(details[F_ANNIVERSARY])   || '');
+        const baptismDate     = toISO(extractDate(details[F_BAPTISM])       || extractDate(details['baptism_date'])     || extractDate(details['baptism'])     || '');
+        const confirmDate     = toISO(extractDate(details[F_CONFIRMATION])  || extractDate(details['confirmation_date'])|| extractDate(details['confirmation']) || '');
+        const anniversaryDate = toISO(extractDate(details[F_ANNIVERSARY])   || extractDate(details['anniversary_date']) || extractDate(details['anniversary'])  || '');
         // Deceased flag and death date — Breeze may store as a checkbox field or date field.
         // Also check p.deceased top-level if Breeze exposes it directly.
         const deathDateRaw = extractDate(details[F_DEATH_DATE]) || extractDate(details[F_DECEASED]) || '';
@@ -2575,9 +2577,9 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           : 0;
         // Envelope number (profile field or top-level)
         const envelopeNumber = F_ENVELOPE ? (extractName(details[F_ENVELOPE]) || extractDate(details[F_ENVELOPE]) || '') : (p.envelope_number || '');
-        // Gender and marital status (stored as {value, name} objects)
-        const gender        = F_GENDER  ? extractName(details[F_GENDER])  : '';
-        const maritalStatus = F_MARITAL ? extractName(details[F_MARITAL]) : '';
+        // Gender and marital status — check profile field ID first, then literal keys
+        const gender        = (F_GENDER  ? extractName(details[F_GENDER])  : '') || extractName(details['gender'])        || extractName(details['sex'])     || '';
+        const maritalStatus = (F_MARITAL ? extractName(details[F_MARITAL]) : '') || extractName(details['marital_status']) || extractName(details['marital']) || '';
         // Photo: build full URL from p.path (relative path on Breeze CDN).
         // Ignore p.thumb/p.photo — they may be blob/data URLs or generic placeholders.
         // Skip any path that looks like a generic/default avatar.
