@@ -4206,21 +4206,26 @@ function openRegFromPeoplePrompt() {
   var label = type === 'baptism' ? 'Baptisms' : 'Confirmations';
   var cutoff = prompt(
     'Generate ' + label + ' register entries from people records.\n\n'
-    + 'Enter earliest date to include (YYYY-MM-DD):\n'
-    + '(leave blank to use 2020-01-01)',
-    '2020-01-01'
+    + 'Enter earliest date to include (YYYY-MM-DD), or leave blank for all dates:',
+    ''
   );
   if (cutoff === null) return; // cancelled
-  cutoff = cutoff.trim() || '2020-01-01';
+  cutoff = cutoff.trim() || '1900-01-01';
+  var btn = document.querySelector('[onclick="openRegFromPeoplePrompt()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
   api('/admin/api/import/register-from-people', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ cutoff: cutoff, types: [type] })
   }).then(function(d) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#128100; From People'; }
     if (d.error) { alert('Error: ' + d.error); return; }
     alert('Done. ' + d.imported + ' ' + label.toLowerCase() + ' entries created' + (d.skipped ? ', ' + d.skipped + ' already existed' : '') + '.');
     loadRegister();
-  }).catch(function(e) { alert('Error: ' + e.message); });
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#128100; From People'; }
+    alert('Error: ' + e.message);
+  });
 }
 function generateRegisterFromPeople() {
   var status = document.getElementById('reg-gen-status');
