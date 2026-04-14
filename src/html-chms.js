@@ -2882,6 +2882,15 @@ function syncPersonFromBreeze(breezeId, personId) {
     body: JSON.stringify({ breeze_id: breezeId })
   }).then(function(r) {
     if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+    // Always log the full diagnostic to the console — switch to Console tab (not Issues) to see it
+    console.log('[Breeze Sync] Full diagnostic response:', r);
+    if (r && r.diag) {
+      console.log('[Breeze Sync] Profile fields in Breeze:', r.diag.all_profile_field_names);
+      console.log('[Breeze Sync] Detail keys on person record:', r.diag.detail_keys_in_breeze);
+      console.log('[Breeze Sync] Detail sample:', r.diag.detail_sample);
+      console.log('[Breeze Sync] Field matches:', r.diag.field_matches);
+      console.log('[Breeze Sync] Fetch debug:', r.diag.fetch_debug);
+    }
     if (r && r.ok) {
       var u = r.updated || {};
       var lines = [];
@@ -2893,7 +2902,7 @@ function syncPersonFromBreeze(breezeId, personId) {
       if (u.maritalStatus)   lines.push('Marital status: ' + u.maritalStatus);
       var msg = lines.length
         ? 'Updated from Breeze:\n\u2022 ' + lines.join('\n\u2022 ')
-        : 'Sync complete \u2014 no new demographic data found in Breeze for this person.\n\nOpen the browser console (F12) and check the API response for diagnostic details.';
+        : 'Sync complete \u2014 no new demographic data found in Breeze for this person.\n\nSwitch to the Console tab (not Issues) in DevTools (F12) to see the full diagnostic — look for [Breeze Sync] entries.';
       alert(msg);
       // Reload the profile to show any updated values
       api('/admin/api/people/' + personId).then(function(p) { if (p && p.id) showProfile(p); });
