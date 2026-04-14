@@ -2711,7 +2711,9 @@ function showProfile(p) {
       + '</div>';
     var rightCol = '<div>'
       + '<div class="pv-section">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Demographics / Dates</div><button class="btn-secondary require-edit" style="font-size:.7rem;padding:2px 8px;" onclick="openPersonEdit(_currentPvPerson)">Edit</button></div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Demographics / Dates</div><div style="display:flex;gap:5px;">'
+      + (p.breeze_id ? '<button class="btn-secondary role-admin" style="font-size:.7rem;padding:2px 8px;" onclick="syncPersonFromBreeze(\''+esc(p.breeze_id)+'\','+p.id+')">&#8635; Sync Breeze</button>' : '')
+      + '<button class="btn-secondary require-edit" style="font-size:.7rem;padding:2px 8px;" onclick="openPersonEdit(_currentPvPerson)">Edit</button></div></div>'
       + '<div class="pv-field-grid">'
       + (p.gender        ? pvField('gender',         p.gender)        : '')
       + (p.marital_status? pvField('marital status', p.marital_status): '')
@@ -2868,6 +2870,39 @@ function savePvTags() {
       display.innerHTML = tagHtml || '<span style="color:var(--warm-gray);font-size:.82rem;font-style:italic;">No tags</span>';
     }
     document.getElementById('pv-tags-editor').style.display = 'none';
+  });
+}
+function syncPersonFromBreeze(breezeId, personId) {
+  var btn = event && event.currentTarget;
+  var origLabel = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing\u2026'; }
+  api('/admin/api/import/breeze-sync-person', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ breeze_id: breezeId })
+  }).then(function(r) {
+    if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+    if (r && r.ok) {
+      var u = r.updated || {};
+      var lines = [];
+      if (u.dob)             lines.push('Birthday: ' + u.dob);
+      if (u.baptismDate)     lines.push('Baptism: ' + u.baptismDate);
+      if (u.confirmDate)     lines.push('Confirmation: ' + u.confirmDate);
+      if (u.anniversaryDate) lines.push('Anniversary: ' + u.anniversaryDate);
+      if (u.gender)          lines.push('Gender: ' + u.gender);
+      if (u.maritalStatus)   lines.push('Marital status: ' + u.maritalStatus);
+      var msg = lines.length
+        ? 'Updated from Breeze:\n\u2022 ' + lines.join('\n\u2022 ')
+        : 'Sync complete \u2014 no new demographic data found in Breeze for this person.\n\nOpen the browser console (F12) and check the API response for diagnostic details.';
+      alert(msg);
+      // Reload the profile to show any updated values
+      api('/admin/api/people/' + personId).then(function(p) { if (p && p.id) showProfile(p); });
+    } else {
+      alert('Breeze sync failed: ' + ((r && r.error) || 'Unknown error'));
+    }
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+    alert('Breeze sync error: ' + (e.message || e));
   });
 }
 function applyAddressToHousehold(personId, householdId) {
