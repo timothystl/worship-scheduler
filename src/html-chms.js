@@ -530,7 +530,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item no-member" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
   <div class="s-item require-staff" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
   <div class="s-divider require-admin"></div>
-  <div class="s-item require-admin" data-tab="import" onclick="showTab('import')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
+  <div class="s-item require-admin" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-item require-admin" data-tab="volunteers" onclick="showTab('volunteers')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg><span class="s-tip">Volunteers</span></div>
   <a class="s-item require-admin" href="/scheduler" target="_blank" title="Worship Scheduler" style="text-decoration:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><span class="s-tip">Scheduler &#x2197;</span></a>
   <div class="s-bottom">
@@ -761,15 +761,91 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   </div>
 </div>
 
-<!-- ═══ IMPORT TAB ═══ -->
+<!-- ═══ IMPORT TAB (content moved to Settings) ═══ -->
 <div id="tab-import" class="tab-panel">
+</div>
+
+<!-- ═══ SETTINGS TAB ═══ -->
+<div id="tab-settings" class="tab-panel">
   <div style="padding:16px 20px 24px;max-width:900px;">
+    <div id="st-status" class="status-msg" style="margin-bottom:8px;"></div>
+    <!-- Users Card (admin only) -->
+    <div class="import-card require-admin" style="margin-bottom:14px;">
+      <h3>&#128100; Users</h3>
+      <p>Create named login accounts. Each user gets their own username and password for their role.</p>
+      <div id="st-users-list" style="margin:12px 0;"></div>
+      <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="openUserForm(null)">+ Add User</button>
+    </div>
+    <!-- Church Info Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#9962; Church Information</h3>
+      <p>Used in giving letters, email headers, and reports.</p>
+      <div class="modal-2col" style="margin-bottom:10px;">
+        <div class="field"><label>Church Name</label><input type="text" id="st-church-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>EIN (Tax ID)</label><input type="text" id="st-ein" placeholder="XX-XXXXXXX" style="width:100%;"></div>
+      </div>
+      <div class="modal-2col" style="margin-bottom:12px;">
+        <div class="field"><label>From Name (for emails)</label><input type="text" id="st-from-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>From Email</label><input type="email" id="st-from-email" placeholder="giving@yourdomain.org" style="width:100%;"></div>
+      </div>
+      <button class="btn-primary" onclick="saveSettings()">Save Church Info</button>
+    </div>
+    <!-- Letter Template Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#128140; Year-End Giving Letter Template</h3>
+      <p>Used when generating giving letters. Available placeholders: <code>{{name}}</code>, <code>{{year}}</code>, <code>{{total}}</code>, <code>{{ein}}</code>, <code>{{date}}</code>, <code>{{gift_table}}</code></p>
+      <textarea id="st-letter-tpl" rows="10" style="width:100%;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
+      <div style="margin-top:8px;">
+        <button class="btn-primary" onclick="saveSettings()">Save Template</button>
+        <button class="btn-secondary" onclick="resetLetterTemplate()" style="margin-left:8px;">Reset to Default</button>
+      </div>
+    </div>
+    <!-- Tags Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#9881; Tags</h3>
+      <p>Tags are used to categorize people. You can filter by tag in the People tab.</p>
+      <div id="settings-tags-list" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="st-new-tag-name" placeholder="New tag name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:160px;">
+        <input type="color" id="st-new-tag-color" value="#2E7EA6" style="width:40px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">
+        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="createTagSettings()">Add Tag</button>
+      </div>
+    </div>
+    <!-- Member Types Card -->
+    <div class="import-card" style="margin-bottom:14px;">
+      <h3>&#9965; Member Types</h3>
+      <p>Define the member types available for people records.</p>
+      <div id="settings-member-types-list" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="st-new-type-name" placeholder="New type name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:180px;">
+        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="addMemberTypeSettings()">Add Type</button>
+      </div>
+    </div>
+    <!-- Breeze Status Mapping Card -->
     <div class="import-card">
-      <h3>&#9729; Sync from Breeze</h3>
+      <h3>&#128279; Breeze Status &rarr; Member Type Mapping</h3>
+      <p>After a Breeze import, each status name that came in from Breeze appears here. Map it to your local member type so future imports assign the right type automatically.</p>
+      <div id="settings-mt-map-list" style="margin-bottom:10px;"></div>
+      <div id="settings-mt-map-hint" style="font-size:.8rem;color:var(--warm-gray);"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+        <button class="btn-primary" style="font-size:.82rem;" id="mt-map-save-btn" onclick="saveMtMap()">Save Mapping</button>
+        <button class="btn-secondary" style="font-size:.82rem;" onclick="loadMemberTypeMap()">&#8635; Refresh</button>
+        <span id="mt-map-status" style="font-size:.82rem;"></span>
+      </div>
+    </div>
+
+    <!-- ── Data Import & Sync ─────────────────────────────────── -->
+    <h2 style="font-size:1rem;font-weight:700;margin:24px 0 12px;color:var(--warm-gray);">Data Import &amp; Sync</h2>
+    <div class="import-card">
+      <h3>&#9729; Sync People from Breeze</h3>
       <p>Pull people records directly from the Breeze API. Existing records (matched by Breeze ID) are updated; new people are added. Dates and photos already in the system are preserved if Breeze doesn't return a value.</p>
-      <button class="btn-primary" onclick="runBreezeImport()">Sync People from Breeze</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <button class="btn-primary" onclick="runBreezeImport()">Sync People from Breeze</button>
+        <button class="btn-secondary" onclick="runBreezeTagSync()">&#127991; Sync Tags Only</button>
+      </div>
       <div class="progress-bar" id="breeze-bar"><div class="progress-fill" id="breeze-fill" style="width:0%"></div></div>
       <div class="import-status" id="breeze-status"></div>
+      <div class="import-status" id="breeze-tag-status" style="margin-top:4px;"></div>
       <div id="breeze-diag" style="display:none;margin-top:10px;font-size:.78rem;font-family:monospace;background:var(--linen);padding:10px;border-radius:6px;white-space:pre-wrap;"></div>
     </div>
     <div class="import-card">
@@ -846,77 +922,6 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <p>Permanently deletes all giving entries and batches from the database. Use this to start fresh before re-importing correct data. <strong>This cannot be undone.</strong></p>
       <button style="background:#e74c3c;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;" onclick="clearAllGiving()">&#9888; Clear All Giving Data</button>
       <div class="import-status" id="clear-giving-status"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ SETTINGS TAB ═══ -->
-<div id="tab-settings" class="tab-panel">
-  <div style="padding:16px 20px 24px;max-width:900px;">
-    <div id="st-status" class="status-msg" style="margin-bottom:8px;"></div>
-    <!-- Users Card (admin only) -->
-    <div class="import-card require-admin" style="margin-bottom:14px;">
-      <h3>&#128100; Users</h3>
-      <p>Create named login accounts. Each user gets their own username and password for their role.</p>
-      <div id="st-users-list" style="margin:12px 0;"></div>
-      <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="openUserForm(null)">+ Add User</button>
-    </div>
-    <!-- Church Info Card -->
-    <div class="import-card" style="margin-bottom:14px;">
-      <h3>&#9962; Church Information</h3>
-      <p>Used in giving letters, email headers, and reports.</p>
-      <div class="modal-2col" style="margin-bottom:10px;">
-        <div class="field"><label>Church Name</label><input type="text" id="st-church-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
-        <div class="field"><label>EIN (Tax ID)</label><input type="text" id="st-ein" placeholder="XX-XXXXXXX" style="width:100%;"></div>
-      </div>
-      <div class="modal-2col" style="margin-bottom:12px;">
-        <div class="field"><label>From Name (for emails)</label><input type="text" id="st-from-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
-        <div class="field"><label>From Email</label><input type="email" id="st-from-email" placeholder="giving@yourdomain.org" style="width:100%;"></div>
-      </div>
-      <button class="btn-primary" onclick="saveSettings()">Save Church Info</button>
-    </div>
-    <!-- Letter Template Card -->
-    <div class="import-card" style="margin-bottom:14px;">
-      <h3>&#128140; Year-End Giving Letter Template</h3>
-      <p>Used when generating giving letters. Available placeholders: <code>{{name}}</code>, <code>{{year}}</code>, <code>{{total}}</code>, <code>{{ein}}</code>, <code>{{date}}</code>, <code>{{gift_table}}</code></p>
-      <textarea id="st-letter-tpl" rows="10" style="width:100%;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
-      <div style="margin-top:8px;">
-        <button class="btn-primary" onclick="saveSettings()">Save Template</button>
-        <button class="btn-secondary" onclick="resetLetterTemplate()" style="margin-left:8px;">Reset to Default</button>
-      </div>
-    </div>
-    <!-- Tags Card -->
-    <div class="import-card" style="margin-bottom:14px;">
-      <h3>&#9881; Tags</h3>
-      <p>Tags are used to categorize people. You can filter by tag in the People tab.</p>
-      <div id="settings-tags-list" style="margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="st-new-tag-name" placeholder="New tag name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:160px;">
-        <input type="color" id="st-new-tag-color" value="#2E7EA6" style="width:40px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">
-        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="createTagSettings()">Add Tag</button>
-      </div>
-    </div>
-    <!-- Member Types Card -->
-    <div class="import-card" style="margin-bottom:14px;">
-      <h3>&#9965; Member Types</h3>
-      <p>Define the member types available for people records.</p>
-      <div id="settings-member-types-list" style="margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" id="st-new-type-name" placeholder="New type name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:180px;">
-        <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="addMemberTypeSettings()">Add Type</button>
-      </div>
-    </div>
-    <!-- Breeze Status Mapping Card -->
-    <div class="import-card">
-      <h3>&#128279; Breeze Status &rarr; Member Type Mapping</h3>
-      <p>After a Breeze import, each status name that came in from Breeze appears here. Map it to your local member type so future imports assign the right type automatically.</p>
-      <div id="settings-mt-map-list" style="margin-bottom:10px;"></div>
-      <div id="settings-mt-map-hint" style="font-size:.8rem;color:var(--warm-gray);"></div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
-        <button class="btn-primary" style="font-size:.82rem;" id="mt-map-save-btn" onclick="saveMtMap()">Save Mapping</button>
-        <button class="btn-secondary" style="font-size:.82rem;" onclick="loadMemberTypeMap()">&#8635; Refresh</button>
-        <span id="mt-map-status" style="font-size:.82rem;"></span>
-      </div>
     </div>
   </div>
 </div>
@@ -1401,7 +1406,7 @@ window.onerror = function(msg, src, line, col, err) {
   return false;
 };
 // ── STATE ────────────────────────────────────────────────────────────
-var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagId:'',offset:0,limit:100,sort:'last_name',dir:'asc'};
+var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagIds:[],offset:0,limit:100,sort:'last_name',dir:'asc'};
 var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
@@ -1624,10 +1629,9 @@ function applyRoleUI() {
       badge.textContent = d.display_name || _userRole;
       badge.style.display = 'inline-block';
     }
-    // Member users land on People tab (no dashboard access)
-    if (_userRole === 'member') { showTab('people'); }
-    else { showTab('home'); }
-  }).catch(function() { showTab('home'); });
+    // All roles land on People tab directly
+    showTab('people');
+  }).catch(function() { showTab('people'); });
 }
 
 // ── TAGS ──────────────────────────────────────────────────────────────
@@ -1674,16 +1678,16 @@ function renderFilterDrawer() {
         return fdRadio('fd-mt', v, t, peopleFilter.mt === v, 'setFdMt(\'' + v + '\')');
       }).join('');
   }
-  // Tags
+  // Tags — checkboxes so multiple tags can be AND-filtered simultaneously
   var tEl = document.getElementById('fd-tags');
   if (tEl) {
-    tEl.innerHTML = fdRadio('fd-tag', '', 'All Tags', !peopleFilter.tagId, 'setFdTag(\'\')')
-      + allTags.map(function(t) {
-        return '<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:.9rem;border-radius:6px;">'
-          + '<input type="radio" name="fd-tag" value="' + t.id + '" ' + (String(peopleFilter.tagId) === String(t.id) ? 'checked' : '') + ' onchange="setFdTag(\'' + t.id + '\')" style="flex-shrink:0;">'
-          + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
-          + esc(t.name) + '</label>';
-      }).join('');
+    tEl.innerHTML = allTags.map(function(t) {
+      var checked = peopleFilter.tagIds.indexOf(String(t.id)) !== -1;
+      return '<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:.9rem;border-radius:6px;">'
+        + '<input type="checkbox" value="' + t.id + '" ' + (checked ? 'checked' : '') + ' onchange="toggleFdTag(\'' + t.id + '\',this.checked)" style="flex-shrink:0;">'
+        + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
+        + esc(t.name) + '</label>';
+    }).join('');
   }
 }
 function fdRadio(name, val, label, checked, onchange) {
@@ -1698,23 +1702,35 @@ function setFdMt(v) {
   updateFilterBadge();
   updateFdCount();
 }
-function setFdTag(v) {
-  peopleFilter.tagId = v;
+function toggleFdTag(id, on) {
+  var sid = String(id);
+  var idx = peopleFilter.tagIds.indexOf(sid);
+  if (on && idx === -1) peopleFilter.tagIds.push(sid);
+  else if (!on && idx !== -1) peopleFilter.tagIds.splice(idx, 1);
   loadPeople(true);
+  renderActiveFilterChips();
+  updateFilterBadge();
+  updateFdCount();
+}
+// Keep legacy setFdTag for any existing callers
+function setFdTag(v) {
+  peopleFilter.tagIds = v ? [String(v)] : [];
+  loadPeople(true);
+  renderFilterDrawer();
   renderActiveFilterChips();
   updateFilterBadge();
   updateFdCount();
 }
 function clearAllFilters() {
   peopleFilter.mt = '';
-  peopleFilter.tagId = '';
+  peopleFilter.tagIds = [];
   loadPeople(true);
   renderFilterDrawer();
   renderActiveFilterChips();
   updateFilterBadge();
 }
 function updateFilterBadge() {
-  var count = (peopleFilter.mt ? 1 : 0) + (peopleFilter.tagId ? 1 : 0);
+  var count = (peopleFilter.mt ? 1 : 0) + peopleFilter.tagIds.length;
   var badge = document.getElementById('p-filter-count');
   if (badge) { badge.textContent = count; badge.style.display = count > 0 ? 'inline-flex' : 'none'; }
 }
@@ -1730,10 +1746,10 @@ function renderActiveFilterChips() {
     var label = _memberTypes.find(function(t){ return t.toLowerCase().replace(/\s+/g,'-') === peopleFilter.mt; }) || peopleFilter.mt;
     chips.push(filterChip(label, 'var(--steel-anchor)', "setFdMt('')"));
   }
-  if (peopleFilter.tagId) {
-    var tag = allTags.find(function(t){ return String(t.id) === String(peopleFilter.tagId); });
-    if (tag) chips.push(filterChip(tag.name, tag.color, "setFdTag('')"));
-  }
+  peopleFilter.tagIds.forEach(function(tid) {
+    var tag = allTags.find(function(t){ return String(t.id) === tid; });
+    if (tag) chips.push(filterChip(tag.name, tag.color, "toggleFdTag('" + tid + "',false)"));
+  });
   c.innerHTML = chips.length
     ? chips.join('') + (chips.length > 1 ? '<button onclick="clearAllFilters()" style="font-size:.75rem;color:var(--teal);background:none;border:none;cursor:pointer;padding:2px 6px;font-weight:600;">Clear all</button>' : '')
     : '';
@@ -2398,7 +2414,7 @@ function loadPeople(resetPage) {
   var params = new URLSearchParams();
   if (peopleFilter.q) params.set('q', peopleFilter.q);
   if (peopleFilter.mt) params.set('member_type', peopleFilter.mt);
-  if (peopleFilter.tagId) params.set('tag_id', peopleFilter.tagId);
+  if (peopleFilter.tagIds && peopleFilter.tagIds.length) params.set('tag_ids', peopleFilter.tagIds.join(','));
   params.set('limit', peopleFilter.limit);
   params.set('offset', peopleFilter.offset);
   params.set('sort', peopleFilter.sort || 'last_name');
@@ -4987,6 +5003,9 @@ function runBreezeImport() {
         } else {
           msg += ' Status field: "' + lastStatusField.name + '". Statuses seen: ' + [...allStatusesSeen].join(', ') + '.';
         }
+        if (d.tags_synced !== undefined) {
+          msg += ' Tags: ' + d.tags_synced + ' synced, ' + (d.tag_assignments || 0) + ' assignments.';
+        }
         status.textContent = msg;
         status.className = (lastStatusField && allStatusesSeen.size > 0) ? 'import-status ok' : 'import-status warn';
         fill.style.width = '100%';
@@ -4997,6 +5016,27 @@ function runBreezeImport() {
     }).catch(function(e) { status.textContent = 'Network error: ' + e.message; status.className = 'import-status err'; });
   }
   doPage(0);
+}
+function runBreezeTagSync() {
+  var btn = event && event.currentTarget;
+  var origLabel = btn ? btn.innerHTML : '';
+  var status = document.getElementById('breeze-tag-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing tags\u2026'; }
+  if (status) { status.textContent = 'Syncing tags\u2026'; status.className = 'import-status'; }
+  api('/admin/api/import/breeze-sync-tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function(r) {
+      if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+      if (r && r.ok) {
+        var msg = 'Tags synced: ' + (r.tags_synced || 0) + ' tags, ' + (r.tag_assignments || 0) + ' assignments.';
+        if (status) { status.textContent = msg; status.className = 'import-status ok'; }
+        loadTags();
+      } else {
+        if (status) { status.textContent = 'Tag sync failed: ' + ((r && r.error) || 'Unknown error'); status.className = 'import-status err'; }
+      }
+    }).catch(function(e) {
+      if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+      if (status) { status.textContent = 'Tag sync error: ' + (e.message || e); status.className = 'import-status err'; }
+    });
 }
 function importGivingCSV(file) {
   if (!file) file = document.getElementById('giving-csv-file').files[0];
