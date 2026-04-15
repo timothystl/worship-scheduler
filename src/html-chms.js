@@ -3432,6 +3432,7 @@ function savePerson() {
   var meth = id ? 'PUT' : 'POST';
   api(url, {method:meth, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(r) {
     if (r.ok) {
+      reEnablePersonSave();
       closeModal('person-modal');
       var pvId = _currentPvPerson ? (_currentPvPerson.id || r.id) : null;
       if (pvId) {
