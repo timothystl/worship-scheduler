@@ -29,7 +29,7 @@ Items below were provided by the admin on 2026-04-15. Needs clarification marked
 ### Auth / Navigation
 | # | Description | Priority | Status |
 |---|-------------|----------|--------|
-| A1 | Login screen should require both **username and password** — currently only a password field. Need to clarify: shared password now → per-user credentials? Or just a missing username field? ❓ | High | Queued |
+| A1 | Login currently accepts password-only even though both fields are shown — **enforce both username + password as required**. Per-user credentials with roles (Admin / Finance / Staff / Member). User management exists in Settings but is **broken** — needs dedicated fix. | High | Queued — dedicated session |
 | A2 | After login, redirect directly to the CHMS/people screen instead of a splash or home page | Medium | Queued |
 
 ### Performance / UX Polish
@@ -38,7 +38,7 @@ Items below were provided by the admin on 2026-04-15. Needs clarification marked
 | P1 | Paginate all list views at **25 items per page** to speed up load times (people, households, giving, etc.) | High | Queued |
 | P2 | Move the Breeze **import** controls into the **Settings tab** — currently hard to find | Medium | Queued |
 | P3 | Edit gifts **inline on the person profile** — no separate window/tab needed | Medium | Queued |
-| P4 | Edit **name and contact info** directly from the profile view (❓ clarify: is Edit button missing, or opens modal you want inline?) | Medium | Queued |
+| P4 | **Inline field editing on profile** — master Edit button + modal is fine to keep, but every individual field should also be editable inline (click the value → edit in place). Both paths should work. | Medium | Queued |
 
 ### Household & People Management
 | # | Description | Priority | Status |
@@ -51,7 +51,7 @@ Items below were provided by the admin on 2026-04-15. Needs clarification marked
 | # | Description | Priority | Status |
 |---|-------------|----------|--------|
 | D1 | Directory print defaults to **member households only**; offer option to select which groups to include; non-member members of included households are still printed | High | Queued |
-| D2 | Add **"Hide from directory" checkbox** on each profile | Medium | Queued |
+| D2 | **Granular directory privacy per field** on each profile — individual toggles to hide: address, phone, email, profile photo. A person with everything hidden still appears in the directory by name only (e.g. "John and Sally Smith" with no contact details). Not a single hide-all checkbox. | Medium | Queued |
 | D3 | Printed directory formatted for **8.5×11**, includes **profile photos**, paginates **alphabetically** (A–C page 1, D–F page 2, etc.) | Medium | Queued |
 
 ### Breeze Import / Sync
