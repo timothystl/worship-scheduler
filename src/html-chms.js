@@ -1393,9 +1393,17 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('member-types-modal')">Close</button></div>
   </div>
 </div>
+<div class="modal-overlay" id="add-to-hh-modal" onclick="if(event.target===this)closeModal('add-to-hh-modal')">
+  <div class="modal">
+    <h2>Add Person to Household</h2>
+    <input type="text" id="add-hh-search" placeholder="Search by name…" style="width:100%;margin-bottom:10px;" oninput="searchAddToHh(this.value)">
+    <div id="add-hh-results" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;min-height:60px;"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('add-to-hh-modal')">Cancel</button></div>
+  </div>
+</div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-15-v2';
+var DEPLOY_VERSION = '2026-04-15-v3';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -1405,7 +1413,7 @@ window.onerror = function(msg, src, line, col, err) {
   return false;
 };
 // ── STATE ────────────────────────────────────────────────────────────
-var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagIds:[],offset:0,limit:100,sort:'last_name',dir:'asc'};
+var allTags = [], allFunds = [], currentBatchId = null, peopleFilter = {q:'',mt:'',tagIds:[],offset:0,limit:25,sort:'last_name',dir:'asc'};
 var _peopleTotal = 0;
 var _pDebounce, _hDebounce;
 var _loadedServices = [];
@@ -2944,28 +2952,53 @@ function applyAddressToHousehold(personId, householdId) {
   });
 }
 // Add-to-household: search for existing person and link them
+var _addToHhId = null, _addToHhPeople = {}, _addToHhTimer = null;
 function openAddToHouseholdModal(householdId) {
-  var name = prompt('Enter the name of a person to add to this household:');
-  if (!name) return;
-  api('/admin/api/people?q='+encodeURIComponent(name)+'&limit=10').then(function(d) {
-    var people = d.people || [];
-    if (!people.length) { alert('No people found matching "'+name+'".'); return; }
-    var list = people.map(function(p,i){return (i+1)+'. '+p.first_name+' '+p.last_name+(p.household_name?' ('+p.household_name+')':'');}).join('\n');
-    var idx = parseInt(prompt('Select a person:\n'+list+'\n\nEnter number:')) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= people.length) return;
-    var chosen = people[idx];
-    api('/admin/api/people/'+chosen.id, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(Object.assign({}, chosen, { household_id: householdId, tag_ids: (chosen.tags||[]).map(function(t){return t.id;}) }))
-    }).then(function(r) {
-      if (r.ok) {
-        alert(chosen.first_name+' '+chosen.last_name+' added to household.');
-        if (_currentPvPerson && _currentPvPerson.household_id === householdId) {
-          loadPvFamily(householdId, _currentPvPerson.id);
-        }
-      } else alert('Error: '+(r.error||'unknown'));
+  _addToHhId = householdId;
+  _addToHhPeople = {};
+  var s = document.getElementById('add-hh-search');
+  if (s) s.value = '';
+  var r = document.getElementById('add-hh-results');
+  if (r) r.innerHTML = '<p style="color:var(--warm-gray);text-align:center;padding:16px;font-size:.88rem;">Type a name to search…</p>';
+  openModal('add-to-hh-modal');
+  setTimeout(function(){ if (s) s.focus(); }, 100);
+}
+function searchAddToHh(q) {
+  if (_addToHhTimer) clearTimeout(_addToHhTimer);
+  var el = document.getElementById('add-hh-results');
+  if (!q || q.length < 2) {
+    el.innerHTML = '<p style="color:var(--warm-gray);text-align:center;padding:16px;font-size:.88rem;">Type a name to search…</p>';
+    return;
+  }
+  _addToHhTimer = setTimeout(function() {
+    el.innerHTML = '<p style="color:var(--warm-gray);text-align:center;padding:16px;font-size:.88rem;">Searching…</p>';
+    api('/admin/api/people?q='+encodeURIComponent(q)+'&limit=10').then(function(d) {
+      var people = d.people || [];
+      _addToHhPeople = {};
+      people.forEach(function(p){ _addToHhPeople[p.id] = p; });
+      if (!people.length) { el.innerHTML = '<p style="color:var(--warm-gray);text-align:center;padding:16px;font-size:.88rem;">No people found</p>'; return; }
+      el.innerHTML = people.map(function(p) {
+        var hhTag = p.household_name ? ' <span style="font-size:.75rem;color:var(--warm-gray);background:var(--bg-alt);border-radius:4px;padding:1px 6px;margin-left:4px;">'+esc(p.household_name)+'</span>' : '';
+        return '<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+          +'<span style="font-size:.92rem;">'+esc(p.first_name)+' '+esc(p.last_name)+hhTag+'</span>'
+          +'<button class="btn-primary" style="font-size:.78rem;padding:4px 10px;white-space:nowrap;" onclick="confirmAddToHh('+p.id+')">Add</button>'
+          +'</div>';
+      }).join('');
     });
+  }, 300);
+}
+function confirmAddToHh(personId) {
+  var p = _addToHhPeople[personId];
+  if (!p) return;
+  var tagIds = (p.tags||[]).map(function(t){ return t.id; });
+  api('/admin/api/people/'+personId, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(Object.assign({}, p, { household_id: _addToHhId, tag_ids: tagIds }))
+  }).then(function(r) {
+    if (r.ok) {
+      closeModal('add-to-hh-modal');
+      if (_currentPvPerson && _currentPvPerson.household_id === _addToHhId) loadPvFamily(_addToHhId, _currentPvPerson.id);
+    } else alert('Error: '+(r.error||'unknown'));
   });
 }
 function showPvTab(name) {
