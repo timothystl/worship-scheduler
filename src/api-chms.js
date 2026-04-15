@@ -2153,49 +2153,56 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
   }
 
   // ── Breeze Tag-Only Sync ─────────────────────────────────────────
-  // Syncs tags and tag assignments from Breeze independently of a full people import.
-  // Clears existing assignments for Breeze-sourced tags and re-syncs so removals are caught.
+  // Two-phase design to stay under Cloudflare's subrequest limit per invocation:
+  //   phase=list  → fetch all tags from Breeze, upsert locally, return tag list
+  //   phase=sync  → clear + re-sync ONE tag's members (called once per tag by frontend)
   if (seg === 'import/breeze-sync-tags' && method === 'POST') { try {
     const subdomain = env.BREEZE_SUBDOMAIN;
     const apiKey    = env.BREEZE_API_KEY;
     if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
-    // 1. Fetch all tags from Breeze
-    const tagRes = await fetch(`https://${subdomain}.breezechms.com/api/tags/list_tags`, { headers: { 'Api-key': apiKey } });
-    if (!tagRes.ok) return json({ error: `Breeze API error: ${tagRes.status}` }, 502);
-    let allBreezeTagsRaw; try { allBreezeTagsRaw = await tagRes.json(); } catch { return json({ error: 'Invalid JSON from Breeze tags endpoint' }, 502); }
-    const allBreezeTags = Array.isArray(allBreezeTagsRaw) ? allBreezeTagsRaw : [];
-    let tagsSynced = 0, tagAssignments = 0;
-    const errors = [];
-    // 2. Upsert tag records
-    for (const t of allBreezeTags) {
-      const bId = String(t.id);
-      const tName = (t.name || '').trim();
-      if (!tName) continue;
-      const existing = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bId).first();
-      if (existing) {
-        await db.prepare('UPDATE tags SET name=? WHERE breeze_id=?').bind(tName, bId).run();
-      } else {
-        const byName = await db.prepare('SELECT id FROM tags WHERE name=? AND (breeze_id="" OR breeze_id IS NULL)').bind(tName).first();
-        if (byName) {
-          await db.prepare('UPDATE tags SET breeze_id=? WHERE id=?').bind(bId, byName.id).run();
+    let b = {}; try { b = await req.json(); } catch {}
+    const phase = b.phase || 'list';
+
+    if (phase === 'list') {
+      // Fetch all tags from Breeze and upsert records. Returns tag list for frontend to iterate.
+      const tagRes = await fetch(`https://${subdomain}.breezechms.com/api/tags/list_tags`, { headers: { 'Api-key': apiKey } });
+      if (!tagRes.ok) return json({ error: `Breeze API error: ${tagRes.status}` }, 502);
+      let rawTags; try { rawTags = await tagRes.json(); } catch { return json({ error: 'Invalid JSON from Breeze' }, 502); }
+      const allBreezeTags = Array.isArray(rawTags) ? rawTags : [];
+      const tags = [];
+      for (const t of allBreezeTags) {
+        const bId = String(t.id);
+        const tName = (t.name || '').trim();
+        if (!tName) continue;
+        let localId;
+        const existing = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bId).first();
+        if (existing) {
+          await db.prepare('UPDATE tags SET name=? WHERE breeze_id=?').bind(tName, bId).run();
+          localId = existing.id;
         } else {
-          await db.prepare('INSERT INTO tags (name, breeze_id) VALUES (?,?)').bind(tName, bId).run();
+          const byName = await db.prepare('SELECT id FROM tags WHERE name=? AND (breeze_id="" OR breeze_id IS NULL)').bind(tName).first();
+          if (byName) {
+            await db.prepare('UPDATE tags SET breeze_id=? WHERE id=?').bind(bId, byName.id).run();
+            localId = byName.id;
+          } else {
+            const r = await db.prepare('INSERT INTO tags (name, breeze_id) VALUES (?,?)').bind(tName, bId).run();
+            localId = r.meta?.last_row_id;
+          }
         }
+        if (localId) tags.push({ breeze_id: bId, local_id: localId, name: tName });
       }
-      tagsSynced++;
+      return json({ ok: true, tags });
     }
-    // 3. For each Breeze tag, clear existing assignments then re-sync from Breeze.
-    //    This ensures people removed from a tag in Breeze get un-tagged locally too.
-    for (const t of allBreezeTags) {
-      const bTagId = String(t.id);
-      const tagRow = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bTagId).first();
-      if (!tagRow) continue;
-      const localTagId = tagRow.id;
-      // Delete all current assignments for this Breeze-sourced tag
+
+    if (phase === 'sync') {
+      // Sync a single tag's member assignments. Called once per tag by the frontend loop.
+      const bTagId = String(b.tag_id || '');
+      const localTagId = b.local_tag_id;
+      if (!bTagId || !localTagId) return json({ ok: false, error: 'Missing tag_id or local_tag_id' }, 400);
+      // Clear existing assignments so removals in Breeze are reflected locally
       await db.prepare('DELETE FROM person_tags WHERE tag_id=?').bind(localTagId).run();
-      // Re-fetch all members of this tag from Breeze
       const filterJson = encodeURIComponent(`{"tag_contains": "y_${bTagId}"}`);
-      let tagOffset = 0;
+      let assignments = 0, tagOffset = 0;
       const tagLimit = 500;
       while (true) {
         let memText = '';
@@ -2205,7 +2212,7 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
             { headers: { 'Api-key': apiKey } }
           );
           memText = await memRes.text();
-        } catch (fetchErr) { errors.push({ tag: t.name, error: fetchErr.message }); break; }
+        } catch { break; }
         if (!memText || !memText.trim()) break;
         let tagMembers = [];
         try {
@@ -2220,14 +2227,16 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
           if (!personRow) continue;
           try {
             await db.prepare('INSERT OR IGNORE INTO person_tags (person_id, tag_id) VALUES (?,?)').bind(personRow.id, localTagId).run();
-            tagAssignments++;
+            assignments++;
           } catch {}
         }
         if (tagMembers.length < tagLimit) break;
         tagOffset += tagLimit;
       }
+      return json({ ok: true, assignments });
     }
-    return json({ ok: true, tags_synced: tagsSynced, tag_assignments: tagAssignments, errors });
+
+    return json({ error: 'Unknown phase' }, 400);
   } catch (e) {
     return json({ ok: false, error: 'Tag sync error: ' + e.message }, 500);
   } }

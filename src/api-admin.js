@@ -99,11 +99,14 @@ export async function handleAdminLogin(req, env) {
   }
   const submittedUser = (params.get('username') || '').trim().toLowerCase();
   const submittedPass = params.get('password') || '';
+  if (!submittedUser) {
+    return html(LOGIN_HTML.replace('<!--ERROR-->', '<p style="color:#c0392b;margin-bottom:1rem;">Username is required.</p>'));
+  }
   let matchedRole = null;
   let matchedUsername = '';
 
   // ── 1. Check app_users table ─────────────────────────────────────
-  if (submittedUser && env.DB) {
+  if (env.DB) {
     const dbUser = await env.DB.prepare(
       `SELECT id, username, password_hash, role, active FROM app_users WHERE LOWER(username)=? LIMIT 1`
     ).bind(submittedUser).first().catch(() => null);
@@ -116,14 +119,15 @@ export async function handleAdminLogin(req, env) {
   }
 
   // ── 2. Fall back to env-var passwords (break-glass / initial setup) ──
+  // Username must match the role name exactly (admin/finance/staff/member)
   if (!matchedRole) {
     const financePassword = env.FINANCE_PASSWORD || '';
     const staffPassword   = env.STAFF_PASSWORD   || '';
     const memberPassword  = env.MEMBER_PASSWORD  || '';
-    if      (submittedPass === adminPassword)                             matchedRole = 'admin';
-    else if (financePassword && submittedPass === financePassword)        matchedRole = 'finance';
-    else if (staffPassword   && submittedPass === staffPassword)          matchedRole = 'staff';
-    else if (memberPassword  && submittedPass === memberPassword)         matchedRole = 'member';
+    if      (submittedUser === 'admin'   && submittedPass === adminPassword)                   matchedRole = 'admin';
+    else if (submittedUser === 'finance' && financePassword && submittedPass === financePassword) matchedRole = 'finance';
+    else if (submittedUser === 'staff'   && staffPassword   && submittedPass === staffPassword)   matchedRole = 'staff';
+    else if (submittedUser === 'member'  && memberPassword  && submittedPass === memberPassword)  matchedRole = 'member';
   }
 
   if (matchedRole) {
