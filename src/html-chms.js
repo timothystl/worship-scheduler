@@ -530,7 +530,6 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="s-item no-member" data-tab="reports" onclick="showTab('reports')"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg><span class="s-tip">Reports</span></div>
   <div class="s-item require-staff" data-tab="register" onclick="showTab('register')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/></svg><span class="s-tip">Register</span></div>
   <div class="s-divider require-admin"></div>
-  <div class="s-item require-admin" data-tab="settings" onclick="showTab('settings')"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span class="s-tip">Import</span></div>
   <div class="s-item require-admin" data-tab="volunteers" onclick="showTab('volunteers')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg><span class="s-tip">Volunteers</span></div>
   <a class="s-item require-admin" href="/scheduler" target="_blank" title="Worship Scheduler" style="text-decoration:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><span class="s-tip">Scheduler &#x2197;</span></a>
   <div class="s-bottom">
@@ -1396,7 +1395,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-14-v27';
+var DEPLOY_VERSION = '2026-04-15-v2';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -1629,9 +1628,10 @@ function applyRoleUI() {
       badge.textContent = d.display_name || _userRole;
       badge.style.display = 'inline-block';
     }
-    // All roles land on People tab directly
-    showTab('people');
-  }).catch(function() { showTab('people'); });
+    // Member users land on People tab; everyone else gets the home dashboard
+    if (_userRole === 'member') { showTab('people'); }
+    else { showTab('home'); }
+  }).catch(function() { showTab('home'); });
 }
 
 // ── TAGS ──────────────────────────────────────────────────────────────
@@ -5022,17 +5022,35 @@ function runBreezeTagSync() {
   var origLabel = btn ? btn.innerHTML : '';
   var status = document.getElementById('breeze-tag-status');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing tags\u2026'; }
-  if (status) { status.textContent = 'Syncing tags\u2026'; status.className = 'import-status'; }
-  api('/admin/api/import/breeze-sync-tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  if (status) { status.textContent = 'Fetching tag list\u2026'; status.className = 'import-status'; }
+  // Phase 1: fetch + upsert tag list (one Breeze API call)
+  api('/admin/api/import/breeze-sync-tags', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({phase:'list'}) })
     .then(function(r) {
-      if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
-      if (r && r.ok) {
-        var msg = 'Tags synced: ' + (r.tags_synced || 0) + ' tags, ' + (r.tag_assignments || 0) + ' assignments.';
-        if (status) { status.textContent = msg; status.className = 'import-status ok'; }
-        loadTags();
-      } else {
-        if (status) { status.textContent = 'Tag sync failed: ' + ((r && r.error) || 'Unknown error'); status.className = 'import-status err'; }
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Unknown error');
+      var tags = r.tags || [];
+      var total = tags.length;
+      var done = 0, totalAssignments = 0;
+      // Phase 2: sync each tag's members one-at-a-time (one Breeze API call per tag)
+      function syncNext() {
+        if (done >= total) {
+          if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+          var msg = 'Tags synced: ' + total + ' tags, ' + totalAssignments + ' assignments.';
+          if (status) { status.textContent = msg; status.className = 'import-status ok'; }
+          loadTags();
+          return;
+        }
+        var tag = tags[done];
+        if (status) status.textContent = 'Syncing tag ' + (done+1) + '/' + total + ': ' + tag.name + '\u2026';
+        api('/admin/api/import/breeze-sync-tags', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({phase:'sync', tag_id: tag.breeze_id, local_tag_id: tag.local_id})
+        }).then(function(sr) {
+          totalAssignments += (sr && sr.assignments) || 0;
+          done++;
+          syncNext();
+        }).catch(function() { done++; syncNext(); }); // skip failed tags and continue
       }
+      syncNext();
     }).catch(function(e) {
       if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
       if (status) { status.textContent = 'Tag sync error: ' + (e.message || e); status.className = 'import-status err'; }
