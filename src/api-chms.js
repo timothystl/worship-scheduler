@@ -151,6 +151,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const q = url.searchParams.get('q') || '';
     const mt = url.searchParams.get('member_type') || '';
     const tagId = url.searchParams.get('tag_id') || '';
+    const tagIdsRaw = url.searchParams.get('tag_ids') || '';
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const SORT_COLS = { last_name: 'p.last_name', first_name: 'p.first_name', member_type: 'p.member_type', created_at: 'p.created_at' };
@@ -164,6 +165,12 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     if (role === 'member') { where += ` AND LOWER(p.member_type)='member'`; }
     if (mt) { where += ' AND LOWER(p.member_type)=LOWER(?)'; binds.push(mt); }
     if (tagId) { where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)'; binds.push(tagId); }
+    // Multi-tag AND filter: each tag must match separately
+    const tagIds = tagIdsRaw ? tagIdsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    for (const tid of tagIds) {
+      where += ' AND p.id IN (SELECT person_id FROM person_tags WHERE tag_id=?)';
+      binds.push(tid);
+    }
     // Total count
     const countRow = await db.prepare(`SELECT COUNT(*) as n FROM people p WHERE ${where}`).bind(...binds).first();
     const total = countRow?.n || 0;
@@ -2144,6 +2151,86 @@ h1{font-size:18pt;margin:0 0 4px;} .subtitle{font-size:10pt;color:#666;margin-bo
     }
     return json({ field_types_in_members: fieldMap, tag_endpoints: tagResults, family_member_sample: familyMember ? { id: familyMember.id, name: familyMember.first_name+' '+familyMember.last_name, family: familyMember.family } : null });
   }
+
+  // ── Breeze Tag-Only Sync ─────────────────────────────────────────
+  // Syncs tags and tag assignments from Breeze independently of a full people import.
+  // Clears existing assignments for Breeze-sourced tags and re-syncs so removals are caught.
+  if (seg === 'import/breeze-sync-tags' && method === 'POST') { try {
+    const subdomain = env.BREEZE_SUBDOMAIN;
+    const apiKey    = env.BREEZE_API_KEY;
+    if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
+    // 1. Fetch all tags from Breeze
+    const tagRes = await fetch(`https://${subdomain}.breezechms.com/api/tags/list_tags`, { headers: { 'Api-key': apiKey } });
+    if (!tagRes.ok) return json({ error: `Breeze API error: ${tagRes.status}` }, 502);
+    let allBreezeTagsRaw; try { allBreezeTagsRaw = await tagRes.json(); } catch { return json({ error: 'Invalid JSON from Breeze tags endpoint' }, 502); }
+    const allBreezeTags = Array.isArray(allBreezeTagsRaw) ? allBreezeTagsRaw : [];
+    let tagsSynced = 0, tagAssignments = 0;
+    const errors = [];
+    // 2. Upsert tag records
+    for (const t of allBreezeTags) {
+      const bId = String(t.id);
+      const tName = (t.name || '').trim();
+      if (!tName) continue;
+      const existing = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bId).first();
+      if (existing) {
+        await db.prepare('UPDATE tags SET name=? WHERE breeze_id=?').bind(tName, bId).run();
+      } else {
+        const byName = await db.prepare('SELECT id FROM tags WHERE name=? AND (breeze_id="" OR breeze_id IS NULL)').bind(tName).first();
+        if (byName) {
+          await db.prepare('UPDATE tags SET breeze_id=? WHERE id=?').bind(bId, byName.id).run();
+        } else {
+          await db.prepare('INSERT INTO tags (name, breeze_id) VALUES (?,?)').bind(tName, bId).run();
+        }
+      }
+      tagsSynced++;
+    }
+    // 3. For each Breeze tag, clear existing assignments then re-sync from Breeze.
+    //    This ensures people removed from a tag in Breeze get un-tagged locally too.
+    for (const t of allBreezeTags) {
+      const bTagId = String(t.id);
+      const tagRow = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bTagId).first();
+      if (!tagRow) continue;
+      const localTagId = tagRow.id;
+      // Delete all current assignments for this Breeze-sourced tag
+      await db.prepare('DELETE FROM person_tags WHERE tag_id=?').bind(localTagId).run();
+      // Re-fetch all members of this tag from Breeze
+      const filterJson = encodeURIComponent(`{"tag_contains": "y_${bTagId}"}`);
+      let tagOffset = 0;
+      const tagLimit = 500;
+      while (true) {
+        let memText = '';
+        try {
+          const memRes = await fetch(
+            `https://${subdomain}.breezechms.com/api/people?filter_json=${filterJson}&limit=${tagLimit}&offset=${tagOffset}`,
+            { headers: { 'Api-key': apiKey } }
+          );
+          memText = await memRes.text();
+        } catch (fetchErr) { errors.push({ tag: t.name, error: fetchErr.message }); break; }
+        if (!memText || !memText.trim()) break;
+        let tagMembers = [];
+        try {
+          const parsed = JSON.parse(memText);
+          tagMembers = Array.isArray(parsed) ? parsed : Object.values(parsed).filter(v => v && v.id);
+        } catch { break; }
+        if (!tagMembers.length) break;
+        for (const m of tagMembers) {
+          const bPersonId = String(m.id || '');
+          if (!bPersonId) continue;
+          const personRow = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(bPersonId).first();
+          if (!personRow) continue;
+          try {
+            await db.prepare('INSERT OR IGNORE INTO person_tags (person_id, tag_id) VALUES (?,?)').bind(personRow.id, localTagId).run();
+            tagAssignments++;
+          } catch {}
+        }
+        if (tagMembers.length < tagLimit) break;
+        tagOffset += tagLimit;
+      }
+    }
+    return json({ ok: true, tags_synced: tagsSynced, tag_assignments: tagAssignments, errors });
+  } catch (e) {
+    return json({ ok: false, error: 'Tag sync error: ' + e.message }, 500);
+  } }
 
   // ── Breeze Per-Person Sync ───────────────────────────────────────
   // Forces a demographic re-sync for a single person identified by their Breeze ID.
