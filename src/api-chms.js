@@ -2747,7 +2747,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         // Use user-defined map first, then direct name match, then 'Other'
         const mappedType = statusName ? (memberTypeMap[statusName] || memberTypeMap[statusName.toLowerCase()] || null) : null;
         const matched = mappedType || (statusName ? configuredMemberTypes.find(t => t.toLowerCase() === statusName.toLowerCase()) : null);
-        const memberType = matched || (configuredMemberTypes.includes('Other') ? 'Other' : configuredMemberTypes[0] || 'Other');
+        // Default to 'Other' when no status found — never fall back to the first configured
+        // type (which is typically 'Member'), as that causes blank-status people to be
+        // incorrectly imported as members.
+        const memberType = matched || 'Other';
         // Dates — Breeze may return as a plain string, an object {date/value:"..."}, or an array.
         // extractDate unwraps all formats before passing to toISO.
         // Also check p.birth_date top-level field which Breeze exposes directly.
