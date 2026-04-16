@@ -42,11 +42,11 @@ Added 2026-04-15, phased 2026-04-15.
 
 ---
 
-### Phase 2 — UI Fixes (no schema changes)
+### Phase 2 — UI Fixes (no schema changes) ✅ DONE 2026-04-15
 | # | Description | Status |
 |---|-------------|--------|
-| H2 | Fix **"Add person to household"** — search/select existing people OR create new; current text popup is broken | Queued |
-| P1 | Paginate all list views at **25 items per page** (people, households, giving) | Queued |
+| H2 | Fix **"Add person to household"** — search/select existing people OR create new; current text popup is broken | Done — proper search modal, debounced 300ms, shows household badge |
+| P1 | Paginate all list views at **25 items per page** (people, households, giving) | Done — `peopleFilter.limit` changed to 25; existing pager handles prev/next |
 
 **Test after Phase 2:** Household member adding works both ways, lists load faster and paginate correctly.
 
@@ -109,7 +109,19 @@ Added 2026-04-15, phased 2026-04-15.
 
 ## Recent Changes (newest first)
 
-### 2026-04-15
+### 2026-04-15 (session 3 — Phase 2)
+- **H2 — Add person to household**: Replaced prompt()/alert() chain with a proper search modal (`#add-to-hh-modal`). Debounced 300ms, min 2 chars, shows existing household badge next to name. Confirms via `confirmAddToHh(personId)` which PUTs to `/admin/api/people/:id`.
+- **P1 — Pagination**: Changed `peopleFilter.limit` from 100 to 25. Existing `renderPeoplePager()` / `peoplePage()` already handle prev/next correctly.
+- **Version**: Bumped to `2026-04-15-v3`.
+
+### 2026-04-15 (session 2 — Phase 1 round 2)
+- **Tag sync two-phase**: Refactored `import/breeze-sync-tags` to `phase=list` (one Breeze call, returns tag list) and `phase=sync` (one tag per invocation). Frontend loops sequentially showing progress.
+- **Import sidebar removed**: Deleted Import sidebar item entirely; all import tools now in Settings tab.
+- **Login enforcement**: Added `required` to both form fields; removed "no username needed" hint; server rejects empty username; env-var fallback requires `username === role`.
+- **Post-login behavior**: Reverted A2 — roles other than `member` land on Dashboard (home), `member` lands on People.
+- **Version**: Bumped to `2026-04-15-v2`.
+
+### 2026-04-15 (session 1 — Phase 1)
 - **NOTES.md created**: Added this dev reference file; backlog populated from admin-provided list.
 - **Bulk import global try/catch** (`src/api-chms.js`): Wrapped entire `import/breeze` handler in try/catch so uncaught exceptions return `{ ok: false, error: "..." }` JSON instead of Cloudflare HTML error page.
 - **Deactivation query batching**: Changed `NOT IN (?)` deactivation to process IDs in chunks of 90 to respect D1's ~100-parameter limit.
