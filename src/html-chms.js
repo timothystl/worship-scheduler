@@ -1414,7 +1414,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-15-v4';
+var DEPLOY_VERSION = '2026-04-15-v5';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -2729,7 +2729,8 @@ function showProfile(p) {
     var dirBadge = p.public_directory === 0 ? '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;background:#f4e8c1;color:#9a7a2b;font-weight:600;margin-left:8px;">Private</span>' : '';
     var leftCol = '<div>'
       + '<div class="pv-section">'
-      + '<div class="pv-section-title">Contact'+dirBadge+'</div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Contact'+dirBadge+'</div>'
+      + '<button class="btn-secondary require-edit" style="font-size:.7rem;padding:2px 8px;" onclick="openPersonEdit(_currentPvPerson)">Edit</button></div>'
       + pvRow('Address', addrVal, 'address')
       + pvRow('Phone', phoneVal, 'phone')
       + pvRow('Email', emailVal, 'email')
@@ -2944,8 +2945,8 @@ function pvStartEdit(fieldKey, el) {
       + '<input type="text" id="pie-zip" placeholder="ZIP" value="'+esc(p.zip||'')+'" style="'+inp+'">'
       + '</div>'
       + '<div style="display:flex;gap:4px;margin-top:3px;">'
-      + '<button class="btn-primary" style="'+btn+'" onclick="pvSaveAddress(this.closest(\'[data-editing]\'))">Save</button>'
-      + '<button class="btn-secondary" style="'+btn+'" onclick="pvCancelEdit(this.closest(\'[data-editing]\'),\'address\')">Cancel</button>'
+      + '<button class="btn-primary" style="'+btn+'" onclick="event.stopPropagation();pvSaveAddress(this.closest(\'[data-editing]\'))">Save</button>'
+      + '<button class="btn-secondary" style="'+btn+'" onclick="event.stopPropagation();pvCancelEdit(this.closest(\'[data-editing]\'),\'address\')">Cancel</button>'
       + '</div></div>';
     el.innerHTML = html;
     var f = el.querySelector('#pie-addr1'); if (f) f.focus();
@@ -2960,28 +2961,28 @@ function pvStartEdit(fieldKey, el) {
     }).join('');
     html = '<div style="display:flex;gap:4px;align-items:center;">'
       + '<select id="pie-'+fieldKey+'" style="'+inp+';flex:1;">'+selOpts+'</select>'
-      + '<button class="btn-primary" style="'+btn+'" onclick="pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
-      + '<button class="btn-secondary" style="'+btn+'" onclick="pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
+      + '<button class="btn-primary" style="'+btn+'" onclick="event.stopPropagation();pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
+      + '<button class="btn-secondary" style="'+btn+'" onclick="event.stopPropagation();pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
       + '</div>';
   } else if (isDate) {
     html = '<div style="display:flex;gap:4px;align-items:center;">'
       + '<input type="date" id="pie-'+fieldKey+'" value="'+esc(raw)+'" style="'+inp+';flex:1;" onkeydown="pvEditKey(event,\''+fieldKey+'\',this,this.closest(\'[data-editing]\'))">'
-      + '<button class="btn-primary" style="'+btn+'" onclick="pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
-      + '<button class="btn-secondary" style="'+btn+'" onclick="pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
+      + '<button class="btn-primary" style="'+btn+'" onclick="event.stopPropagation();pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
+      + '<button class="btn-secondary" style="'+btn+'" onclick="event.stopPropagation();pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
       + '</div>';
   } else if (fieldKey === 'notes') {
     html = '<div>'
       + '<textarea id="pie-notes" style="'+inp+';min-height:80px;resize:vertical;display:block;" onkeydown="if(event.key===\'Escape\')pvCancelEdit(this.closest(\'[data-editing]\'),\'notes\')">'+esc(raw)+'</textarea>'
       + '<div style="display:flex;gap:4px;margin-top:4px;">'
-      + '<button class="btn-primary" style="'+btn+'" onclick="pvSaveField(\'notes\',document.getElementById(\'pie-notes\'),this.closest(\'[data-editing]\'))">Save</button>'
-      + '<button class="btn-secondary" style="'+btn+'" onclick="pvCancelEdit(this.closest(\'[data-editing]\'),\'notes\')">Cancel</button>'
+      + '<button class="btn-primary" style="'+btn+'" onclick="event.stopPropagation();pvSaveField(\'notes\',document.getElementById(\'pie-notes\'),this.closest(\'[data-editing]\'))">Save</button>'
+      + '<button class="btn-secondary" style="'+btn+'" onclick="event.stopPropagation();pvCancelEdit(this.closest(\'[data-editing]\'),\'notes\')">Cancel</button>'
       + '</div></div>';
   } else {
     var type = fieldKey === 'email' ? 'email' : fieldKey === 'phone' ? 'tel' : 'text';
     html = '<div style="display:flex;gap:4px;align-items:center;">'
       + '<input type="'+type+'" id="pie-'+fieldKey+'" value="'+esc(raw)+'" style="'+inp+';flex:1;" onkeydown="pvEditKey(event,\''+fieldKey+'\',this,this.closest(\'[data-editing]\'))">'
-      + '<button class="btn-primary" style="'+btn+'" onclick="pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
-      + '<button class="btn-secondary" style="'+btn+'" onclick="pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
+      + '<button class="btn-primary" style="'+btn+'" onclick="event.stopPropagation();pvSaveField(\''+fieldKey+'\',document.getElementById(\'pie-'+fieldKey+'\'),this.closest(\'[data-editing]\'))">Save</button>'
+      + '<button class="btn-secondary" style="'+btn+'" onclick="event.stopPropagation();pvCancelEdit(this.closest(\'[data-editing]\'),\''+fieldKey+'\')">&#x2715;</button>'
       + '</div>';
   }
   el.innerHTML = html;
