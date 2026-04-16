@@ -438,6 +438,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .pv-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 .pv-hdr{display:flex;align-items:flex-start;gap:18px;padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .pv-photo{width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.12);}
+.pv-photo-wrap{position:relative;flex-shrink:0;width:88px;height:88px;}
+.pv-photo-wrap .pv-photo{width:100%;height:100%;}
+.pv-photo-upload-overlay{position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;}
+.pv-photo-wrap:hover .pv-photo-upload-overlay{opacity:1;}
+.pv-photo-upload-overlay svg{pointer-events:none;}
 .pv-hdr-info{flex:1;}
 .pv-fullname{font-size:26px;font-weight:700;color:var(--charcoal);line-height:1.2;font-family:var(--font-head,inherit);}
 .pv-meta{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
@@ -1048,7 +1053,13 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   </div>
   <div class="pv-body">
     <div class="pv-hdr">
-      <div class="pv-photo" id="pv-photo"></div>
+      <div class="pv-photo-wrap" id="pv-photo-wrap">
+        <div class="pv-photo" id="pv-photo"></div>
+        <div class="pv-photo-upload-overlay require-edit" id="pv-photo-overlay" onclick="triggerPhotoUpload()" title="Upload photo" style="display:none;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+      </div>
+      <input type="file" id="pv-photo-input" accept="image/*" style="display:none;" onchange="handlePhotoFileSelected(this)">
       <div class="pv-hdr-info">
         <div class="pv-fullname" id="pv-fullname"></div>
         <div class="pv-meta">
@@ -1431,7 +1442,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-16-v19';
+var DEPLOY_VERSION = '2026-04-16-v20';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -2765,6 +2776,8 @@ function showProfile(p) {
       photoEl.innerHTML = '<span style="color:white;font-size:24px;font-weight:600;line-height:1;">'+initials+'</span>';
       photoEl.style.background = bg;
     }
+    var overlayEl = document.getElementById('pv-photo-overlay');
+    if (overlayEl) overlayEl.style.display = (_userRole !== 'member') ? 'flex' : 'none';
   }
   var fnEl = document.getElementById('pv-fullname');
   if (fnEl) fnEl.textContent = displayName;
@@ -3229,6 +3242,64 @@ function savePvTags() {
     document.getElementById('pv-tags-editor').style.display = 'none';
   });
 }
+function triggerPhotoUpload() {
+  var inp = document.getElementById('pv-photo-input');
+  if (inp) inp.click();
+}
+
+function handlePhotoFileSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  input.value = '';
+  if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var MAX = 400;
+      var w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) {
+        var pid = _currentPvPerson && _currentPvPerson.id;
+        if (!pid) return;
+        var overlay = document.getElementById('pv-photo-overlay');
+        if (overlay) { overlay.style.opacity = '1'; overlay.innerHTML = '<span style="color:white;font-size:12px;">Uploading\u2026</span>'; }
+        var fd = new FormData();
+        fd.append('photo', blob, 'photo.jpg');
+        fetch('/admin/api/people/' + pid + '/photo', { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (overlay) { overlay.style.opacity = ''; overlay.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>'; }
+            if (d && d.ok && d.photo_url) {
+              _currentPvPerson.photo_url = d.photo_url;
+              var photoEl = document.getElementById('pv-photo');
+              if (photoEl) {
+                var imgEl = document.createElement('img');
+                imgEl.src = d.photo_url + '?t=' + Date.now();
+                imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
+                photoEl.innerHTML = '';
+                photoEl.appendChild(imgEl);
+              }
+            } else {
+              alert('Upload failed: ' + ((d && d.error) || 'unknown error'));
+            }
+          }).catch(function() {
+            if (overlay) overlay.style.opacity = '';
+            alert('Upload failed. Please try again.');
+          });
+      }, 'image/jpeg', 0.85);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function syncPersonFromBreeze(breezeId, personId) {
   var btn = event && event.currentTarget;
   var origLabel = btn ? btn.innerHTML : '';

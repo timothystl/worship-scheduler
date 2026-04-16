@@ -102,6 +102,22 @@ async function _fetch(req, env) {
       if (!await isAuthed(req, env)) return html(LOGIN_HTML);
       return html(BACKLOG_HTML, 200, { 'Cache-Control': 'no-store, no-cache, must-revalidate' });
     }
+    // ── R2 photo serve — requires auth ───────────────────────────────
+    if (path.startsWith('/admin/r2photo/') && method === 'GET') {
+      if (!await isAuthed(req, env)) return new Response('Unauthorized', { status: 401 });
+      if (!env.PHOTOS) return new Response('Photo storage not configured', { status: 503 });
+      const r2Key = decodeURIComponent(path.slice('/admin/r2photo/'.length));
+      if (!r2Key) return new Response('Missing key', { status: 400 });
+      const obj = await env.PHOTOS.get(r2Key);
+      if (!obj) return new Response('Not found', { status: 404 });
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+          'Cache-Control': 'private, max-age=86400',
+        }
+      });
+    }
+
     // ── Breeze photo proxy — requires auth, forwards to Breeze CDN with API key ──
     if (path === '/admin/photo-proxy' && method === 'GET') {
       if (!await isAuthed(req, env)) return json({ error: 'Unauthorized' }, 401);
