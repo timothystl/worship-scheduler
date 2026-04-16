@@ -1929,8 +1929,9 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       }
     } catch (e) { /* giving/list is best-effort; audit log is primary */ }
 
-    // Merge: giving list entries first so audit log can overwrite with richer data if same ID appears in both
-    const allEntries = [...givingListEntries, ...entries];
+    // Merge: audit log first (richer batch/method data), giving list fills in anything not in the log.
+    // Order matters: the seenIds set below ensures the first occurrence wins.
+    const allEntries = [...entries, ...givingListEntries];
     if (allEntries.length === 0) return json({ ok: true, imported: 0, skipped: 0, total: 0, date_range: { start, end } });
 
     // Helpers
@@ -1957,9 +1958,19 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       return m ? m[3] + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0') : (s || start).slice(0,10);
     };
 
+    // ── Deduplicate any existing rows caused by prior double-imports ────
+    // Keeps the lowest-id row for each (breeze_id, fund_id) pair.
+    const dupeResult = await db.prepare(
+      `DELETE FROM giving_entries
+       WHERE breeze_id != '' AND id NOT IN (
+         SELECT MIN(id) FROM giving_entries WHERE breeze_id != '' GROUP BY breeze_id, fund_id
+       )`
+    ).run();
+    const dupesRemoved = dupeResult.meta?.changes || 0;
+
     // ── Pre-load caches to avoid per-row DB round trips ──────────────
-    // Existing contribution IDs → skip set
-    const existingIds = new Set(
+    // Existing contribution IDs → skip set (also tracks IDs seen this run)
+    const seenIds = new Set(
       ((await db.prepare("SELECT breeze_id FROM giving_entries WHERE breeze_id != ''").all()).results || [])
         .map(r => r.breeze_id)
     );
@@ -1984,7 +1995,8 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     for (const entry of allEntries) {
       try {
         const contribId = String(entry.object_json || entry.id);
-        if (existingIds.has(contribId)) { skipped++; continue; }
+        if (seenIds.has(contribId)) { skipped++; continue; }
+        seenIds.add(contribId);
         const d = parseDetails(entry.details);
         if (!d) { skipped++; continue; }
 
@@ -2039,7 +2051,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
     ).run();
 
-    return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, from_giving_list: givingListEntries.length, date_range: { start, end } });
+    return json({ ok: true, imported, skipped, dupesRemoved, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, from_giving_list: givingListEntries.length, date_range: { start, end } });
   }
 
   // ── Breeze Giving CSV Import ─────────────────────────────────────
