@@ -653,8 +653,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="tile-icon">&#128200;</div>
       <div class="tile-title">Giving by Fund</div>
       <div class="tile-desc">
-        <div class="field" style="margin:8px 0 4px;"><label>From</label><input type="date" id="rpt-from" style="font-size:.82rem;padding:4px 8px;"></div>
-        <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-to" style="font-size:.82rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:8px 0 4px;"><label>From</label><input type="date" id="rpt-from" name="rpt-from" style="font-size:.82rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-to" name="rpt-to" style="font-size:.82rem;padding:4px 8px;"></div>
         <button class="btn-primary" style="margin-top:8px;font-size:.8rem;padding:5px 12px;" onclick="runGivingSummary()">Run Report</button>
       </div>
     </div>
@@ -662,8 +662,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="tile-icon">&#128179;</div>
       <div class="tile-title">Giving by Method</div>
       <div class="tile-desc">
-        <div class="field" style="margin:8px 0 4px;"><label>From</label><input type="date" id="rpt-method-from" style="font-size:.82rem;padding:4px 8px;"></div>
-        <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-method-to" style="font-size:.82rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:8px 0 4px;"><label>From</label><input type="date" id="rpt-method-from" name="rpt-method-from" style="font-size:.82rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-method-to" name="rpt-method-to" style="font-size:.82rem;padding:4px 8px;"></div>
         <button class="btn-primary" style="margin-top:8px;font-size:.8rem;padding:5px 12px;" onclick="runGivingByMethod()">Run Report</button>
       </div>
     </div>
@@ -676,14 +676,14 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
           <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;"><input type="radio" name="rpt-stmt-mode" value="household" onchange="toggleStmtMode()"> Household</label>
         </div>
         <div id="rpt-stmt-person-row" class="field" style="margin:4px 0;">
-          <div class="ac-wrap"><input type="text" id="rpt-person-search" placeholder="Search person…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearch(this,&#39;rpt-person-ac&#39;,&#39;rpt-person-id&#39;)"><div class="ac-dropdown" id="rpt-person-ac"></div></div>
-          <input type="hidden" id="rpt-person-id">
+          <div class="ac-wrap"><input type="text" id="rpt-person-search" name="rpt-person-search" placeholder="Search person…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearch(this,&#39;rpt-person-ac&#39;,&#39;rpt-person-id&#39;)"><div class="ac-dropdown" id="rpt-person-ac"></div></div>
+          <input type="hidden" id="rpt-person-id" name="rpt-person-id">
         </div>
         <div id="rpt-stmt-hh-row" class="field" style="margin:4px 0;display:none;">
-          <div class="ac-wrap"><input type="text" id="rpt-hh-search" placeholder="Search household…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearchHH(this)"><div class="ac-dropdown" id="rpt-hh-ac"></div></div>
-          <input type="hidden" id="rpt-hh-id">
+          <div class="ac-wrap"><input type="text" id="rpt-hh-search" name="rpt-hh-search" placeholder="Search household…" style="font-size:.82rem;padding:4px 8px;" oninput="acSearchHH(this)"><div class="ac-dropdown" id="rpt-hh-ac"></div></div>
+          <input type="hidden" id="rpt-hh-id" name="rpt-hh-id">
         </div>
-        <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="rpt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
+        <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="rpt-year" name="rpt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingStatement()">View Statement</button>
           <button class="btn-secondary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingStatementLetter()">View Letter</button>
@@ -698,7 +698,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="tile-title">Batch Send Statements</div>
       <div class="tile-desc">
         <div style="font-size:.82rem;color:var(--warm-gray);margin-bottom:8px;">Send year-end giving letters via email to all givers for a year.</div>
-        <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="batch-stmt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
+        <div class="field" style="margin:4px 0;"><label>Year</label><input type="number" id="batch-stmt-year" name="batch-stmt-year" value="" style="font-size:.82rem;padding:4px 8px;width:90px;"></div>
         <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;margin-top:6px;" onclick="loadBatchStatementGivers()">Load Givers</button>
         <div id="batch-stmt-status" class="import-status" style="margin-top:6px;"></div>
         <div id="batch-stmt-list" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
@@ -728,12 +728,12 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <button class="btn-primary" style="font-size:.85rem;" onclick="openNewSundayEntry()">+ Add Sunday</button>
       <button class="btn-secondary" style="font-size:.8rem;" onclick="seedYearSundays()">&#128197; Pre-fill Year Sundays</button>
       <div style="flex:1;"></div>
-      <input type="date" id="att-from" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
+      <input type="date" id="att-from" name="att-from" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
       <span style="font-size:.8rem;color:var(--warm-gray);">to</span>
-      <input type="date" id="att-to" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
+      <input type="date" id="att-to" name="att-to" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
       <button class="btn-sm" onclick="loadAttendance()" style="padding:4px 8px;font-size:.75rem;">Filter</button>
       <button class="btn-sm" id="att-order-btn" onclick="toggleAttOrder()" style="padding:4px 8px;font-size:.75rem;min-width:56px;" title="Toggle sort order">&#8595; Desc</button>
-      <select id="att-group-by" onchange="renderAttendanceListFromLoaded()" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
+      <select id="att-group-by" name="att-group-by" onchange="renderAttendanceListFromLoaded()" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
         <option value="none">No grouping</option>
         <option value="month">By Month</option>
       </select>
@@ -754,8 +754,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         </div>
         <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px;flex:1;min-width:220px;">
           <div style="font-weight:700;font-size:.88rem;color:var(--steel-anchor);margin-bottom:6px;">&#128337; Attendance by Service</div>
-          <div class="field" style="margin:6px 0 4px;"><label>From</label><input type="date" id="rpt-att-from" style="font-size:.82rem;padding:4px 8px;"></div>
-          <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-att-to" style="font-size:.82rem;padding:4px 8px;"></div>
+          <div class="field" style="margin:6px 0 4px;"><label>From</label><input type="date" id="rpt-att-from" name="rpt-att-from" style="font-size:.82rem;padding:4px 8px;"></div>
+          <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-att-to" name="rpt-att-to" style="font-size:.82rem;padding:4px 8px;"></div>
           <button class="btn-primary" style="margin-top:8px;font-size:.8rem;padding:5px 12px;" onclick="runAttendanceByTime()">Run Report</button>
         </div>
       </div>
@@ -784,12 +784,12 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <h3>&#9962; Church Information</h3>
       <p>Used in giving letters, email headers, and reports.</p>
       <div class="modal-2col" style="margin-bottom:10px;">
-        <div class="field"><label>Church Name</label><input type="text" id="st-church-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
-        <div class="field"><label>EIN (Tax ID)</label><input type="text" id="st-ein" placeholder="XX-XXXXXXX" style="width:100%;"></div>
+        <div class="field"><label>Church Name</label><input type="text" id="st-church-name" name="st-church-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>EIN (Tax ID)</label><input type="text" id="st-ein" name="st-ein" placeholder="XX-XXXXXXX" style="width:100%;"></div>
       </div>
       <div class="modal-2col" style="margin-bottom:12px;">
-        <div class="field"><label>From Name (for emails)</label><input type="text" id="st-from-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
-        <div class="field"><label>From Email</label><input type="email" id="st-from-email" placeholder="giving@yourdomain.org" style="width:100%;"></div>
+        <div class="field"><label>From Name (for emails)</label><input type="text" id="st-from-name" name="st-from-name" placeholder="Timothy Lutheran Church" style="width:100%;"></div>
+        <div class="field"><label>From Email</label><input type="email" id="st-from-email" name="st-from-email" placeholder="giving@yourdomain.org" style="width:100%;"></div>
       </div>
       <button class="btn-primary" onclick="saveSettings()">Save Church Info</button>
     </div>
@@ -797,7 +797,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div class="import-card" style="margin-bottom:14px;">
       <h3>&#128140; Year-End Giving Letter Template</h3>
       <p>Used when generating giving letters. Available placeholders: <code>{{name}}</code>, <code>{{year}}</code>, <code>{{total}}</code>, <code>{{ein}}</code>, <code>{{date}}</code>, <code>{{gift_table}}</code></p>
-      <textarea id="st-letter-tpl" rows="10" style="width:100%;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
+      <textarea id="st-letter-tpl" name="st-letter-tpl" rows="10" style="width:100%;font-family:monospace;font-size:.82rem;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;"></textarea>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="saveSettings()">Save Template</button>
         <button class="btn-secondary" onclick="resetLetterTemplate()" style="margin-left:8px;">Reset to Default</button>
@@ -809,8 +809,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <p>Tags are used to categorize people. You can filter by tag in the People tab.</p>
       <div id="settings-tags-list" style="margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="st-new-tag-name" placeholder="New tag name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:160px;">
-        <input type="color" id="st-new-tag-color" value="#2E7EA6" style="width:40px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">
+        <input type="text" id="st-new-tag-name" name="st-new-tag-name" placeholder="New tag name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:160px;">
+        <input type="color" id="st-new-tag-color" name="st-new-tag-color" value="#2E7EA6" style="width:40px;height:32px;border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer;">
         <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="createTagSettings()">Add Tag</button>
       </div>
     </div>
@@ -820,7 +820,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <p>Define the member types available for people records.</p>
       <div id="settings-member-types-list" style="margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" id="st-new-type-name" placeholder="New type name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:180px;">
+        <input type="text" id="st-new-type-name" name="st-new-type-name" placeholder="New type name" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:.88rem;width:180px;">
         <button class="btn-primary" style="font-size:.85rem;padding:6px 14px;" onclick="addMemberTypeSettings()">Add Type</button>
       </div>
     </div>
@@ -856,15 +856,15 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <h3>&#128181; Sync Giving from Breeze</h3>
       <p>Pull contribution records from the Breeze account log. Already-imported contributions are skipped (safe to re-sync). Groups by Breeze batch number. Fund names can be renamed in Giving &rarr; Funds after import.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
-        <div class="field" style="margin:0;"><label>From</label><input type="date" id="giving-sync-from" style="font-size:.85rem;padding:4px 8px;"></div>
-        <div class="field" style="margin:0;"><label>To</label><input type="date" id="giving-sync-to" style="font-size:.85rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:0;"><label>From</label><input type="date" id="giving-sync-from" name="giving-sync-from" style="font-size:.85rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:0;"><label>To</label><input type="date" id="giving-sync-to" name="giving-sync-to" style="font-size:.85rem;padding:4px 8px;"></div>
       </div>
       <button class="btn-primary" onclick="runBreezeGivingSync()">Sync Date Range</button>
       <div class="import-status" id="giving-sync-status"></div>
       <hr style="margin:14px 0;border:none;border-top:1px solid var(--warm-gray-light,#e0d9d0);">
       <p style="margin:0 0 8px;"><strong>Sync All History</strong> — loops through every year from start year to today, one year at a time.</p>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
-        <div class="field" style="margin:0;"><label>Start Year</label><input type="number" id="giving-sync-start-year" value="2020" min="2000" max="2099" style="width:90px;font-size:.85rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:0;"><label>Start Year</label><input type="number" id="giving-sync-start-year" name="giving-sync-start-year" value="2020" min="2000" max="2099" style="width:90px;font-size:.85rem;padding:4px 8px;"></div>
       </div>
       <button class="btn-primary" id="giving-all-btn" onclick="runBreezeGivingAll()">Sync All History</button>
       <div class="import-status" id="giving-all-status"></div>
@@ -900,7 +900,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div class="import-card">
       <h3>&#128197; Import Attendance (Simple CSV)</h3>
       <p>Paste or upload a 3-column file: <code>date, service_name, attendance</code>. Date must be YYYY-MM-DD. One row per service. Header row optional. Existing records for the same date+time are updated; new ones are inserted.</p>
-      <textarea id="att-simple-text" rows="6" style="width:100%;font-family:monospace;font-size:.8rem;padding:6px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;" placeholder="2024-03-10&#9;Sunday 8am&#9;112&#10;2024-03-10&#9;Sunday 10:45am&#9;187"></textarea>
+      <textarea id="att-simple-text" name="att-simple-text" rows="6" style="width:100%;font-family:monospace;font-size:.8rem;padding:6px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;" placeholder="2024-03-10&#9;Sunday 8am&#9;112&#10;2024-03-10&#9;Sunday 10:45am&#9;187"></textarea>
       <button class="btn-primary" onclick="importAttendanceSimple()">Import</button>
       <div class="import-status" id="att-simple-status"></div>
     </div>
@@ -914,9 +914,9 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <h3>&#9997; Generate Register from People Records</h3>
       <p>Create church register entries from baptism and confirmation dates already stored on people records. People who already have a matching register entry are skipped (safe to re-run).</p>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-        <div class="field" style="margin:0;"><label>Earliest date to include</label><input type="date" id="reg-gen-cutoff" value="1900-01-01" style="font-size:.85rem;padding:4px 8px;"></div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-baptism" checked> Baptisms</label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-confirm" checked> Confirmations</label>
+        <div class="field" style="margin:0;"><label>Earliest date to include</label><input type="date" id="reg-gen-cutoff" name="reg-gen-cutoff" value="1900-01-01" style="font-size:.85rem;padding:4px 8px;"></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-baptism" name="reg-gen-baptism" checked> Baptisms</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer;"><input type="checkbox" id="reg-gen-confirm" name="reg-gen-confirm" checked> Confirmations</label>
       </div>
       <button class="btn-primary" onclick="generateRegisterFromPeople()">Generate Register Entries</button>
       <div class="import-status" id="reg-gen-status"></div>
@@ -956,13 +956,16 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <!-- Add / Edit form -->
       <div class="reg-form-panel" id="reg-form-panel">
         <div class="reg-form-title" id="reg-form-title">Add Baptism</div>
-        <div class="field"><label>Date</label><input type="date" id="reg-date"></div>
-        <div class="field"><label id="reg-name-lbl">Name Baptized</label><input type="text" id="reg-name" placeholder="Full name"></div>
-        <div class="field"><label>Father</label><input type="text" id="reg-father" placeholder="Optional"></div>
-        <div class="field"><label>Mother</label><input type="text" id="reg-mother" placeholder="Optional"></div>
-        <div class="field"><label>Sponsors / Godparents</label><input type="text" id="reg-sponsors" placeholder="Optional"></div>
-        <div class="field"><label>Officiant</label><input type="text" id="reg-officiant" placeholder="Pastor name"></div>
-        <div class="field"><label>Notes</label><textarea id="reg-notes" placeholder="Optional notes" style="width:100%;height:64px;resize:vertical;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"></textarea></div>
+        <div class="field"><label>Date</label><input type="date" id="reg-date" name="reg-date"></div>
+        <div class="field"><label id="reg-name-lbl">Name Baptized</label><input type="text" id="reg-name" name="reg-name" placeholder="Full name"></div>
+        <div class="field"><label>Date of Birth</label><input type="date" id="reg-dob" name="reg-dob"></div>
+        <div class="field"><label>Place of Birth</label><input type="text" id="reg-place-of-birth" name="reg-place-of-birth" placeholder="Optional"></div>
+        <div class="field"><label>Baptism Place</label><input type="text" id="reg-baptism-place" name="reg-baptism-place" placeholder="Optional"></div>
+        <div class="field"><label>Father</label><input type="text" id="reg-father" name="reg-father" placeholder="Optional"></div>
+        <div class="field"><label>Mother</label><input type="text" id="reg-mother" name="reg-mother" placeholder="Optional"></div>
+        <div class="field"><label>Sponsors / Godparents</label><input type="text" id="reg-sponsors" name="reg-sponsors" placeholder="Optional"></div>
+        <div class="field"><label>Officiant</label><input type="text" id="reg-officiant" name="reg-officiant" placeholder="Pastor name"></div>
+        <div class="field"><label>Notes</label><textarea id="reg-notes" name="reg-notes" placeholder="Optional notes" style="width:100%;height:64px;resize:vertical;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"></textarea></div>
         <div style="display:flex;gap:8px;margin-top:4px;">
           <button class="btn-primary" style="font-size:.85rem;" id="reg-save-btn" onclick="saveRegisterEntry()">Add Entry</button>
           <button class="btn-secondary" style="font-size:.85rem;display:none;" id="reg-cancel-btn" onclick="cancelRegisterEdit()">Cancel</button>
@@ -1017,10 +1020,10 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
       <div id="vol-add-event-form" style="display:none;background:var(--white);border-radius:10px;border:1px solid var(--border);padding:16px;margin-bottom:12px;">
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
-          <div style="flex:1;min-width:180px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Event Name *</label><input type="text" id="vol-new-ev-name" class="form-input" style="width:100%;" placeholder="e.g. Easter Egg Hunt"></div>
-          <div style="flex:0 0 160px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Date</label><input type="date" id="vol-new-ev-date" class="form-input" style="width:100%;"></div>
+          <div style="flex:1;min-width:180px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Event Name *</label><input type="text" id="vol-new-ev-name" name="vol-new-ev-name" class="form-input" style="width:100%;" placeholder="e.g. Easter Egg Hunt"></div>
+          <div style="flex:0 0 160px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Date</label><input type="date" id="vol-new-ev-date" name="vol-new-ev-date" class="form-input" style="width:100%;"></div>
         </div>
-        <div style="margin-bottom:8px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Description</label><textarea id="vol-new-ev-desc" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;font-family:inherit;height:60px;resize:vertical;" placeholder="Brief description…"></textarea></div>
+        <div style="margin-bottom:8px;"><label style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--charcoal);display:block;margin-bottom:4px;">Description</label><textarea id="vol-new-ev-desc" name="vol-new-ev-desc" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:.85rem;font-family:inherit;height:60px;resize:vertical;" placeholder="Brief description…"></textarea></div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><input type="checkbox" id="vol-new-ev-time-slots" checked style="width:auto;margin:0;"><label for="vol-new-ev-time-slots" style="font-size:.83rem;cursor:pointer;">Roles have scheduled time slots</label></div>
         <div style="display:flex;gap:6px;">
           <button class="btn-primary" style="font-size:.82rem;" onclick="volSaveNewEvent()">Save Event</button>
@@ -1069,14 +1072,14 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
             <button class="btn-primary" onclick="togglePvQuickGift()" id="pv-gift-btn">+ Add Gift</button>
             <div id="pv-quick-gift" style="display:none;margin-top:12px;background:var(--linen);border-radius:10px;padding:16px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                <div class="field"><label>Date</label><input type="date" id="pv-gift-date" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
-                <div class="field"><label>Amount ($)</label><input type="number" id="pv-gift-amount" min="0.01" step="0.01" placeholder="0.00" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
-                <div class="field"><label>Fund</label><select id="pv-gift-fund" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></select></div>
-                <div class="field"><label>Method</label><select id="pv-gift-method" onchange="togglePvCheckNum()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;">
+                <div class="field"><label>Date</label><input type="date" id="pv-gift-date" name="pv-gift-date" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
+                <div class="field"><label>Amount ($)</label><input type="number" id="pv-gift-amount" name="pv-gift-amount" min="0.01" step="0.01" placeholder="0.00" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
+                <div class="field"><label>Fund</label><select id="pv-gift-fund" name="pv-gift-fund" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></select></div>
+                <div class="field"><label>Method</label><select id="pv-gift-method" name="pv-gift-method" onchange="togglePvCheckNum()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;">
                   <option value="cash">Cash</option><option value="check">Check</option><option value="online">Online</option><option value="stock">Stock</option><option value="other">Other</option>
                 </select></div>
-                <div class="field" id="pv-gift-check-row" style="display:none;"><label>Check #</label><input type="text" id="pv-gift-check" placeholder="e.g. 1042" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
-                <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="pv-gift-notes" placeholder="Optional note…" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
+                <div class="field" id="pv-gift-check-row" style="display:none;"><label>Check #</label><input type="text" id="pv-gift-check" name="pv-gift-check" placeholder="e.g. 1042" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
+                <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="pv-gift-notes" name="pv-gift-notes" placeholder="Optional note…" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></div>
               </div>
               <div style="display:flex;gap:8px;">
                 <button class="btn-primary" onclick="submitPvQuickGift()">Save Gift</button>
@@ -1193,41 +1196,41 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <input type="hidden" id="pm-id">
     <div class="modal-section">Name</div>
     <div id="pm-name-2col" class="modal-2col">
-      <div class="field"><label>First Name</label><input type="text" id="pm-first"></div>
-      <div class="field"><label>Last Name</label><input type="text" id="pm-last"></div>
+      <div class="field"><label>First Name</label><input type="text" id="pm-first" name="pm-first"></div>
+      <div class="field"><label>Last Name</label><input type="text" id="pm-last" name="pm-last"></div>
     </div>
     <div id="pm-name-1col" style="display:none;">
-      <div class="field"><label>Name</label><input type="text" id="pm-org-name" style="width:100%;"></div>
+      <div class="field"><label>Name</label><input type="text" id="pm-org-name" name="pm-org-name" style="width:100%;"></div>
     </div>
     <div class="modal-section">Contact</div>
     <div class="modal-2col">
-      <div class="field"><label>Email</label><input type="email" id="pm-email"></div>
-      <div class="field"><label>Phone</label><input type="tel" id="pm-phone"></div>
+      <div class="field"><label>Email</label><input type="email" id="pm-email" name="pm-email"></div>
+      <div class="field"><label>Phone</label><input type="tel" id="pm-phone" name="pm-phone"></div>
     </div>
     <div class="modal-section" id="pm-addr-section">Address <span id="pm-addr-hint" style="font-weight:400;text-transform:none;">(leave blank to use household address)</span></div>
-    <div class="field" style="margin-bottom:8px;"><label>Street</label><input type="text" id="pm-addr1"></div>
+    <div class="field" style="margin-bottom:8px;"><label>Street</label><input type="text" id="pm-addr1" name="pm-addr1"></div>
     <div class="modal-2col">
-      <div class="field"><label>City</label><input type="text" id="pm-city"></div>
-      <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="pm-state" style="width:60px;" maxlength="2" placeholder="MO"><input type="text" id="pm-zip" placeholder="63000"></div></div>
+      <div class="field"><label>City</label><input type="text" id="pm-city" name="pm-city"></div>
+      <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="pm-state" name="pm-state" style="width:60px;" maxlength="2" placeholder="MO"><input type="text" id="pm-zip" name="pm-zip" placeholder="63000"></div></div>
     </div>
     <div class="modal-section">Church Info</div>
     <div class="modal-2col">
       <div class="field"><label>Member Type</label>
-        <select id="pm-type" onchange="updatePersonNameMode()"><!-- populated dynamically by openPersonEdit() from _memberTypes --></select>
+        <select id="pm-type" name="pm-type" onchange="updatePersonNameMode()"><!-- populated dynamically by openPersonEdit() from _memberTypes --></select>
       </div>
       <div class="field" id="pm-role-field"><label>Family Role</label>
-        <select id="pm-role"><option value="">—</option><option value="head">Head</option><option value="spouse">Spouse</option><option value="child">Child</option><option value="other">Other</option></select>
+        <select id="pm-role" name="pm-role"><option value="">—</option><option value="head">Head</option><option value="spouse">Spouse</option><option value="child">Child</option><option value="other">Other</option></select>
       </div>
     </div>
     <div class="field" id="pm-hh-field" style="margin-bottom:8px;"><label>Household</label>
-      <div class="ac-wrap"><input type="text" id="pm-hh-search" placeholder="Search household…" oninput="acHouseholdSearch()"><div class="ac-dropdown" id="pm-hh-ac"></div></div>
+      <div class="ac-wrap"><input type="text" id="pm-hh-search" name="pm-hh-search" placeholder="Search household…" oninput="acHouseholdSearch()"><div class="ac-dropdown" id="pm-hh-ac"></div></div>
       <input type="hidden" id="pm-hh-id">
     </div>
     <div id="pm-dates-section">
       <div class="modal-section">Demographics</div>
       <div class="modal-2col">
         <div class="field"><label>Gender</label>
-          <select id="pm-gender" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+          <select id="pm-gender" name="pm-gender" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
             <option value="">— not set —</option>
             <option value="Male">Male</option>
             <option value="Female">Female</option>
@@ -1235,7 +1238,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
           </select>
         </div>
         <div class="field"><label>Marital Status</label>
-          <select id="pm-marital" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
+          <select id="pm-marital" name="pm-marital" style="padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;width:100%;">
             <option value="">— not set —</option>
             <option value="Single">Single</option>
             <option value="Married">Married</option>
@@ -1247,11 +1250,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
       <div class="modal-section">Dates</div>
       <div class="modal-2col">
-        <div class="field"><label>Date of Birth</label><input type="date" id="pm-dob"></div>
-        <div class="field"><label>Baptism</label><input type="date" id="pm-baptism"></div>
-        <div class="field"><label>Confirmation</label><input type="date" id="pm-confirm"></div>
-        <div class="field"><label>Anniversary</label><input type="date" id="pm-anniv"></div>
-        <div class="field"><label>Death Date</label><input type="date" id="pm-death"></div>
+        <div class="field"><label>Date of Birth</label><input type="date" id="pm-dob" name="pm-dob"></div>
+        <div class="field"><label>Baptism</label><input type="date" id="pm-baptism" name="pm-baptism"></div>
+        <div class="field"><label>Confirmation</label><input type="date" id="pm-confirm" name="pm-confirm"></div>
+        <div class="field"><label>Anniversary</label><input type="date" id="pm-anniv" name="pm-anniv"></div>
+        <div class="field"><label>Death Date</label><input type="date" id="pm-death" name="pm-death"></div>
       </div>
       <div style="margin-bottom:10px;display:flex;gap:24px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;">
@@ -1275,11 +1278,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div class="tag-picker" id="pm-tag-picker"></div>
     <div class="modal-section">Church Records</div>
     <div class="modal-2col">
-      <div class="field"><label>Envelope #</label><input type="text" id="pm-envelope" placeholder="e.g. 42" maxlength="20"></div>
-      <div class="field"><label>Last Seen</label><input type="date" id="pm-last-seen"></div>
+      <div class="field"><label>Envelope #</label><input type="text" id="pm-envelope" name="pm-envelope" placeholder="e.g. 42" maxlength="20"></div>
+      <div class="field"><label>Last Seen</label><input type="date" id="pm-last-seen" name="pm-last-seen"></div>
     </div>
     <div class="modal-section">Notes</div>
-    <div class="field"><textarea id="pm-notes" rows="2" style="resize:vertical;"></textarea></div>
+    <div class="field"><textarea id="pm-notes" name="pm-notes" rows="2" style="resize:vertical;"></textarea></div>
     <div class="modal-actions">
       <button class="btn-danger" id="pm-del-btn" onclick="deletePerson()" style="margin-right:auto;display:none;">Delete</button>
       <button class="btn-secondary" onclick="closeModal('person-modal')">Cancel</button>
@@ -1304,12 +1307,12 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="modal" style="max-width:420px;">
     <h2 style="margin:0 0 18px;">Edit Gift</h2>
     <div class="modal-2col">
-      <div class="field"><label>Date</label><input type="date" id="egm-date"></div>
-      <div class="field"><label>Amount ($)</label><input type="number" id="egm-amount" step="0.01" min="0.01" placeholder="0.00"></div>
-      <div class="field"><label>Fund</label><select id="egm-fund" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></select></div>
-      <div class="field"><label>Method</label><select id="egm-method" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"><option value="cash">Cash</option><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="other">Other</option></select></div>
-      <div class="field"><label>Check #</label><input type="text" id="egm-check" placeholder="optional"></div>
-      <div class="field"><label>Notes</label><input type="text" id="egm-notes" placeholder="optional"></div>
+      <div class="field"><label>Date</label><input type="date" id="egm-date" name="egm-date"></div>
+      <div class="field"><label>Amount ($)</label><input type="number" id="egm-amount" name="egm-amount" step="0.01" min="0.01" placeholder="0.00"></div>
+      <div class="field"><label>Fund</label><select id="egm-fund" name="egm-fund" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"></select></div>
+      <div class="field"><label>Method</label><select id="egm-method" name="egm-method" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:.88rem;"><option value="cash">Cash</option><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="other">Other</option></select></div>
+      <div class="field"><label>Check #</label><input type="text" id="egm-check" name="egm-check" placeholder="optional"></div>
+      <div class="field"><label>Notes</label><input type="text" id="egm-notes" name="egm-notes" placeholder="optional"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('edit-gift-modal')">Cancel</button>
@@ -1323,15 +1326,15 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   <div class="modal">
     <h2 id="hh-modal-title">New Household</h2>
     <input type="hidden" id="hm-id">
-    <div class="field" style="margin-bottom:10px;"><label>Family Name</label><input type="text" id="hm-name" placeholder="e.g. Smith Family"></div>
-    <div class="field" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="hm-addr1"></div>
-    <div class="field" style="margin-bottom:8px;"><label>Address Line 2</label><input type="text" id="hm-addr2"></div>
+    <div class="field" style="margin-bottom:10px;"><label>Family Name</label><input type="text" id="hm-name" name="hm-name" placeholder="e.g. Smith Family"></div>
+    <div class="field" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="hm-addr1" name="hm-addr1"></div>
+    <div class="field" style="margin-bottom:8px;"><label>Address Line 2</label><input type="text" id="hm-addr2" name="hm-addr2"></div>
     <div class="modal-2col">
-      <div class="field"><label>City</label><input type="text" id="hm-city"></div>
-      <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="hm-state" style="width:60px;" maxlength="2" value="MO"><input type="text" id="hm-zip" placeholder="63000"></div></div>
+      <div class="field"><label>City</label><input type="text" id="hm-city" name="hm-city"></div>
+      <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="hm-state" name="hm-state" style="width:60px;" maxlength="2" value="MO"><input type="text" id="hm-zip" name="hm-zip" placeholder="63000"></div></div>
     </div>
-    <div class="field" style="margin-top:10px;"><label>Notes</label><textarea id="hm-notes" rows="2" style="resize:vertical;"></textarea></div>
-    <div class="field" style="margin-top:10px;"><label>Family Photo URL</label><input type="url" id="hm-photo" placeholder="https://…"></div>
+    <div class="field" style="margin-top:10px;"><label>Notes</label><textarea id="hm-notes" name="hm-notes" rows="2" style="resize:vertical;"></textarea></div>
+    <div class="field" style="margin-top:10px;"><label>Family Photo URL</label><input type="url" id="hm-photo" name="hm-photo" placeholder="https://…"></div>
     <div id="hm-members" style="margin-top:14px;"></div>
     <div class="modal-actions">
       <button class="btn-danger" id="hm-del-btn" onclick="deleteHousehold()" style="margin-right:auto;display:none;">Delete</button>
@@ -1345,8 +1348,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 <div class="modal-overlay" id="batch-modal">
   <div class="modal" style="max-width:380px;">
     <h2>New Batch</h2>
-    <div class="field" style="margin-bottom:10px;"><label>Date</label><input type="date" id="bm-date"></div>
-    <div class="field"><label>Description</label><input type="text" id="bm-desc" placeholder="e.g. Sunday AM Offering"></div>
+    <div class="field" style="margin-bottom:10px;"><label>Date</label><input type="date" id="bm-date" name="bm-date"></div>
+    <div class="field"><label>Description</label><input type="text" id="bm-desc" name="bm-desc" placeholder="e.g. Sunday AM Offering"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('batch-modal')">Cancel</button>
       <button class="btn-primary" onclick="createBatch()">Create</button>
@@ -1360,8 +1363,8 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <h2>Manage Tags</h2>
     <div id="tags-list" style="margin-bottom:14px;"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-      <div class="field"><label>Name</label><input type="text" id="new-tag-name" placeholder="e.g. Council"></div>
-      <div class="field"><label>Color</label><input type="color" id="new-tag-color" value="#5C8FA8" style="width:44px;height:36px;padding:2px;border-radius:6px;cursor:pointer;"></div>
+      <div class="field"><label>Name</label><input type="text" id="new-tag-name" name="new-tag-name" placeholder="e.g. Council"></div>
+      <div class="field"><label>Color</label><input type="color" id="new-tag-color" name="new-tag-color" value="#5C8FA8" style="width:44px;height:36px;padding:2px;border-radius:6px;cursor:pointer;"></div>
       <button class="btn-primary" onclick="createTag()">Add Tag</button>
     </div>
     <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('tags-modal')">Close</button></div>
@@ -1374,10 +1377,10 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <h2>Add Follow-up Item</h2>
     <input type="hidden" id="fu-modal-pid">
     <div class="field"><label>Person (optional)</label>
-      <input type="text" id="fu-modal-name" placeholder="Type a name to search…" style="width:100%;">
+      <input type="text" id="fu-modal-name" name="fu-modal-name" placeholder="Type a name to search…" style="width:100%;">
     </div>
     <div class="field"><label>Type</label>
-      <select id="fu-modal-type" style="width:100%;">
+      <select id="fu-modal-type" name="fu-modal-type" style="width:100%;">
         <option value="general">General Follow-up</option>
         <option value="pastoral_call">Pastoral Call</option>
         <option value="prayer">Prayer Follow-up</option>
@@ -1387,7 +1390,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </select>
     </div>
     <div class="field"><label>Notes</label>
-      <textarea id="fu-modal-notes" placeholder="Optional notes…" style="width:100%;height:72px;resize:vertical;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"></textarea>
+      <textarea id="fu-modal-notes" name="fu-modal-notes" placeholder="Optional notes…" style="width:100%;height:72px;resize:vertical;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn-primary" onclick="saveFollowUpModal()">Save</button>
@@ -1401,7 +1404,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <p style="font-size:.85rem;color:var(--warm-gray);margin-bottom:12px;">Add or remove the types available in the Member Type dropdown. Removing a type won't change existing people — they'll still have that type until edited.</p>
     <div id="member-types-list" style="margin-bottom:14px;"></div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <input type="text" id="new-type-name" placeholder="New type name…" style="flex:1;font-size:.88rem;">
+      <input type="text" id="new-type-name" name="new-type-name" placeholder="New type name…" style="flex:1;font-size:.88rem;">
       <button class="btn-primary" onclick="addMemberType()">Add</button>
     </div>
     <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('member-types-modal')">Close</button></div>
@@ -1416,10 +1419,10 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <button id="add-hh-new-toggle" class="btn-secondary" style="font-size:.82rem;width:100%;" onclick="toggleAddHhNew(this)">+ Create new person instead</button>
       <div id="add-hh-new" style="display:none;margin-top:10px;padding:12px;background:var(--linen);border-radius:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div class="field" style="margin:0;"><label style="font-size:11px;">First Name</label><input type="text" id="anh-first" style="width:100%;box-sizing:border-box;"></div>
-          <div class="field" style="margin:0;"><label style="font-size:11px;">Last Name</label><input type="text" id="anh-last" style="width:100%;box-sizing:border-box;"></div>
+          <div class="field" style="margin:0;"><label style="font-size:11px;">First Name</label><input type="text" id="anh-first" name="anh-first" style="width:100%;box-sizing:border-box;"></div>
+          <div class="field" style="margin:0;"><label style="font-size:11px;">Last Name</label><input type="text" id="anh-last" name="anh-last" style="width:100%;box-sizing:border-box;"></div>
         </div>
-        <div class="field" style="margin:0 0 10px;"><label style="font-size:11px;">Member Type</label><select id="anh-type" style="width:100%;"></select></div>
+        <div class="field" style="margin:0 0 10px;"><label style="font-size:11px;">Member Type</label><select id="anh-type" name="anh-type" style="width:100%;"></select></div>
         <button class="btn-primary" style="font-size:.82rem;" onclick="createAndAddToHh()">Create &amp; Add to Household</button>
       </div>
     </div>
@@ -1428,7 +1431,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-16-v10';
+var DEPLOY_VERSION = '2026-04-16-v11';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -3957,7 +3960,7 @@ function showRegisterTab(type) {
   loadRegister();
 }
 function clearRegForm() {
-  ['reg-date','reg-name','reg-father','reg-mother','reg-sponsors','reg-officiant','reg-notes'].forEach(function(id) {
+  ['reg-date','reg-name','reg-dob','reg-place-of-birth','reg-baptism-place','reg-father','reg-mother','reg-sponsors','reg-officiant','reg-notes'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.value = '';
   });
 }
@@ -4075,18 +4078,21 @@ function renderRegisterList(entries) {
   el.innerHTML = html;
 }
 function saveRegisterEntry() {
-  var date      = document.getElementById('reg-date').value;
-  var name      = document.getElementById('reg-name').value.trim();
-  var father    = document.getElementById('reg-father').value.trim();
-  var mother    = document.getElementById('reg-mother').value.trim();
-  var sponsors  = document.getElementById('reg-sponsors').value.trim();
-  var officiant = document.getElementById('reg-officiant').value.trim();
-  var notes     = document.getElementById('reg-notes').value.trim();
+  var date          = document.getElementById('reg-date').value;
+  var name          = document.getElementById('reg-name').value.trim();
+  var dob           = document.getElementById('reg-dob').value;
+  var placeOfBirth  = document.getElementById('reg-place-of-birth').value.trim();
+  var baptismPlace  = document.getElementById('reg-baptism-place').value.trim();
+  var father        = document.getElementById('reg-father').value.trim();
+  var mother        = document.getElementById('reg-mother').value.trim();
+  var sponsors      = document.getElementById('reg-sponsors').value.trim();
+  var officiant     = document.getElementById('reg-officiant').value.trim();
+  var notes         = document.getElementById('reg-notes').value.trim();
   if (!name) { alert('Name is required.'); return; }
   var isEdit = !!_regEditId;
   var url    = isEdit ? '/admin/api/register/' + _regEditId : '/admin/api/register';
   var method = isEdit ? 'PUT' : 'POST';
-  var body   = {event_date: date, name: name, father: father, mother: mother, sponsors: sponsors, officiant: officiant, notes: notes};
+  var body   = {event_date: date, name: name, dob: dob, place_of_birth: placeOfBirth, baptism_place: baptismPlace, father: father, mother: mother, sponsors: sponsors, officiant: officiant, notes: notes};
   if (!isEdit) body.type = _regType;
   api(url, {method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(function(r) {
     if (r.ok) {
@@ -4103,13 +4109,16 @@ function openRegisterEdit(id) {
   var entry = _regEntries.find(function(e){ return e.id === id; });
   if (!entry) return;
   _regEditId = id;
-  document.getElementById('reg-date').value      = entry.event_date || '';
-  document.getElementById('reg-name').value      = entry.name || '';
-  document.getElementById('reg-father').value    = entry.father || '';
-  document.getElementById('reg-mother').value    = entry.mother || '';
-  document.getElementById('reg-sponsors').value  = entry.sponsors || entry.name2 || '';
-  document.getElementById('reg-officiant').value = entry.officiant || '';
-  document.getElementById('reg-notes').value     = entry.notes || '';
+  document.getElementById('reg-date').value           = entry.event_date || '';
+  document.getElementById('reg-name').value           = entry.name || '';
+  document.getElementById('reg-dob').value            = entry.dob || '';
+  document.getElementById('reg-place-of-birth').value = entry.place_of_birth || '';
+  document.getElementById('reg-baptism-place').value  = entry.baptism_place || '';
+  document.getElementById('reg-father').value         = entry.father || '';
+  document.getElementById('reg-mother').value         = entry.mother || '';
+  document.getElementById('reg-sponsors').value       = entry.sponsors || entry.name2 || '';
+  document.getElementById('reg-officiant').value      = entry.officiant || '';
+  document.getElementById('reg-notes').value          = entry.notes || '';
   var ft = document.getElementById('reg-form-title'); if (ft) ft.textContent = 'Edit Entry';
   var sb = document.getElementById('reg-save-btn');   if (sb) sb.textContent = 'Save Changes';
   var cb = document.getElementById('reg-cancel-btn'); if (cb) cb.style.display = '';
