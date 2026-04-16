@@ -1431,7 +1431,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-16-v17';
+var DEPLOY_VERSION = '2026-04-16-v18';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -2817,8 +2817,8 @@ function showProfile(p) {
       + pvField('gender', p.gender)
       + pvField('marital status', p.marital_status)
       + pvField('birthday', p.dob ? fmtDate(p.dob)+calcAge(p.dob) : '')
-      + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : '')
-      + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : '')
+      + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : (p.baptized ? 'Yes (date unknown)' : ''))
+      + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : (p.confirmed ? 'Yes (date unknown)' : ''))
       + pvField('anniversary', p.anniversary_date ? fmtDate(p.anniversary_date) : '')
       + pvField('deceased', p.deceased ? (p.death_date ? fmtDate(p.death_date) : 'Yes') : 'No')
       + '</div>'
@@ -2988,8 +2988,10 @@ function pvEditDemo() {
     + '<div class="pv-field-card"><label for="ped-gender" class="pv-field-card-lbl">gender</label><select id="ped-gender" style="'+inp+'">'+gOpts+'</select></div>'
     + '<div class="pv-field-card"><label for="ped-ms" class="pv-field-card-lbl">marital status</label><select id="ped-ms" style="'+inp+'">'+msOpts+'</select></div>'
     + '<div class="pv-field-card"><label for="ped-dob" class="pv-field-card-lbl">birthday</label><input type="date" id="ped-dob" value="'+esc(p.dob ? p.dob.slice(0,10) : '')+'" style="'+inp+'"></div>'
-    + '<div class="pv-field-card"><label for="ped-bap" class="pv-field-card-lbl">baptized</label><input type="date" id="ped-bap" value="'+esc(p.baptism_date ? p.baptism_date.slice(0,10) : '')+'" style="'+inp+'"></div>'
-    + '<div class="pv-field-card"><label for="ped-conf" class="pv-field-card-lbl">confirmed</label><input type="date" id="ped-conf" value="'+esc(p.confirmation_date ? p.confirmation_date.slice(0,10) : '')+'" style="'+inp+'"></div>'
+    + '<div class="pv-field-card"><label for="ped-bap" class="pv-field-card-lbl">baptized (date)</label><input type="date" id="ped-bap" name="ped-bap" value="'+esc(p.baptism_date ? p.baptism_date.slice(0,10) : '')+'" style="'+inp+'"></div>'
+    + '<div class="pv-field-card" style="display:flex;flex-direction:column;gap:4px;"><label class="pv-field-card-lbl">baptized (no date)</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" id="ped-baptized" name="ped-baptized"'+(p.baptized?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"> Yes, date unknown</label></div>'
+    + '<div class="pv-field-card"><label for="ped-conf" class="pv-field-card-lbl">confirmed (date)</label><input type="date" id="ped-conf" name="ped-conf" value="'+esc(p.confirmation_date ? p.confirmation_date.slice(0,10) : '')+'" style="'+inp+'"></div>'
+    + '<div class="pv-field-card" style="display:flex;flex-direction:column;gap:4px;"><label class="pv-field-card-lbl">confirmed (no date)</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" id="ped-confirmed" name="ped-confirmed"'+(p.confirmed?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"> Yes, date unknown</label></div>'
     + '<div class="pv-field-card"><label for="ped-ann" class="pv-field-card-lbl">anniversary</label><input type="date" id="ped-ann" value="'+esc(p.anniversary_date ? p.anniversary_date.slice(0,10) : '')+'" style="'+inp+'"></div>'
     + '</div>';
   var f = sec.querySelector('select'); if (f) f.focus();
@@ -3004,12 +3006,14 @@ function pvSaveDemo() {
     marital_status:    (document.getElementById('ped-ms')||{}).value || '',
     dob:               (document.getElementById('ped-dob')||{}).value || null,
     baptism_date:      (document.getElementById('ped-bap')||{}).value || null,
+    baptized:          (document.getElementById('ped-baptized')||{}).checked ? 1 : 0,
     confirmation_date: (document.getElementById('ped-conf')||{}).value || null,
+    confirmed:         (document.getElementById('ped-confirmed')||{}).checked ? 1 : 0,
     anniversary_date:  (document.getElementById('ped-ann')||{}).value || null
   });
   api('/admin/api/people/'+p.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)})
     .then(function() {
-      ['gender','marital_status','dob','baptism_date','confirmation_date','anniversary_date'].forEach(function(k){ _currentPvPerson[k] = patch[k]; });
+      ['gender','marital_status','dob','baptism_date','baptized','confirmation_date','confirmed','anniversary_date'].forEach(function(k){ _currentPvPerson[k] = patch[k]; });
       pvRenderDemo();
     }).catch(function() {
       if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
@@ -3028,8 +3032,8 @@ function pvRenderDemo() {
     + pvField('gender', p.gender)
     + pvField('marital status', p.marital_status)
     + pvField('birthday', p.dob ? fmtDate(p.dob)+calcAge(p.dob) : '')
-    + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : '')
-    + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : '')
+    + pvField('baptized', p.baptism_date ? fmtDate(p.baptism_date) : (p.baptized ? 'Yes (date unknown)' : ''))
+    + pvField('confirmed', p.confirmation_date ? fmtDate(p.confirmation_date) : (p.confirmed ? 'Yes (date unknown)' : ''))
     + pvField('anniversary', p.anniversary_date ? fmtDate(p.anniversary_date) : '')
     + pvField('deceased', p.deceased ? (p.death_date ? fmtDate(p.death_date) : 'Yes') : 'No')
     + '</div>';

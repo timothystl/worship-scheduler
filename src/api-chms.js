@@ -279,7 +279,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
          city=?,state=?,zip=?,member_type=?,dob=?,baptism_date=?,confirmation_date=?,
          anniversary_date=?,death_date=?,deceased=?,household_id=?,family_role=?,photo_url=?,notes=?,
          public_directory=?,envelope_number=?,last_seen_date=?,gender=?,marital_status=?,
-         dir_hide_address=?,dir_hide_phone=?,dir_hide_email=? WHERE id=?`
+         dir_hide_address=?,dir_hide_phone=?,dir_hide_email=?,baptized=?,confirmed=? WHERE id=?`
       ).bind(b.first_name||'',b.last_name||'',b.email||'',b.phone||'',
              b.address1||'',b.address2||'',b.city||'',b.state||'MO',b.zip||'',
              b.member_type||'visitor',b.dob||'',b.baptism_date||'',
@@ -287,7 +287,8 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
              b.household_id||null,b.family_role||'',b.photo_url||'',b.notes||'',
              b.public_directory!=null?(b.public_directory?1:0):1,
              b.envelope_number||'',b.last_seen_date||'',b.gender||'',b.marital_status||'',
-             b.dir_hide_address?1:0, b.dir_hide_phone?1:0, b.dir_hide_email?1:0, pid
+             b.dir_hide_address?1:0, b.dir_hide_phone?1:0, b.dir_hide_email?1:0,
+             b.baptized?1:0, b.confirmed?1:0, pid
       ).run();
       if (Array.isArray(b.tag_ids)) {
         await db.prepare('DELETE FROM person_tags WHERE person_id=?').bind(pid).run();

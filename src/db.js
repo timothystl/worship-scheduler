@@ -455,6 +455,9 @@ export async function initDb(db) {
     'ALTER TABLE people ADD COLUMN dir_hide_address INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE people ADD COLUMN dir_hide_phone INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE people ADD COLUMN dir_hide_email INTEGER NOT NULL DEFAULT 0',
+    // people: baptized/confirmed boolean flags (independent of date — for cases where date is unknown)
+    'ALTER TABLE people ADD COLUMN baptized INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE people ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }
