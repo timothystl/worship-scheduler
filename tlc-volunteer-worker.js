@@ -113,10 +113,9 @@ async function _fetch(req, env) {
       if (!parsed.hostname.endsWith('.breezechms.com') && parsed.hostname !== 'breezechms.com') {
         return json({ error: 'Only Breeze photo URLs may be proxied' }, 403);
       }
-      const apiKey = env.BREEZE_API_KEY || '';
-      const upstream = await fetch(photoUrl, {
-        headers: apiKey ? { 'Api-Key': apiKey } : {}
-      });
+      // Photo files on Breeze CDN are static assets — the REST API key is not used for
+      // file serving. Sending it can cause unexpected responses; fetch without auth headers.
+      const upstream = await fetch(photoUrl);
       const ct = upstream.headers.get('Content-Type') || 'image/jpeg';
       return new Response(upstream.body, {
         status: upstream.status,
