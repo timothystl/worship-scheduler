@@ -329,6 +329,25 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     }
   }
 
+  // ── Person photo upload ──────────────────────────────────────────
+  const photoMatch = seg.match(/^people\/(\d+)\/photo$/);
+  if (photoMatch && method === 'POST') {
+    if (!isStaff) return json({ error: 'Insufficient permissions' }, 403);
+    if (!env.PHOTOS) return json({ error: 'Photo storage not configured — create R2 bucket tlc-chms-photos' }, 503);
+    const pid = parseInt(photoMatch[1]);
+    let file;
+    try { const fd = await req.formData(); file = fd.get('photo'); } catch { return json({ error: 'Invalid form data' }, 400); }
+    if (!file || !file.size) return json({ error: 'No file provided' }, 400);
+    const ct = file.type || 'image/jpeg';
+    if (!ct.startsWith('image/')) return json({ error: 'File must be an image' }, 400);
+    const ext = ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : 'jpg';
+    const r2Key = `people/${pid}/photo.${ext}`;
+    await env.PHOTOS.put(r2Key, await file.arrayBuffer(), { httpMetadata: { contentType: ct } });
+    const photoUrl = `/admin/r2photo/${r2Key}`;
+    await db.prepare('UPDATE people SET photo_url=? WHERE id=?').bind(photoUrl, pid).run();
+    return json({ ok: true, photo_url: photoUrl });
+  }
+
   // ── Households ──────────────────────────────────────────────────
   if (seg === 'households' && method === 'GET') {
     const q = '%' + (url.searchParams.get('q') || '') + '%';
