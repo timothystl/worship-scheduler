@@ -71,8 +71,8 @@ Added 2026-04-15, phased 2026-04-15.
 | # | Description | Status |
 |---|-------------|--------|
 | A1 | Per-user auth: enforce username+password, fix broken user management in Settings. Roles: Admin/Finance/Staff/Member | Queued — dedicated session |
-| S1 | **Register record creation from people records** is broken — diagnose and fix | Queued — dedicated session |
-| S2 | **Image/photo import** is broken — diagnose and fix | Queued — dedicated session |
+| S1 | **Register record creation from people records** — diagnose and fix | Done 2026-04-16 — endpoint confirmed correct; DOB/Place of Birth/Baptism Place added to edit form |
+| S2 | **Image/photo import** — diagnose and fix | Done 2026-04-16 — bulk import already syncs photos via p.path; per-person sync now also updates photo_url; diagnostic output added |
 
 ---
 
@@ -120,6 +120,7 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-16
+- **v11**: Register edit form — DOB, Place of Birth, Baptism Place fields added (Goal 2). Autofill `name=` attributes added to all form fields missing them (~50 fields across all modals, Goal 3). Per-person Breeze sync now updates photo_url + exposes photo diagnostic (Goal 4).
 - **v8**: Fixed blank-status people defaulting to Member (R10).
 - **v7**: Fixed tag sync Worker timeout — batch DB ops (R12).
 - **v6**: Fixed deactivation wipe bug (R11); removed tag sync from import (R13); added Restore All Active button.

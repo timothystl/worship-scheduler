@@ -2478,6 +2478,17 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const anniversaryDate = toISOPS(extractDatePS(details[F_ANNIVERSARY]) || extractDatePS(details['anniversary_date']) || extractDatePS(details['anniversary']) || '');
     const gender          = (F_GENDER  ? extractNamePS(details[F_GENDER])  : '') || extractNamePS(details['gender'])  || extractNamePS(details['sex']) || '';
     const maritalStatus   = (F_MARITAL ? extractNamePS(details[F_MARITAL]) : '') || extractNamePS(details['marital_status']) || extractNamePS(details['marital']) || '';
+    // Photo — same logic as bulk import: prefer p.path (relative CDN path), fall back to p.thumb
+    const GENERIC_PAT_PS = ['/generic/', 'silhouette', 'no-photo', 'placeholder', 'default-avatar', 'profile-generic'];
+    let photoUrl = '';
+    if (p.path && !GENERIC_PAT_PS.some(pat => p.path.toLowerCase().includes(pat))) {
+      photoUrl = `https://${subdomain}.breezechms.com/${p.path}`;
+    } else if (typeof p.thumb === 'string' && p.thumb.startsWith('https://') &&
+               p.thumb.includes('breezechms.com') &&
+               !GENERIC_PAT_PS.some(pat => p.thumb.toLowerCase().includes(pat))) {
+      photoUrl = p.thumb;
+    }
+    diag.photo.photoUrl_extracted = photoUrl;
 
     // Find this person in the local DB
     const localPerson = await db.prepare(
@@ -2498,6 +2509,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         gender:        { field: F_GENDER_FIELD   ? { id: F_GENDER_FIELD.id,   field_id: F_GENDER_FIELD.field_id,   name: F_GENDER_FIELD.name   } : null, raw: details[F_GENDER]       ?? null, extracted: gender },
         marital_status:{ field: F_MARITAL_FIELD  ? { id: F_MARITAL_FIELD.id,  field_id: F_MARITAL_FIELD.field_id,  name: F_MARITAL_FIELD.name  } : null, raw: details[F_MARITAL]      ?? null, extracted: maritalStatus },
       },
+      photo: { path: p.path || null, thumb_type: typeof p.thumb, photoUrl_extracted: '' /* filled after extraction */ },
       detail_keys_in_breeze: Object.keys(details),
       detail_sample: Object.entries(details).slice(0, 30).map(([k,v]) => ({ key: k, val: String(JSON.stringify(v) ?? '').slice(0, 200) })),
       // Show raw profile field objects (truncated) so we can see if there's a field_id vs id discrepancy
@@ -2516,11 +2528,13 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
        confirmation_date= CASE WHEN ? != '' THEN ? ELSE confirmation_date END,
        anniversary_date = CASE WHEN ? != '' THEN ? ELSE anniversary_date  END,
        gender           = CASE WHEN ? != '' THEN ? ELSE gender            END,
-       marital_status   = CASE WHEN ? != '' THEN ? ELSE marital_status    END
+       marital_status   = CASE WHEN ? != '' THEN ? ELSE marital_status    END,
+       photo_url        = CASE WHEN ? != '' THEN ? ELSE photo_url         END
        WHERE breeze_id=?`
     ).bind(
       dob,dob, baptismDate,baptismDate, confirmDate,confirmDate,
       anniversaryDate,anniversaryDate, gender,gender, maritalStatus,maritalStatus,
+      photoUrl,photoUrl,
       breezeId
     ).run();
 
@@ -2536,6 +2550,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const summary = 'Profile fields discovered: ' + allFields.length
       + '\nDetail keys on this person: ' + Object.keys(details).length
       + '\nTop-level birth_date: "' + (p.birth_date || '') + '"'
+      + '\nPhoto URL: "' + (photoUrl || '(none — p.path=' + (p.path||'') + ')') + '"'
       + '\nFetch: single=' + (fetchDebug.single_status||'?') + ' (' + (fetchDebug.single_detail_keys||0) + ' keys)'
       + (fetchDebug.list_status ? ', list=' + fetchDebug.list_status + ' (' + (fetchDebug.list_count||0) + ' results)' : '')
       + '\n\nField matching:\n' + matchSummary
