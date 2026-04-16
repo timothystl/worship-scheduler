@@ -2158,6 +2158,14 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     return json({ ok: true, deleted: r.meta?.changes ?? 0 });
   }
 
+  // ── Restore active=1 for all Breeze-imported people ──────────────
+  // Emergency recovery: sets active=1 for every person that has a breeze_id.
+  // Use after a deactivation bug wipes everyone from the system.
+  if (seg === 'import/restore-breeze-active' && method === 'POST') {
+    const r = await db.prepare(`UPDATE people SET active=1 WHERE breeze_id != '' AND breeze_id IS NOT NULL`).run();
+    return json({ ok: true, restored: r.meta?.changes ?? 0 });
+  }
+
   // ── Breeze Debug ─────────────────────────────────────────────────
   if (seg === 'import/breeze-debug' && method === 'GET') {
     const subdomain = env.BREEZE_SUBDOMAIN;
@@ -2889,90 +2897,30 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       await db.prepare(`INSERT INTO chms_config(key,value) VALUES('${accKey}',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
         .bind(JSON.stringify([...existing])).run();
       if (done && existing.size > 0) {
-        // Deactivate people with a breeze_id that were not seen in any batch this run.
-        // D1 has a ~100-parameter limit per statement so batch in chunks of 90 IDs.
-        const allIds = [...existing];
-        const chunkSize = 90;
-        for (let ci = 0; ci < allIds.length; ci += chunkSize) {
-          const chunk = allIds.slice(ci, ci + chunkSize);
-          const idList = chunk.map(() => '?').join(',');
-          const r = await db.prepare(
-            `UPDATE people SET active=0 WHERE active=1 AND breeze_id != '' AND breeze_id NOT IN (${idList})`
-          ).bind(...chunk).run();
-          deactivated += r.meta?.changes ?? 0;
+        // Deactivate people whose breeze_id was not seen in any batch this run.
+        // Correct approach: find the TO-DEACTIVATE set in JS, then chunk with IN (not NOT IN).
+        // Using chunked NOT IN on the seen set is wrong — each chunk deactivates everyone
+        // outside that small chunk, wiping the entire database.
+        const allActivePeople = (await db.prepare(
+          `SELECT breeze_id FROM people WHERE active=1 AND breeze_id != '' AND breeze_id IS NOT NULL`
+        ).all()).results || [];
+        const toDeactivate = allActivePeople.map(r => r.breeze_id).filter(id => !existing.has(id));
+        if (toDeactivate.length > 0) {
+          const chunkSize = 90;
+          for (let ci = 0; ci < toDeactivate.length; ci += chunkSize) {
+            const chunk = toDeactivate.slice(ci, ci + chunkSize);
+            const idList = chunk.map(() => '?').join(',');
+            const r = await db.prepare(
+              `UPDATE people SET active=0 WHERE active=1 AND breeze_id IN (${idList})`
+            ).bind(...chunk).run();
+            deactivated += r.meta?.changes ?? 0;
+          }
         }
       }
     } catch {}
-    // On the final batch, sync tags and tag assignments from Breeze
-    let tagsSynced = 0, tagAssignments = 0;
-    if (done) {
-      try {
-        // 1. Fetch all tags
-        const tagRes = await fetch(`https://${subdomain}.breezechms.com/api/tags/list_tags`, { headers: { 'Api-key': apiKey } });
-        const tagText = await tagRes.text();
-        let allTags = [];
-        try { allTags = JSON.parse(tagText); } catch {}
-        if (Array.isArray(allTags)) {
-          for (const t of allTags) {
-            const bId = String(t.id);
-            const tName = (t.name || '').trim();
-            if (!tName) continue;
-            const existing = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bId).first();
-            if (existing) {
-              await db.prepare('UPDATE tags SET name=? WHERE breeze_id=?').bind(tName, bId).run();
-            } else {
-              // Check by name in case it was created manually
-              const byName = await db.prepare('SELECT id FROM tags WHERE name=? AND (breeze_id="" OR breeze_id IS NULL)').bind(tName).first();
-              if (byName) {
-                await db.prepare('UPDATE tags SET breeze_id=? WHERE id=?').bind(bId, byName.id).run();
-              } else {
-                await db.prepare('INSERT INTO tags (name, breeze_id) VALUES (?,?)').bind(tName, bId).run();
-              }
-            }
-            tagsSynced++;
-          }
-          // 2. Tag-to-person assignments using filter_json with y_ prefix (Breeze quirk)
-          for (const t of allTags) {
-            const bTagId = String(t.id);
-            const tagRow = await db.prepare('SELECT id FROM tags WHERE breeze_id=?').bind(bTagId).first();
-            if (!tagRow) continue;
-            const localTagId = tagRow.id;
-            // Breeze requires y_ prefix + space after colon in filter_json
-            const filterJson = encodeURIComponent(`{"tag_contains": "y_${bTagId}"}`);
-            let tagOffset = 0;
-            const tagLimit = 500;
-            while (true) {
-              const memRes = await fetch(
-                `https://${subdomain}.breezechms.com/api/people?filter_json=${filterJson}&limit=${tagLimit}&offset=${tagOffset}`,
-                { headers: { 'Api-key': apiKey } }
-              );
-              const memText = await memRes.text();
-              if (!memText || !memText.trim()) break;
-              let tagMembers = [];
-              try {
-                const parsed = JSON.parse(memText);
-                // Breeze may return array or numbered object
-                tagMembers = Array.isArray(parsed) ? parsed : Object.values(parsed);
-              } catch { break; }
-              if (!tagMembers.length) break;
-              for (const m of tagMembers) {
-                const bPersonId = String(m.id || '');
-                if (!bPersonId) continue;
-                const personRow = await db.prepare('SELECT id FROM people WHERE breeze_id=?').bind(bPersonId).first();
-                if (!personRow) continue;
-                try {
-                  await db.prepare('INSERT OR IGNORE INTO person_tags (person_id, tag_id) VALUES (?,?)').bind(personRow.id, localTagId).run();
-                  tagAssignments++;
-                } catch {}
-              }
-              if (tagMembers.length < tagLimit) break;
-              tagOffset += tagLimit;
-            }
-          }
-        }
-      } catch (e) { errors.push({ tag_sync_error: e.message }); }
-    }
-    return json({ ok: true, imported, updated, skipped, deactivated, errors, done, next_offset: offset + people.length, tags_synced: tagsSynced, tag_assignments: tagAssignments, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, dob_field: F_DOB_FIELD ? {id: F_DOB_FIELD.id, name: F_DOB_FIELD.name} : null, baptism_field: F_BAPTISM_FIELD ? {id: F_BAPTISM_FIELD.id, name: F_BAPTISM_FIELD.name} : null, confirmation_field: F_CONFIRM_FIELD ? {id: F_CONFIRM_FIELD.id, name: F_CONFIRM_FIELD.name} : null, deceased_field: F_DECEASED_FIELD ? {id: F_DECEASED_FIELD.id, name: F_DECEASED_FIELD.name} : null, death_date_field: F_DEATH_FIELD ? {id: F_DEATH_FIELD.id, name: F_DEATH_FIELD.name} : null, envelope_field: F_ENVELOPE_FIELD ? {id: F_ENVELOPE_FIELD.id, name: F_ENVELOPE_FIELD.name} : null, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, sample_detail_entries: sampleDetailEntries, sample_top_level_keys: sampleTopLevelKeys, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
+    // Tag sync removed from people import — it times out the Worker when run inline.
+    // The frontend auto-triggers runBreezeTagSync() after the final people batch.
+    return json({ ok: true, imported, updated, skipped, deactivated, errors, done, next_offset: offset + people.length, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, dob_field: F_DOB_FIELD ? {id: F_DOB_FIELD.id, name: F_DOB_FIELD.name} : null, baptism_field: F_BAPTISM_FIELD ? {id: F_BAPTISM_FIELD.id, name: F_BAPTISM_FIELD.name} : null, confirmation_field: F_CONFIRM_FIELD ? {id: F_CONFIRM_FIELD.id, name: F_CONFIRM_FIELD.name} : null, deceased_field: F_DECEASED_FIELD ? {id: F_DECEASED_FIELD.id, name: F_DECEASED_FIELD.name} : null, death_date_field: F_DEATH_FIELD ? {id: F_DEATH_FIELD.id, name: F_DEATH_FIELD.name} : null, envelope_field: F_ENVELOPE_FIELD ? {id: F_ENVELOPE_FIELD.id, name: F_ENVELOPE_FIELD.name} : null, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, sample_detail_entries: sampleDetailEntries, sample_top_level_keys: sampleTopLevelKeys, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
   } catch (importErr) {
     return json({ ok: false, error: 'Bulk import error: ' + importErr.message, _stack: (importErr.stack||'').slice(0, 500) }, 500);
   } }

@@ -841,6 +841,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
         <button class="btn-primary" onclick="runBreezeImport()">Sync People from Breeze</button>
         <button class="btn-secondary" onclick="runBreezeTagSync()">&#127991; Sync Tags Only</button>
+        <button class="btn-secondary" style="color:#c0392b;border-color:#c0392b;" onclick="restoreBreezeActive()" title="Emergency: re-activate all Breeze-imported people (use after a deactivation bug)">&#9881; Restore All Active</button>
       </div>
       <div class="progress-bar" id="breeze-bar"><div class="progress-fill" id="breeze-fill" style="width:0%"></div></div>
       <div class="import-status" id="breeze-status"></div>
@@ -1421,7 +1422,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-16-v5';
+var DEPLOY_VERSION = '2026-04-16-v6';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -5410,27 +5411,38 @@ function runBreezeImport() {
       fill.style.width = d.done ? '100%' : Math.min(95, (d.next_offset / Math.max(d.next_offset + 100, 200)) * 100) + '%';
       status.textContent = 'Imported ' + totalImported + ', updated ' + totalUpdated + '…';
       if (d.done) {
-        var msg = 'Done. ' + totalImported + ' new, ' + totalUpdated + ' updated' + (totalDeactivated ? ', ' + totalDeactivated + ' deactivated (removed from Breeze)' : '') + '.';
+        var msg = 'People sync done. ' + totalImported + ' new, ' + totalUpdated + ' updated' + (totalDeactivated ? ', ' + totalDeactivated + ' deactivated' : '') + '.';
         if (!lastStatusField) {
           msg += ' ⚠ No Breeze status field detected — check Settings › Breeze Status Mapping.';
         } else if (allStatusesSeen.size === 0) {
           msg += ' ⚠ Status field "' + lastStatusField.name + '" found but no values seen.';
         } else {
-          msg += ' Status field: "' + lastStatusField.name + '". Statuses seen: ' + [...allStatusesSeen].join(', ') + '.';
-        }
-        if (d.tags_synced !== undefined) {
-          msg += ' Tags: ' + d.tags_synced + ' synced, ' + (d.tag_assignments || 0) + ' assignments.';
+          msg += ' Status field: "' + lastStatusField.name + '". Statuses: ' + [...allStatusesSeen].join(', ') + '.';
         }
         status.textContent = msg;
         status.className = (lastStatusField && allStatusesSeen.size > 0) ? 'import-status ok' : 'import-status warn';
         fill.style.width = '100%';
         loadPeople();
+        // Auto-trigger tag sync after people import completes
+        runBreezeTagSync();
         return;
       }
       doPage(d.next_offset);
     }).catch(function(e) { status.textContent = 'Network error: ' + e.message; status.className = 'import-status err'; });
   }
   doPage(0);
+}
+function restoreBreezeActive() {
+  if (!confirm('Re-activate all Breeze-imported people? Use this after a deactivation bug. Then run a full sync to clean up.')) return;
+  var status = document.getElementById('breeze-status');
+  if (status) { status.textContent = 'Restoring…'; status.className = 'import-status'; }
+  api('/admin/api/import/restore-breeze-active', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+    .then(function(d) {
+      if (status) { status.textContent = 'Restored ' + (d.restored || 0) + ' people to active. Now run a full Breeze sync.'; status.className = 'import-status ok'; }
+      loadPeople();
+    }).catch(function(e) {
+      if (status) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; }
+    });
 }
 function runBreezeTagSync() {
   var btn = event && event.currentTarget;
