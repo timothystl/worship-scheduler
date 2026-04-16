@@ -2432,7 +2432,11 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const F_CONFIRM_FIELD  = findFieldPS(['confirmation date','affirmation date','date of confirmation','date affirmed','date confirmed','date of affirmation','affirmation of baptism','confirmation (date)','confirmation_date'], ['confirmation','confirmed','affirm']);
     const F_ANNIV_FIELD    = findFieldPS(['anniversary date','anniversary','anniversary_date','wedding anniversary','wedding date'], ['anniversary','wedding']);
     const F_GENDER_FIELD   = findFieldPS(['gender','sex','gender identity'], ['gender','sex']);
-    const F_MARITAL_FIELD  = findFieldPS(['marital status','marital','marriage status','civil status','married']);
+    const F_MARITAL_FIELD    = findFieldPS(['marital status','marital','marriage status','civil status','married']);
+    const F_STATUS_FIELD_PS  = findFieldPS(['status','member status','membership status','fellowship status','church status','member type','church membership','congregational status','person status'], ['status','membership']);
+    const F_ENVELOPE_FIELD_PS = findFieldPS(['envelope number','envelope','giving number','contribution number'], ['envelope']);
+    const F_DEATH_FIELD_PS   = findFieldPS(['death date','date of death','date passed','date deceased'], ['death','passed']);
+    const F_DECEASED_FIELD_PS = findFieldPS(['deceased','passed away'], ['deceased']);
 
     // Use field_id if present — some Breeze instances use a separate field_id as the details key
     const fieldKeyPS = (f) => f ? String(f.field_id || f.id) : '';
@@ -2442,6 +2446,12 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const F_ANNIVERSARY  = fieldKeyPS(F_ANNIV_FIELD);
     const F_GENDER       = fieldKeyPS(F_GENDER_FIELD);
     const F_MARITAL      = fieldKeyPS(F_MARITAL_FIELD);
+    const F_STATUS_PS    = fieldKeyPS(F_STATUS_FIELD_PS);
+    const F_ENVELOPE_PS  = fieldKeyPS(F_ENVELOPE_FIELD_PS);
+    const F_DEATH_PS     = fieldKeyPS(F_DEATH_FIELD_PS);
+    const F_DECEASED_PS  = fieldKeyPS(F_DECEASED_FIELD_PS);
+    const BREEZE_TYPE_FIELD_PS = '1076274773';
+    const BREEZE_TYPE_NUMS_PS  = { '1': 'Member', '2': 'Attender', '3': 'Visitor' };
 
     const toISOPS = s => {
       if (!s || typeof s !== 'string') return '';
@@ -2474,16 +2484,76 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       return '';
     };
 
+    // Load configured member types + map for status resolution
+    const mtCfgRowPS = await db.prepare("SELECT value FROM chms_config WHERE key='member_types'").first();
+    const configuredMemberTypesPS = mtCfgRowPS ? JSON.parse(mtCfgRowPS.value) : ['Member','Attender','Visitor','Vietnamese Congregation','Other'];
+    const mtMapRowPS = await db.prepare("SELECT value FROM chms_config WHERE key='member_type_map'").first();
+    const memberTypeMapPS = mtMapRowPS ? JSON.parse(mtMapRowPS.value) : {};
+
     const details = p.details || {};
-    // Breeze stores some built-in fields with literal string keys (not numeric profile field IDs).
-    // Always check literal keys as a fallback alongside the profile-field-ID-based lookup.
+    const fn = (p.first_name || '').trim();
+    const ln = (p.last_name  || '').trim();
+
+    // Demographic dates, gender, marital
     const dob             = toISOPS(p.birth_date || extractDatePS(details[F_DOB]) || extractDatePS(details['birthdate']) || '');
     const baptismDate     = toISOPS(extractDatePS(details[F_BAPTISM]) || extractDatePS(details['baptism_date']) || extractDatePS(details['baptism']) || '');
     const confirmDate     = toISOPS(extractDatePS(details[F_CONFIRMATION]) || extractDatePS(details['confirmation_date']) || extractDatePS(details['confirmation']) || '');
     const anniversaryDate = toISOPS(extractDatePS(details[F_ANNIVERSARY]) || extractDatePS(details['anniversary_date']) || extractDatePS(details['anniversary']) || '');
     const gender          = (F_GENDER  ? extractNamePS(details[F_GENDER])  : '') || extractNamePS(details['gender'])  || extractNamePS(details['sex']) || '';
     const maritalStatus   = (F_MARITAL ? extractNamePS(details[F_MARITAL]) : '') || extractNamePS(details['marital_status']) || extractNamePS(details['marital']) || '';
-    // Photo — same logic as bulk import: prefer p.path / p.photo (relative CDN path), fall back to p.thumb
+
+    // Deceased + death date
+    const deathDateRaw = extractDatePS(details[F_DEATH_PS]) || extractDatePS(details[F_DECEASED_PS]) || '';
+    const deathDate    = toISOPS(deathDateRaw);
+    const deceasedRaw  = details[F_DECEASED_PS];
+    const deceasedFlag = p.deceased ? 1 : deathDate ? 1
+      : (deceasedRaw && typeof deceasedRaw === 'string' && deceasedRaw !== '0' && deceasedRaw !== 'false') ? 1
+      : (deceasedRaw && typeof deceasedRaw === 'object' && (deceasedRaw.value || deceasedRaw.name)) ? 1 : 0;
+
+    // Envelope number
+    const envelopeNumber = F_ENVELOPE_PS ? (extractNamePS(details[F_ENVELOPE_PS]) || extractDatePS(details[F_ENVELOPE_PS]) || '') : (p.envelope_number || '');
+
+    // Status / member type — same 3-step resolution as bulk import
+    let statusNamePS = '';
+    if (F_STATUS_PS) statusNamePS = extractNamePS(details[F_STATUS_PS]);
+    if (!statusNamePS) {
+      for (const [dk, val] of Object.entries(details)) {
+        if (dk === BREEZE_TYPE_FIELD_PS) continue;
+        const candidate = extractNamePS(val);
+        if (!candidate) continue;
+        const cl = candidate.toLowerCase();
+        if (configuredMemberTypesPS.some(t => t.toLowerCase() === cl) || memberTypeMapPS[candidate] || memberTypeMapPS[cl]) {
+          statusNamePS = candidate; break;
+        }
+      }
+    }
+    if (!statusNamePS && !F_STATUS_FIELD_PS) {
+      const builtinRaw = details[BREEZE_TYPE_FIELD_PS];
+      if (builtinRaw !== undefined) {
+        const bs = extractNamePS(builtinRaw);
+        statusNamePS = BREEZE_TYPE_NUMS_PS[bs] || memberTypeMapPS[bs] || memberTypeMapPS[bs.toLowerCase()] || bs;
+      }
+    }
+    const mappedRawPS  = statusNamePS ? (memberTypeMapPS[statusNamePS] || memberTypeMapPS[statusNamePS.toLowerCase()] || null) : null;
+    const mappedTypePS = mappedRawPS ? (configuredMemberTypesPS.find(t => t.toLowerCase() === mappedRawPS.toLowerCase()) || mappedRawPS) : null;
+    const memberType   = mappedTypePS || (statusNamePS ? configuredMemberTypesPS.find(t => t.toLowerCase() === statusNamePS.toLowerCase()) : null) || '';
+
+    // Contact info from typed detail arrays
+    let email = '', phone = '';
+    let addr  = { street: '', city: '', state: '', zip: '' };
+    for (const val of Object.values(details)) {
+      if (!Array.isArray(val)) continue;
+      for (const item of val) {
+        if (!item || typeof item !== 'object') continue;
+        const ft = item.field_type || '';
+        if ((ft === 'email_primary' || ft === 'email') && !email) email = (item.address || '').trim();
+        else if ((ft === 'phone' || ft.startsWith('phone')) && !phone) phone = (item.phone_number || '').trim();
+        else if ((ft === 'address_primary' || ft === 'address') && !addr.street)
+          addr = { street: (item.street_address||'').trim(), city: (item.city||'').trim(), state: (item.state||'').trim(), zip: (item.zip||'').trim() };
+      }
+    }
+
+    // Photo
     const GENERIC_PAT_PS = ['/generic/', 'silhouette', 'no-photo', 'placeholder', 'default-avatar', 'profile-generic'];
     let photoUrl = '';
     const rawPathPS = (typeof p.path === 'string' && p.path) ? p.path : (typeof p.photo === 'string' && p.photo ? p.photo : '');
@@ -2494,80 +2564,88 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
                !GENERIC_PAT_PS.some(pat => p.thumb.toLowerCase().includes(pat))) {
       photoUrl = p.thumb;
     }
-    diag.photo.photoUrl_extracted = photoUrl;
+
+    // Household from p.family — look up by breeze_id only, don't create new from per-person sync
+    let familyRole = '', householdId = null;
+    if (Array.isArray(p.family) && p.family.length > 0) {
+      const selfMember = p.family.find(m => String(m.person_id) === String(p.id));
+      if (selfMember) {
+        const rn = (selfMember.role_name || '').toLowerCase();
+        if (rn.includes('head')) familyRole = 'head';
+        else if (rn.includes('spouse') || rn.includes('wife') || rn.includes('husband')) familyRole = 'spouse';
+        else if (rn.includes('child') || rn.includes('son') || rn.includes('daughter')) familyRole = 'child';
+        else if (rn) familyRole = 'other';
+      }
+      const bFamilyId = String(p.family[0].family_id || '');
+      if (bFamilyId) {
+        const hhRow = await db.prepare('SELECT id FROM households WHERE breeze_id=?').bind(bFamilyId).first();
+        if (hhRow) householdId = hhRow.id;
+      }
+    }
 
     // Find this person in the local DB
     const localPerson = await db.prepare(
-      'SELECT id,first_name,last_name,dob,baptism_date,confirmation_date,anniversary_date,gender,marital_status FROM people WHERE breeze_id=?'
+      'SELECT id FROM people WHERE breeze_id=?'
     ).bind(breezeId).first();
 
-    // Build diagnostic payload (visible to admin even if update fails)
-    const diag = {
-      fetch_debug: fetchDebug,
-      breeze_person: { id: p.id, name: ((p.first_name||'')+' '+(p.last_name||'')).trim(), birth_date: p.birth_date || null },
-      profile_fields_total: allFields.length,
-      all_profile_field_names: allFields.map(f => ({ id: String(f.id), name: f.name })),
-      field_matches: {
-        dob:           { field: F_DOB_FIELD      ? { id: F_DOB_FIELD.id,      field_id: F_DOB_FIELD.field_id,      name: F_DOB_FIELD.name      } : null, raw: details[F_DOB]          ?? null, extracted: dob },
-        baptism:       { field: F_BAPTISM_FIELD  ? { id: F_BAPTISM_FIELD.id,  field_id: F_BAPTISM_FIELD.field_id,  name: F_BAPTISM_FIELD.name  } : null, raw: details[F_BAPTISM]      ?? null, extracted: baptismDate },
-        confirmation:  { field: F_CONFIRM_FIELD  ? { id: F_CONFIRM_FIELD.id,  field_id: F_CONFIRM_FIELD.field_id,  name: F_CONFIRM_FIELD.name  } : null, raw: details[F_CONFIRMATION] ?? null, extracted: confirmDate },
-        anniversary:   { field: F_ANNIV_FIELD    ? { id: F_ANNIV_FIELD.id,    field_id: F_ANNIV_FIELD.field_id,    name: F_ANNIV_FIELD.name    } : null, raw: details[F_ANNIVERSARY]  ?? null, extracted: anniversaryDate },
-        gender:        { field: F_GENDER_FIELD   ? { id: F_GENDER_FIELD.id,   field_id: F_GENDER_FIELD.field_id,   name: F_GENDER_FIELD.name   } : null, raw: details[F_GENDER]       ?? null, extracted: gender },
-        marital_status:{ field: F_MARITAL_FIELD  ? { id: F_MARITAL_FIELD.id,  field_id: F_MARITAL_FIELD.field_id,  name: F_MARITAL_FIELD.name  } : null, raw: details[F_MARITAL]      ?? null, extracted: maritalStatus },
-      },
-      photo: { path: p.path || null, photo: p.photo || null, thumb_type: typeof p.thumb, photoUrl_extracted: '' /* filled after extraction */ },
-      detail_keys_in_breeze: Object.keys(details),
-      detail_sample: Object.entries(details).slice(0, 30).map(([k,v]) => ({ key: k, val: String(JSON.stringify(v) ?? '').slice(0, 200) })),
-      // Show raw profile field objects (truncated) so we can see if there's a field_id vs id discrepancy
-      profile_fields_raw: allFields.map(f => ({ id: f.id, field_id: f.field_id, name: f.name, has_sub_fields: Array.isArray(f.fields) && f.fields.length > 0 })),
-      local_before: localPerson || null,
-    };
+    if (!localPerson) return json({ ok: false, error: 'Person not found in local database — run a full Breeze import first', fetch_debug: fetchDebug });
 
-    if (!localPerson) return json({ ok: false, error: 'Person not found in local database — run a full Breeze import first', diag });
-
-    // Update fields where Breeze provided a non-empty value.
-    // Uses CASE to only overwrite when we have a real value, preserving manual edits otherwise.
+    // Full sync — name/contact/member_type always overwrite; dates/photo only update when non-empty
     await db.prepare(
       `UPDATE people SET
-       dob              = CASE WHEN ? != '' THEN ? ELSE dob               END,
-       baptism_date     = CASE WHEN ? != '' THEN ? ELSE baptism_date      END,
-       confirmation_date= CASE WHEN ? != '' THEN ? ELSE confirmation_date END,
-       anniversary_date = CASE WHEN ? != '' THEN ? ELSE anniversary_date  END,
-       gender           = CASE WHEN ? != '' THEN ? ELSE gender            END,
-       marital_status   = CASE WHEN ? != '' THEN ? ELSE marital_status    END,
-       photo_url        = CASE WHEN ? != '' THEN ? ELSE photo_url         END
+       first_name        = CASE WHEN ? != '' THEN ? ELSE first_name        END,
+       last_name         = CASE WHEN ? != '' THEN ? ELSE last_name         END,
+       email             = CASE WHEN ? != '' THEN ? ELSE email             END,
+       phone             = CASE WHEN ? != '' THEN ? ELSE phone             END,
+       address1          = CASE WHEN ? != '' THEN ? ELSE address1          END,
+       city              = CASE WHEN ? != '' THEN ? ELSE city              END,
+       state             = CASE WHEN ? != '' THEN ? ELSE state             END,
+       zip               = CASE WHEN ? != '' THEN ? ELSE zip               END,
+       member_type       = CASE WHEN ? != '' THEN ? ELSE member_type       END,
+       family_role       = CASE WHEN ? != '' THEN ? ELSE family_role       END,
+       household_id      = CASE WHEN ? IS NOT NULL THEN ? ELSE household_id END,
+       dob               = CASE WHEN ? != '' THEN ? ELSE dob               END,
+       baptism_date      = CASE WHEN ? != '' THEN ? ELSE baptism_date      END,
+       confirmation_date = CASE WHEN ? != '' THEN ? ELSE confirmation_date END,
+       anniversary_date  = CASE WHEN ? != '' THEN ? ELSE anniversary_date  END,
+       gender            = CASE WHEN ? != '' THEN ? ELSE gender            END,
+       marital_status    = CASE WHEN ? != '' THEN ? ELSE marital_status    END,
+       photo_url         = CASE WHEN ? != '' THEN ? ELSE photo_url         END,
+       deceased          = CASE WHEN ? = 1 THEN 1 ELSE deceased            END,
+       death_date        = CASE WHEN ? != '' THEN ? ELSE death_date        END,
+       envelope_number   = CASE WHEN ? != '' THEN ? ELSE envelope_number   END
        WHERE breeze_id=?`
     ).bind(
-      dob,dob, baptismDate,baptismDate, confirmDate,confirmDate,
-      anniversaryDate,anniversaryDate, gender,gender, maritalStatus,maritalStatus,
-      photoUrl,photoUrl,
+      fn,fn, ln,ln, email,email, phone,phone,
+      addr.street,addr.street, addr.city,addr.city, addr.state,addr.state, addr.zip,addr.zip,
+      memberType,memberType, familyRole,familyRole, householdId,householdId,
+      dob,dob, baptismDate,baptismDate, confirmDate,confirmDate, anniversaryDate,anniversaryDate,
+      gender,gender, maritalStatus,maritalStatus, photoUrl,photoUrl,
+      deceasedFlag, deathDate,deathDate, envelopeNumber,envelopeNumber,
       breezeId
     ).run();
 
-    // Build human-readable diagnostic summary for the UI alert
-    const fm = diag.field_matches;
-    const matchSummary = ['dob','baptism','confirmation','anniversary','gender','marital_status']
-      .map(k => k + ': ' + (fm[k].field ? fm[k].field.name + ' (id ' + fm[k].field.id + ')' : 'NOT FOUND') + ' => "' + (fm[k].extracted || '') + '"')
-      .join('\n');
-    // Show first 20 detail key:value pairs so we can see what Breeze is actually storing
-    const detailDump = Object.entries(details).slice(0, 20)
-      .map(([k, v]) => '  ' + k + ': ' + String(JSON.stringify(v) ?? '').slice(0, 80))
-      .join('\n');
-    const summary = 'Profile fields discovered: ' + allFields.length
-      + '\nDetail keys on this person: ' + Object.keys(details).length
-      + '\nTop-level birth_date: "' + (p.birth_date || '') + '"'
-      + '\nPhoto URL: "' + (photoUrl || '(none — p.path=' + (p.path||'') + ')') + '"'
-      + '\nFetch: single=' + (fetchDebug.single_status||'?') + ' (' + (fetchDebug.single_detail_keys||0) + ' keys)'
-      + (fetchDebug.list_status ? ', list=' + fetchDebug.list_status + ' (' + (fetchDebug.list_count||0) + ' results)' : '')
-      + '\n\nField matching:\n' + matchSummary
-      + '\n\nDetail key sample (first 20):\n' + detailDump
-      + '\n\nAll profile field names:\n' + allFields.map(f => '  ' + f.id + ': ' + f.name).join('\n');
+    const summary = 'Synced from Breeze:'
+      + '\nName: "' + fn + ' ' + ln + '"'
+      + '\nEmail: "' + email + '"  Phone: "' + phone + '"'
+      + '\nAddress: "' + addr.street + ', ' + addr.city + ', ' + addr.state + ' ' + addr.zip + '"'
+      + '\nMember type: "' + memberType + '" (Breeze status: "' + statusNamePS + '")'
+      + '\nFamily role: "' + familyRole + '"  Household ID: ' + (householdId || 'none')
+      + '\nDOB: "' + dob + '"  Baptism: "' + baptismDate + '"  Confirmation: "' + confirmDate + '"'
+      + '\nAnniversary: "' + anniversaryDate + '"  Gender: "' + gender + '"  Marital: "' + maritalStatus + '"'
+      + '\nDeceased: ' + deceasedFlag + '  Death date: "' + deathDate + '"'
+      + '\nEnvelope: "' + envelopeNumber + '"'
+      + '\nPhoto URL: "' + (photoUrl || '(none — p.path=' + (p.path||'') + (p.photo ? ', p.photo='+p.photo : '') + ')') + '"'
+      + '\nFetch: single=' + (fetchDebug.single_status||'?') + (fetchDebug.list_status ? ', list='+fetchDebug.list_status : '')
+      + '\nProfile fields: ' + allFields.length
+      + '\nAll profile field names:\n' + allFields.map(f => '  ' + f.id + ': ' + f.name).join('\n');
 
     return json({
       ok: true,
-      updated: { dob, baptismDate, confirmDate, anniversaryDate, gender, maritalStatus },
-      summary,
-      diag
+      updated: { fn, ln, email, phone, addr, memberType, familyRole, householdId,
+                 dob, baptismDate, confirmDate, anniversaryDate, gender, maritalStatus,
+                 photoUrl, deceasedFlag, deathDate, envelopeNumber },
+      summary
     });
   }
 
