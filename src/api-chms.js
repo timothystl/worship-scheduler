@@ -703,7 +703,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const limit    = Math.min(parseInt(url.searchParams.get('limit') || '500'), 2000);
     if (!personId) return json({ error: 'person_id required' }, 400);
     let sql = `SELECT ge.id, ge.amount, ge.method, ge.check_number, ge.notes,
-                ge.fund_id, ge.batch_id, gb.closed as batch_closed,
+                ge.fund_id, ge.batch_id, gb.closed as batch_closed, gb.description as batch_description,
                 COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as contribution_date,
                 f.name as fund_name
                FROM giving_entries ge

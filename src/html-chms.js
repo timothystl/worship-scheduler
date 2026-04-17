@@ -1504,7 +1504,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-17-v26';
+var DEPLOY_VERSION = '2026-04-17-v27';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -2326,7 +2326,7 @@ function renderDashboard(d) {
     + dashStat(d.memberCount !== undefined ? d.memberCount : d.totalPeople, 'Members', d.totalPeople + ' total people')
     + dashStat(d.memberHHCount !== undefined ? d.memberHHCount : d.totalHouseholds, 'Member Households', d.totalHouseholds + ' total households')
     + (isFinanceRole ? dashStat('$'+fmt$(d.givingThisYear), yr+' Giving', yr-1+': $'+fmt$(d.givingLastYear)) : '')
-    + (isStaffRole ? (svcs.length ? svcs.map(function(s){ return dashStat(s.attendance, esc(s.service_name)||'Service', s.service_date); }).join('') : dashStat('\u2014','Last Service','No attendance yet')) : '')
+    + (isStaffRole ? dashStatServices(svcs) : '')
     + '</div>';
 
   // ── Follow-up queue — staff+ only ─────────────────────────────
@@ -2549,6 +2549,23 @@ function saveFollowUpItem(pid, type, notes, onErr) {
   api('/admin/api/followup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({person_id:pid||null,type:type,notes:notes}) })
     .then(function() { closeModal('followup-modal'); loadDashboard(); })
     .catch(function() { if (onErr) onErr(); });
+}
+function dashStatServices(svcs) {
+  if (!svcs.length) return dashStat('\u2014', 'Last Service', 'No attendance yet');
+  var total = svcs.reduce(function(s,x){return s+(x.attendance||0);},0);
+  var date = svcs[0].service_date || '';
+  var lines = svcs.map(function(s){
+    return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--warm-gray);margin-top:3px;">'
+      +'<span>'+esc(s.service_name||'Service')+'</span>'
+      +'<span style="font-weight:600;">'+s.attendance+'</span>'
+      +'</div>';
+  }).join('');
+  return '<div class="dash-stat">'
+    +'<div class="dash-stat-val">'+total+'</div>'
+    +'<div class="dash-stat-lbl">Last Sunday</div>'
+    +'<div class="dash-stat-sub">'+esc(date)+'</div>'
+    +lines
+    +'</div>';
 }
 function dashStat(val, lbl, sub) {
   return '<div class="dash-stat">'
@@ -3572,43 +3589,26 @@ function renderPvGiving(filterYear) {
     + '<button class="btn-primary" style="margin-top:10px;font-size:.8rem;padding:5px 16px;" onclick="submitQuickGift('+personId+')">Add Gift</button>'
     + '</div>';
   // Table rows
-  var editFundOpts = (allFunds.filter(function(f){return f.active;}).length ? allFunds.filter(function(f){return f.active;}) : allFunds);
-  var iegIs = 'font-size:11px;padding:3px 5px;border:1px solid var(--sky-steel);border-radius:4px;width:100%;box-sizing:border-box;';
+  var isFinUser = (_userRole === 'admin' || _userRole === 'finance');
   var rows = entries.length ? entries.map(function(e){
     var canDel = !e.batch_closed;
-    // Inline edit row
-    if (_editGiftId === e.id) {
-      var fundOpts2 = editFundOpts.map(function(f){
-        return '<option value="'+f.id+'"'+(f.id===e.fund_id?' selected':'')+'>'+esc(f.name)+'</option>';
-      }).join('');
-      var methodOpts = ['cash','check','card','ach','other'].map(function(v){
-        return '<option value="'+v+'"'+(e.method===v?' selected':'')+'>'+v.charAt(0).toUpperCase()+v.slice(1)+'</option>';
-      }).join('');
-      return '<tr style="background:var(--linen);">'
-        + '<td style="padding:4px 6px;"><input type="date" id="ieg-date" value="'+esc(e.contribution_date||'')+'" style="'+iegIs+'"></td>'
-        + '<td style="padding:4px 6px;"><select id="ieg-fund" style="'+iegIs+'">'+fundOpts2+'</select></td>'
-        + '<td style="padding:4px 6px;"><input type="number" id="ieg-amount" step="0.01" min="0.01" value="'+((e.amount||0)/100).toFixed(2)+'" style="'+iegIs+';text-align:right;"></td>'
-        + '<td style="padding:4px 6px;"><select id="ieg-method" style="'+iegIs+'">'+methodOpts+'</select></td>'
-        + '<td style="padding:4px 6px;"><input type="text" id="ieg-check" placeholder="check #" value="'+esc(e.check_number||'')+'" style="'+iegIs+';margin-bottom:2px;"><input type="text" id="ieg-notes" placeholder="notes" value="'+esc(e.notes||'')+'" style="'+iegIs+'"></td>'
-        + '<td style="padding:4px 6px;white-space:nowrap;">'
-        + '<button onclick="saveInlineGift(\''+filterYear+'\')" style="background:var(--sky-steel);color:white;border:none;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;margin-right:2px;">Save</button>'
-        + '<button onclick="cancelInlineGift(\''+filterYear+'\')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">Cancel</button>'
-        + '</td></tr>';
-    }
-    return '<tr>'
+    var batchCell = isFinUser
+      ? '<button onclick="event.stopPropagation();goToBatch('+e.batch_id+')" style="background:none;border:none;color:var(--sky-steel);cursor:pointer;font-size:12px;padding:0;font-weight:600;" title="'+esc(e.batch_description||'')+'">Batch '+e.batch_id+'</button>'
+      : '<span style="font-size:12px;color:var(--warm-gray);">Batch '+e.batch_id+'</span>';
+    return '<tr style="cursor:pointer;" onclick="openEditGiftModal('+e.id+',\''+filterYear+'\')">'
       + '<td style="padding:6px 8px;white-space:nowrap;font-size:12px;">'+(e.contribution_date||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;">'+batchCell+'</td>'
       + '<td style="padding:6px 8px;font-size:12px;">'+esc(e.fund_name||'General')+'</td>'
       + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;font-size:12px;font-weight:600;">$'+((e.amount||0)/100).toFixed(2)+'</td>'
       + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc(e.method||'')+'</td>'
       + '<td style="padding:6px 8px;font-size:12px;color:var(--warm-gray);">'+esc((e.check_number||e.notes||''))+'</td>'
       + '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'
       + (canDel
-          ? '<button onclick="startInlineGiftEdit('+e.id+',\''+filterYear+'\')" style="background:none;border:none;color:var(--sky-steel);cursor:pointer;font-size:14px;padding:0 4px;line-height:1;" title="Edit">&#9998;</button>'
-            + '<button onclick="deleteGivingEntry('+e.id+',\''+filterYear+'\')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;" title="Delete">&times;</button>'
+          ? '<button onclick="event.stopPropagation();deleteGivingEntry('+e.id+',\''+filterYear+'\')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;" title="Delete">&times;</button>'
           : '<span style="font-size:10px;color:var(--warm-gray);">closed</span>')
       + '</td>'
       + '</tr>';
-  }).join('') : '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--warm-gray);font-size:13px;">No gifts'+(filterYear?' in '+filterYear:'')+'.</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--warm-gray);font-size:13px;">No gifts'+(filterYear?' in '+filterYear:'')+'.</td></tr>';
   // Statement year for links
   var statYear = filterYear || new Date().getFullYear().toString();
   var toolbar = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
@@ -3627,6 +3627,7 @@ function renderPvGiving(filterYear) {
     + '<table style="width:100%;border-collapse:collapse;min-width:480px;">'
     + '<thead><tr style="background:var(--linen);">'
     + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Date</th>'
+    + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Batch</th>'
     + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Fund</th>'
     + '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:600;">Amount</th>'
     + '<th style="padding:6px 8px;text-align:left;font-size:11px;font-weight:600;">Method</th>'
@@ -3745,6 +3746,10 @@ function openEditGiftModal(entryId, filterYear) {
   document.getElementById('egm-method').value = e.method || 'check';
   document.getElementById('egm-check').value = e.check_number || '';
   document.getElementById('egm-notes').value = e.notes || '';
+  var mTitle = document.querySelector('#edit-gift-modal h2');
+  if (mTitle) mTitle.textContent = 'Edit Gift — Batch #' + e.batch_id + (e.batch_closed ? ' (closed)' : '');
+  var saveBtn = document.querySelector('#edit-gift-modal .btn-primary');
+  if (saveBtn) saveBtn.style.display = e.batch_closed ? 'none' : '';
   openModal('edit-gift-modal');
 }
 function saveEditGift() {
@@ -4963,9 +4968,19 @@ function setBatchFilter(btn, val) {
   _batchFilter = val;
   loadBatches();
 }
+var _pendingOpenBatchId = null;
+function goToBatch(batchId) {
+  _pendingOpenBatchId = batchId;
+  showTab('giving');
+}
 function loadBatches() {
   api('/admin/api/giving/batches?status=' + _batchFilter).then(function(d) {
     renderBatchList(d.batches || []);
+    if (_pendingOpenBatchId) {
+      var bid = _pendingOpenBatchId;
+      _pendingOpenBatchId = null;
+      openBatch(bid);
+    }
   });
 }
 function filterBatchSearch(val) {
