@@ -2414,7 +2414,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
   // ── Fix Fund Names ───────────────────────────────────────────────
   // Fetches /api/funds from Breeze and renames any local funds whose name
   // still starts with "Breeze Fund " to the real Breeze fund name.
-  if (seg === 'import/fix-fund-names' && method === 'POST') {
+  if (seg === 'import/fix-fund-names' && method === 'POST') { try {
     const subdomain = env.BREEZE_SUBDOMAIN;
     const apiKey    = env.BREEZE_API_KEY;
     if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
@@ -2427,11 +2427,9 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       const fRes = await fetch(`https://${subdomain}.breezechms.com/api/funds`, { headers: hdrs });
       if (fRes.ok) {
         const fData = await fRes.json();
-        if (Array.isArray(fData)) {
-          for (const f of fData) { if (f.id && f.name) breezeFundNames[String(f.id)] = f.name; }
-        } else if (fData && Array.isArray(fData.funds)) {
-          // Some Breeze installs return { funds: [...] }
-          for (const f of fData.funds) { if (f.id && f.name) breezeFundNames[String(f.id)] = f.name; }
+        const fArr = Array.isArray(fData) ? fData : (Array.isArray(fData?.funds) ? fData.funds : null);
+        if (fArr) {
+          for (const f of fArr) { if (f.id && f.name) breezeFundNames[String(f.id)] = f.name; }
         } else {
           fetchError = 'Unexpected /api/funds format: ' + JSON.stringify(fData).slice(0, 200);
         }
@@ -2462,7 +2460,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     }
 
     return json({ ok: true, breezeFundsFound: Object.keys(breezeFundNames).length, placeholderFundsFound: placeholderFunds.length, renamed, details, fetchError });
-  }
+  } catch (e) { return json({ ok: false, error: e.message }, 500); } }
 
   // ── Breeze Debug ─────────────────────────────────────────────────
   if (seg === 'import/breeze-debug' && method === 'GET') {
