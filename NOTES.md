@@ -130,6 +130,7 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-17
+- **v45**: PH3 — Fix black bar above household card photos. Wrapped img in a container div with matching background-color and border-radius; onerror now hides the whole container so the 80px slot disappears entirely on load failure instead of showing a dark broken-image rectangle.
 - **v44**: Anniversary propagation on manual person save — when anniversary_date is set on a head/spouse, automatically copies it to their household partner if the partner has none. Covers manually-added people who never sync to Breeze.
 - **v43**: Anniversary improvements — (1) Breeze import now propagates anniversary_date to spouse when only one has it set; (2) anniversary dashboard card hides entries where either spouse is deceased.
 - **v42**: DB7 — Fix anniversary spouse pairing for couples where only one person has the anniversary_date set in Breeze (the other's field is blank). After the initial grouping pass, a secondary household lookup finds the head/spouse partner and adds them to the entry. Covers the common Breeze pattern where only the household head has the date.
