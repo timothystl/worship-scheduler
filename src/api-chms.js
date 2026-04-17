@@ -112,9 +112,14 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     // DB4: fetch anniversaries with role+household so couples can be paired
     const annRows = (await db.prepare(
       `SELECT id, first_name, last_name, anniversary_date, family_role, household_id FROM people
-       WHERE active=1 AND anniversary_date != ''
+       WHERE active=1 AND (deceased=0 OR deceased IS NULL) AND anniversary_date != ''
          AND LOWER(member_type) NOT IN ('visitor','inactive','other','organization')
          AND strftime('%m', anniversary_date) = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM people p2
+           WHERE p2.household_id=people.household_id AND p2.id!=people.id
+             AND p2.deceased=1 AND p2.family_role IN ('head','spouse')
+         )
        ORDER BY strftime('%d', anniversary_date), household_id,
          CASE family_role WHEN 'head' THEN 0 WHEN 'spouse' THEN 1 ELSE 2 END`
     ).bind(dashMonthStr).all()).results || [];
@@ -125,6 +130,33 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       const key = (p.household_id && p.household_id !== '') ? `${p.household_id}:${p.anniversary_date}` : `_${p.id}`;
       if (!annGroupMap.has(key)) annGroupMap.set(key, []);
       annGroupMap.get(key).push(p);
+    }
+    // For still-unpaired entries, try to find the household partner who may not have anniversary_date set.
+    // Common Breeze pattern: only the head of household has the date; spouse field is blank.
+    const unpairedHHIds = [...new Set(
+      [...annGroupMap.values()]
+        .filter(g => g.length === 1 && g[0].household_id)
+        .map(g => g[0].household_id)
+    )];
+    if (unpairedHHIds.length > 0) {
+      const ph = unpairedHHIds.map(() => '?').join(',');
+      const partners = (await db.prepare(
+        `SELECT id, first_name, last_name, anniversary_date, family_role, household_id
+         FROM people WHERE active=1 AND household_id IN (${ph})
+         AND family_role IN ('head','spouse')
+         AND LOWER(member_type) NOT IN ('visitor','inactive','other','organization')`
+      ).bind(...unpairedHHIds).all()).results || [];
+      const partnersByHH = {};
+      for (const s of partners) {
+        if (!partnersByHH[s.household_id]) partnersByHH[s.household_id] = [];
+        partnersByHH[s.household_id].push(s);
+      }
+      for (const group of annGroupMap.values()) {
+        if (group.length !== 1 || !group[0].household_id) continue;
+        const existing = group[0];
+        const partner = (partnersByHH[existing.household_id] || []).find(s => s.id !== existing.id);
+        if (partner) group.push({ ...partner, anniversary_date: existing.anniversary_date });
+      }
     }
     const anniversaries = [...annGroupMap.values()]
       .map(group => {
@@ -355,6 +387,16 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
         for (const tid of b.tag_ids) {
           try { await db.prepare('INSERT OR IGNORE INTO person_tags(person_id,tag_id) VALUES(?,?)').bind(pid,tid).run(); } catch {}
         }
+      }
+      // Propagate anniversary_date to household spouse if they don't have one set
+      if (b.anniversary_date && b.household_id && ['head','spouse'].includes(b.family_role||'')) {
+        try {
+          await db.prepare(
+            `UPDATE people SET anniversary_date=?
+             WHERE household_id=? AND id!=? AND (anniversary_date='' OR anniversary_date IS NULL)
+               AND family_role IN ('head','spouse') AND active=1`
+          ).bind(b.anniversary_date, b.household_id, pid).run();
+        } catch {}
       }
       // Write audit log entries for changed fields
       if (oldPerson) {
@@ -3488,9 +3530,30 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         }
       }
     } catch {}
+    // Propagate anniversary dates within households: if one spouse has the date and the
+    // other doesn't, copy it over so both records are consistent.
+    let anniversaryPropagated = 0;
+    try {
+      const ar = await db.prepare(
+        `UPDATE people SET anniversary_date=(
+           SELECT p2.anniversary_date FROM people p2
+           WHERE p2.household_id=people.household_id AND p2.id!=people.id
+             AND p2.anniversary_date!='' AND p2.family_role IN ('head','spouse')
+           LIMIT 1
+         )
+         WHERE active=1 AND (anniversary_date='' OR anniversary_date IS NULL)
+           AND family_role IN ('head','spouse') AND household_id IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM people p2 WHERE p2.household_id=people.household_id
+               AND p2.id!=people.id AND p2.anniversary_date!=''
+               AND p2.family_role IN ('head','spouse')
+           )`
+      ).run();
+      anniversaryPropagated = ar.meta?.changes ?? 0;
+    } catch {}
     // Tag sync removed from people import — it times out the Worker when run inline.
     // The frontend auto-triggers runBreezeTagSync() after the final people batch.
-    return json({ ok: true, imported, updated, skipped, deactivated, errors, done, next_offset: offset + people.length, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, dob_field: F_DOB_FIELD ? {id: F_DOB_FIELD.id, name: F_DOB_FIELD.name} : null, baptism_field: F_BAPTISM_FIELD ? {id: F_BAPTISM_FIELD.id, name: F_BAPTISM_FIELD.name} : null, confirmation_field: F_CONFIRM_FIELD ? {id: F_CONFIRM_FIELD.id, name: F_CONFIRM_FIELD.name} : null, deceased_field: F_DECEASED_FIELD ? {id: F_DECEASED_FIELD.id, name: F_DECEASED_FIELD.name} : null, death_date_field: F_DEATH_FIELD ? {id: F_DEATH_FIELD.id, name: F_DEATH_FIELD.name} : null, envelope_field: F_ENVELOPE_FIELD ? {id: F_ENVELOPE_FIELD.id, name: F_ENVELOPE_FIELD.name} : null, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, sample_detail_entries: sampleDetailEntries, sample_top_level_keys: sampleTopLevelKeys, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
+    return json({ ok: true, imported, updated, skipped, deactivated, anniversaryPropagated, errors, done, next_offset: offset + people.length, status_field: F_STATUS_FIELD ? { id: F_STATUS_FIELD.id, name: F_STATUS_FIELD.name } : null, statuses_seen: [...statusesSeen], _diag: offset === 0 ? { status_field_id: F_STATUS, dob_field: F_DOB_FIELD ? {id: F_DOB_FIELD.id, name: F_DOB_FIELD.name} : null, baptism_field: F_BAPTISM_FIELD ? {id: F_BAPTISM_FIELD.id, name: F_BAPTISM_FIELD.name} : null, confirmation_field: F_CONFIRM_FIELD ? {id: F_CONFIRM_FIELD.id, name: F_CONFIRM_FIELD.name} : null, deceased_field: F_DECEASED_FIELD ? {id: F_DECEASED_FIELD.id, name: F_DECEASED_FIELD.name} : null, death_date_field: F_DEATH_FIELD ? {id: F_DEATH_FIELD.id, name: F_DEATH_FIELD.name} : null, envelope_field: F_ENVELOPE_FIELD ? {id: F_ENVELOPE_FIELD.id, name: F_ENVELOPE_FIELD.name} : null, sample_detail_keys: sampleDetailKeys, sample_status_raw: sampleStatusRaw, sample_detail_entries: sampleDetailEntries, sample_top_level_keys: sampleTopLevelKeys, all_profile_fields: allFields.map(f=>({id:String(f.id),name:f.name})) } : undefined });
   } catch (importErr) {
     return json({ ok: false, error: 'Bulk import error: ' + importErr.message, _stack: (importErr.stack||'').slice(0, 500) }, 500);
   } }
