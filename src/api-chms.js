@@ -1789,7 +1789,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
   // Accepts a Breeze giving export CSV with columns:
   // Payment ID, Date, Batch Number, Batch Name, Person ID, First Name,
   // Last Name, Envelope, Amount, Fund(s), Method, Check Number, Note
-  if (seg === 'import/giving-csv' && method === 'POST') {
+  if (seg === 'import/giving-csv' && method === 'POST') { try {
     let body = ''; try { body = await req.text(); } catch {}
     if (!body.trim()) return json({ error: 'Empty body' }, 400);
 
@@ -1951,16 +1951,17 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     ).run();
 
     return json({ ok: true, imported, skipped, skipBlank, skipDup, skipZero, fundsMade, batchesMade, total: dataRows.length });
-  }
+  } catch (e) { return json({ ok: false, error: e.message }, 500); } }
 
   // ── Giving Reset ──────────────────────────────────────────────────
-  if (seg === 'giving/all' && method === 'DELETE') {
+  if (seg === 'giving/all' && method === 'DELETE') { try {
     if (!isAdmin) return json({ error: 'Access denied: giving reset requires admin access' }, 403);
     await db.batch([
       db.prepare('DELETE FROM giving_entries'),
       db.prepare('DELETE FROM giving_batches'),
     ]);
     return json({ ok: true });
+  } catch (e) { return json({ ok: false, error: e.message }, 500); }
   }
 
   // ── Prune empty batches ───────────────────────────────────────────
