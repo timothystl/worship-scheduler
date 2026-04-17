@@ -142,8 +142,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       const ph = unpairedHHIds.map(() => '?').join(',');
       const partners = (await db.prepare(
         `SELECT id, first_name, last_name, anniversary_date, family_role, household_id
-         FROM people WHERE active=1 AND (deceased=0 OR deceased IS NULL) AND household_id IN (${ph})
-         AND LOWER(member_type) NOT IN ('visitor','inactive','other','organization')`
+         FROM people WHERE active=1 AND (deceased=0 OR deceased IS NULL) AND household_id IN (${ph})`
       ).bind(...unpairedHHIds).all()).results || [];
       const partnersByHH = {};
       for (const s of partners) {
