@@ -70,7 +70,7 @@ Full detail in `NOTES.md`. Summary:
 ### Photos
 - [ ] **PH1** — Household picture: ability to set/upload a photo for the whole household, or apply a member photo as the household picture. (noted 2026-04-17)
 - [ ] **PH2** — Crop profile picture: add a crop/resize tool when uploading a profile photo. (noted 2026-04-17)
-- [ ] **PH3** — Black bar appearing above some household cards — investigate and fix rendering bug. (noted 2026-04-17)
+- [x] **PH3** — Black bar appearing above some household cards — fixed 2026-04-17 (v45). Wrapped photo img in a container div with background:var(--linen); onerror hides the whole container.
 
 ### People / Filters
 - [ ] **PF1** — More filter-by-X options: filter people by missing data fields (no DOB, no address, no email, etc.) for data cleanup workflows. (noted 2026-04-17)
