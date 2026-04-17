@@ -1877,11 +1877,12 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const parseFundSplits = (fundStr, totalCents) => {
       const s = (fundStr || '').trim();
       if (!s) return [{ name: 'General Fund', cents: totalCents }];
-      // Breeze CSV format: starts with numeric fund ID prefix
+      // Breeze CSV format: starts with numeric fund ID prefix e.g. "40085 General Fund (160.00)"
+      // Keep the full name including the number; strip only the trailing amount in parens.
       if (/^\d+\s/.test(s)) {
         const parts = s.split(/,\s*(?=\d)/);
         const splits = parts.map(p => {
-          const m = p.trim().match(/^\d+\s+(.+?)(?:\s+\(([0-9.]+)\))?\s*$/);
+          const m = p.trim().match(/^(.+?)(?:\s+\(([0-9.]+)\))?\s*$/);
           return m ? { name: m[1].trim(), cents: m[2] ? Math.round(parseFloat(m[2]) * 100) : null } : null;
         }).filter(Boolean);
         if (splits.length > 1) return splits.map(f => ({ name: f.name, cents: f.cents ?? 0 }));
