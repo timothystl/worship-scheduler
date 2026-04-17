@@ -2459,30 +2459,43 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     } catch (e) { fetchError = 'fetch threw: ' + e.message; }
 
     // /api/funds returned empty — fall back to harvesting names from recent giving entries
+    let glDiag = null;
     if (Object.keys(breezeFundNames).length === 0) {
       try {
         const today = new Date().toISOString().slice(0, 10);
         const fiveYrsAgo = (new Date().getFullYear() - 5) + '-01-01';
         const glRes = await fetch(
-          `https://${subdomain}.breezechms.com/api/giving/list?start=${fiveYrsAgo}&end=${today}&limit=10000`,
+          `https://${subdomain}.breezechms.com/api/giving/list?start=${fiveYrsAgo}&end=${today}&details=1&limit=100`,
           { headers: hdrs }
         );
         if (glRes.ok) {
-          const gl = await glRes.json().catch(() => null);
-          if (Array.isArray(gl)) {
-            for (const g of gl) {
-              for (const f of (Array.isArray(g.funds) ? g.funds : [])) {
+          const glRaw = await glRes.text();
+          const gl = glRaw.trim() ? JSON.parse(glRaw).catch?.() ?? JSON.parse(glRaw) : null;
+          const glArr = Array.isArray(gl) ? gl : null;
+          // Capture structure of first entry for diagnostics
+          glDiag = glArr ? { count: glArr.length, first_entry_keys: glArr[0] ? Object.keys(glArr[0]) : [], first_funds: glArr[0]?.funds ?? glArr[0]?.fund ?? glArr[0]?.fund_id ?? 'n/a' } : { raw_preview: glRaw.slice(0, 300) };
+          if (glArr) {
+            for (const g of glArr) {
+              // Try both g.funds (array) and g.fund_id + g.fund_name (flat)
+              const funds = Array.isArray(g.funds) ? g.funds : (g.fund_id ? [{ id: g.fund_id, name: g.fund_name || g.fund || '' }] : []);
+              for (const f of funds) {
                 const fid = String(f.id || f.fund_id || '');
-                if (fid && f.name) breezeFundNames[fid] = f.name;
+                const fname = f.name || f.fund_name || '';
+                if (fid && fname) breezeFundNames[fid] = fname;
               }
             }
           }
         }
-      } catch {} // best-effort
+      } catch (e) { glDiag = { error: e.message }; }
     }
 
-    if (Object.keys(breezeFundNames).length === 0)
-      return json({ ok: false, error: (fetchError || '/api/funds empty') + ' and no fund names found in giving/list either', breezeFundsFound: 0, renamed: 0, httpStatus, rawBodyPreview: rawBody.slice(0, 500) });
+    if (Object.keys(breezeFundNames).length === 0) {
+      // Last resort: return placeholder funds so the frontend can render manual rename inputs
+      const placeholderFundsForManual = (await db.prepare(
+        "SELECT id, name, breeze_id FROM funds WHERE name LIKE 'Breeze Fund %' ORDER BY name"
+      ).all()).results || [];
+      return json({ ok: false, needsManual: true, error: 'Breeze API did not return fund names', placeholderFunds: placeholderFundsForManual, breezeFundsFound: 0, renamed: 0, httpStatus, glDiag });
+    }
 
     // Get all local funds with placeholder names
     const placeholderFunds = (await db.prepare(
@@ -2503,6 +2516,20 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     }
 
     return json({ ok: true, breezeFundsFound: Object.keys(breezeFundNames).length, placeholderFundsFound: placeholderFunds.length, renamed, details, fetchError });
+  } catch (e) { return json({ ok: false, error: e.message }, 500); } }
+
+  // ── Manual Fund Renames ───────────────────────────────────────────
+  if (seg === 'import/manual-fund-renames' && method === 'POST') { try {
+    if (!isAdmin) return json({ error: 'Admin only' }, 403);
+    let b = {}; try { b = await req.json(); } catch {}
+    const updates = Array.isArray(b.updates) ? b.updates : [];
+    let renamed = 0;
+    for (const u of updates) {
+      if (!u.id || !u.name) continue;
+      await db.prepare('UPDATE funds SET name=? WHERE id=?').bind(String(u.name).trim(), u.id).run();
+      renamed++;
+    }
+    return json({ ok: true, renamed });
   } catch (e) { return json({ ok: false, error: e.message }, 500); } }
 
   // ── Breeze Debug ─────────────────────────────────────────────────
