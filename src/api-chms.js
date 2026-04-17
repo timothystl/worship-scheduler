@@ -388,6 +388,16 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
           try { await db.prepare('INSERT OR IGNORE INTO person_tags(person_id,tag_id) VALUES(?,?)').bind(pid,tid).run(); } catch {}
         }
       }
+      // Propagate anniversary_date to household spouse if they don't have one set
+      if (b.anniversary_date && b.household_id && ['head','spouse'].includes(b.family_role||'')) {
+        try {
+          await db.prepare(
+            `UPDATE people SET anniversary_date=?
+             WHERE household_id=? AND id!=? AND (anniversary_date='' OR anniversary_date IS NULL)
+               AND family_role IN ('head','spouse') AND active=1`
+          ).bind(b.anniversary_date, b.household_id, pid).run();
+        } catch {}
+      }
       // Write audit log entries for changed fields
       if (oldPerson) {
         const personName = [(oldPerson.first_name||b.first_name||''), (oldPerson.last_name||b.last_name||'')].filter(Boolean).join(' ');
