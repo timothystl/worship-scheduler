@@ -1508,7 +1508,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-17-v28';
+var DEPLOY_VERSION = '2026-04-17-v29';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -1694,7 +1694,7 @@ window.addEventListener('load', function() {
     var yr = y - i;
     var cb = document.createElement('label');
     cb.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;';
-    cb.innerHTML = '<input type="checkbox" value="' + yr + '"' + (i === 0 ? ' checked' : '') + '> ' + yr;
+    cb.innerHTML = '<input type="checkbox" name="stmt-year" value="' + yr + '"' + (i === 0 ? ' checked' : '') + '> ' + yr;
     yc.appendChild(cb);
   }
   // Register SW
@@ -1798,7 +1798,7 @@ function renderFilterDrawer() {
     tEl.innerHTML = allTags.map(function(t) {
       var checked = peopleFilter.tagIds.indexOf(String(t.id)) !== -1;
       return '<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:.9rem;border-radius:6px;">'
-        + '<input type="checkbox" value="' + t.id + '" ' + (checked ? 'checked' : '') + ' onchange="toggleFdTag(\'' + t.id + '\',this.checked)" style="flex-shrink:0;">'
+        + '<input type="checkbox" name="filter-tag" value="' + t.id + '" ' + (checked ? 'checked' : '') + ' onchange="toggleFdTag(\'' + t.id + '\',this.checked)" style="flex-shrink:0;">'
         + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(t.color) + ';flex-shrink:0;"></span>'
         + esc(t.name) + '</label>';
     }).join('');
@@ -2690,7 +2690,7 @@ function renderPeopleDesktop(people) {
     trCls = isSelected ? ' class="dir-row-selected"' : '';
     var badge = (p.member_type||'visitor').replace(/\s+/g,'-');
     return '<tr' + trCls + ' style="cursor:pointer;" ' + clickHandler + '>'
-      + '<td style="width:36px;text-align:center;" onclick="event.stopPropagation()"><input type="checkbox"' + (isSelected ? ' checked' : '') + ' style="' + (_selectMode ? '' : 'display:none;') + '" onchange="togglePersonSelect(' + p.id + ',this.closest(&#39;tr&#39;))" onclick="event.stopPropagation()"></td>'
+      + '<td style="width:36px;text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" name="person-select"' + (isSelected ? ' checked' : '') + ' style="' + (_selectMode ? '' : 'display:none;') + '" onchange="togglePersonSelect(' + p.id + ',this.closest(&#39;tr&#39;))" onclick="event.stopPropagation()"></td>'
       + '<td><div class="dir-name-cell"><div class="' + avClass + '">' + avInner + '</div><span class="dir-name-link">' + displayName + '</span></div></td>'
       + '<td><span class="dir-badge dir-badge-' + badge + '">' + esc(p.member_type||'visitor') + '</span></td>'
       + '<td class="dir-contact">' + (p.email ? '<a href="mailto:' + esc(p.email) + '" onclick="event.stopPropagation()">' + esc(p.email) + '</a>' : '') + (p.phone ? '<div class="dir-phone">' + esc(p.phone) + '</div>' : '') + '</td>'
@@ -3212,7 +3212,7 @@ function pvEditTags() {
   var checkboxes = allTags.map(function(t){
     var checked = currentTagIds.indexOf(t.id) >= 0 ? ' checked' : '';
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer;font-size:13px;">'
-      + '<input type="checkbox" value="'+t.id+'"'+checked+' style="cursor:pointer;">'
+      + '<input type="checkbox" name="person-tag" value="'+t.id+'"'+checked+' style="cursor:pointer;">'
       + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+esc(t.color||'#ccc')+';flex-shrink:0;"></span>'
       + esc(t.name)
       + '</label>';
