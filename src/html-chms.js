@@ -1443,9 +1443,21 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('add-to-hh-modal')">Cancel</button></div>
   </div>
 </div>
+
+<!-- User edit modal -->
+<div class="modal-overlay" id="user-modal" onclick="if(event.target===this)closeModal('user-modal')">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="user-modal-title">Add User</h2>
+    <div id="user-modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('user-modal')">Cancel</button>
+      <button class="btn-primary" id="user-modal-save" onclick="saveUser()">Create User</button>
+    </div>
+  </div>
+</div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-16-v23';
+var DEPLOY_VERSION = '2026-04-16-v24';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -1940,31 +1952,27 @@ function renderUsersList() {
 }
 function openUserForm(userId) {
   _editingUserId = userId;
-  var u = userId ? _usersData.find(function(x){return x.id===userId;}) : null;
+  var u = userId ? (_usersData||[]).find(function(x){return x.id===userId;}) : null;
   var title = u ? 'Edit User: ' + u.username : 'Add User';
-  var modal = document.getElementById('modal-overlay');
-  var content = document.getElementById('modal-content');
-  if (!modal || !content) return;
-  content.innerHTML = '<h2>'+esc(title)+'</h2>'
-    + (u ? '' : '<div class="field"><label>Username</label><input type="text" id="um-username" placeholder="e.g. jsmith" autocomplete="off" style="width:100%;"></div>')
-    + '<div class="field"><label>Display Name</label><input type="text" id="um-display" placeholder="e.g. Jane Smith" value="'+esc(u?u.display_name:'')+'" style="width:100%;"></div>'
-    + '<div class="field"><label>Role</label><select id="um-role" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.9rem;">'
+  document.getElementById('user-modal-title').textContent = title;
+  document.getElementById('user-modal-save').textContent = u ? 'Save Changes' : 'Create User';
+  var inp = 'width:100%;';
+  document.getElementById('user-modal-body').innerHTML =
+    (u ? '' : '<div class="field" style="margin-bottom:10px;"><label>Username</label><input type="text" id="um-username" placeholder="e.g. jsmith" autocomplete="off" style="'+inp+'"></div>')
+    + '<div class="field" style="margin-bottom:10px;"><label>Display Name</label><input type="text" id="um-display" placeholder="e.g. Jane Smith" value="'+esc(u?u.display_name:'')+'" style="'+inp+'"></div>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Role</label><select id="um-role" style="'+inp+'padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.9rem;">'
     + ['admin','finance','staff','member'].map(function(r){return '<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r.charAt(0).toUpperCase()+r.slice(1)+'</option>';}).join('')
     + '</select></div>'
-    + '<div class="field"><label>'+(u?'New Password (leave blank to keep)':'Password')+'</label><input type="password" id="um-password" placeholder="At least 8 characters" autocomplete="new-password" style="width:100%;"></div>'
-    + (u ? '<div style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;"><input type="checkbox" id="um-active" '+(u.active?'checked':'')+'>Active</label></div>' : '')
-    + '<div class="modal-actions">'
-    + '<button class="btn-secondary" onclick="closeModal()">Cancel</button>'
-    + '<button class="btn-primary" onclick="saveUser()">'+esc(u?'Save Changes':'Create User')+'</button>'
-    + '</div>';
-  modal.classList.add('open');
+    + '<div class="field" style="margin-bottom:10px;"><label>'+(u?'New Password (leave blank to keep)':'Password')+'</label><input type="password" id="um-password" placeholder="At least 8 characters" autocomplete="new-password" style="'+inp+'"></div>'
+    + (u ? '<div style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;"><input type="checkbox" id="um-active"'+(u.active?' checked':'')+'>Active</label></div>' : '');
+  openModal('user-modal');
 }
 function saveUser() {
-  var display = (document.getElementById('um-display')||{}).value || '';
-  var role    = (document.getElementById('um-role')||{}).value || 'staff';
-  var pass    = (document.getElementById('um-password')||{}).value || '';
+  var display  = (document.getElementById('um-display')||{}).value || '';
+  var role     = (document.getElementById('um-role')||{}).value || 'staff';
+  var pass     = (document.getElementById('um-password')||{}).value || '';
   var activeEl = document.getElementById('um-active');
-  var payload = { display_name: display, role: role };
+  var payload  = { display_name: display, role: role };
   if (pass) payload.password = pass;
   if (activeEl) payload.active = activeEl.checked;
   if (!_editingUserId) {
@@ -1973,17 +1981,17 @@ function saveUser() {
     payload.username = username;
     if (!pass || pass.length < 8) { alert('Password must be at least 8 characters.'); return; }
   }
-  var url = _editingUserId ? '/admin/api/users/'+_editingUserId : '/admin/api/users';
+  var url    = _editingUserId ? '/admin/api/users/'+_editingUserId : '/admin/api/users';
   var method = _editingUserId ? 'PUT' : 'POST';
-  fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-    .then(function(r){return r.json();}).then(function(r) {
-      if (r.ok) { closeModal(); loadUsers(); }
+  api(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(function(r) {
+      if (r.ok) { closeModal('user-modal'); loadUsers(); }
       else alert('Error: '+(r.error||'unknown'));
     });
 }
 function deleteUser(uid, username) {
   if (!confirm('Delete user "'+username+'"? This cannot be undone.')) return;
-  fetch('/admin/api/users/'+uid, {method:'DELETE'}).then(function(r){return r.json();}).then(function(r){
+  api('/admin/api/users/'+uid, {method:'DELETE'}).then(function(r){
     if (r.ok) loadUsers(); else alert('Error: '+(r.error||'unknown'));
   });
 }
