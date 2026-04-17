@@ -1877,11 +1877,12 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const parseFundSplits = (fundStr, totalCents) => {
       const s = (fundStr || '').trim();
       if (!s) return [{ name: 'General Fund', cents: totalCents }];
-      // Breeze CSV format: starts with numeric fund ID prefix
+      // Breeze CSV format: starts with numeric fund ID prefix e.g. "40085 General Fund (160.00)"
+      // Keep the full name including the number; strip only the trailing amount in parens.
       if (/^\d+\s/.test(s)) {
         const parts = s.split(/,\s*(?=\d)/);
         const splits = parts.map(p => {
-          const m = p.trim().match(/^\d+\s+(.+?)(?:\s+\(([0-9.]+)\))?\s*$/);
+          const m = p.trim().match(/^(.+?)(?:\s+\(([0-9.]+)\))?\s*$/);
           return m ? { name: m[1].trim(), cents: m[2] ? Math.round(parseFloat(m[2]) * 100) : null } : null;
         }).filter(Boolean);
         if (splits.length > 1) return splits.map(f => ({ name: f.name, cents: f.cents ?? 0 }));
@@ -2116,7 +2117,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
   }
 
   // ── Breeze Giving Sync (via account/list_log) ────────────────────
-  if (seg === 'import/breeze-giving' && method === 'POST') {
+  if (seg === 'import/breeze-giving' && method === 'POST') { try {
     const subdomain = env.BREEZE_SUBDOMAIN;
     const apiKey    = env.BREEZE_API_KEY;
     if (!subdomain || !apiKey) return json({ error: 'Breeze not configured' }, 503);
@@ -2341,12 +2342,14 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     ).run();
 
     return json({ ok: true, imported, skipped, dupesRemoved, fundsRenamed, breezeFundsFound: Object.keys(breezeFundNames).length, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, from_giving_list: givingListEntries.length, date_range: { start, end } });
-  }
+  } catch (givingErr) {
+    return json({ error: 'Giving sync error: ' + givingErr.message }, 500);
+  } }
 
   // ── Breeze Giving CSV Import ─────────────────────────────────────
   // Accepts the TSV export from Breeze (Contributions > Export)
   // Fund(s) format: "40085 General Fund" or "40085 General Fund (160.00), 49094 Tuition Aid (40.00)"
-  if (seg === 'import/breeze-giving-csv' && method === 'POST') {
+  if (seg === 'import/breeze-giving-csv' && method === 'POST') { try {
     const csvText = (await req.text()).trim();
     if (!csvText) return json({ error: 'No CSV data provided' }, 400);
 
@@ -2483,7 +2486,9 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       await db.batch(entryInserts.slice(i, i + 100));
     }
     return json({ ok: true, imported, skipped, errors: errors.slice(0, 20), total: lines.length - 1 });
-  }
+  } catch (csvErr) {
+    return json({ error: 'CSV import error: ' + csvErr.message }, 500);
+  } }
 
   // ── Clear Bad Tag Assignments ─────────────────────────────────────
   if (seg === 'import/clear-person-tags' && method === 'POST') {
@@ -2777,7 +2782,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
   // Forces a demographic re-sync for a single person identified by their Breeze ID.
   // Returns detailed diagnostics: which profile fields matched, raw Breeze values,
   // and what was written to the database — useful for debugging field-mapping issues.
-  if (seg === 'import/breeze-sync-person' && method === 'POST') {
+  if (seg === 'import/breeze-sync-person' && method === 'POST') { try {
     const subdomain = env.BREEZE_SUBDOMAIN;
     const apiKey    = env.BREEZE_API_KEY;
     if (!subdomain || !apiKey) return json({ error: 'Breeze not configured (BREEZE_SUBDOMAIN / BREEZE_API_KEY missing)' }, 503);
@@ -3077,7 +3082,9 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
                  photoUrl, deceasedFlag, deathDate, envelopeNumber },
       summary
     });
-  }
+  } catch (syncErr) {
+    return json({ ok: false, error: 'Sync error: ' + syncErr.message }, 500);
+  } }
 
   // ── Breeze Import ────────────────────────────────────────────────
   if (seg === 'import/breeze' && method === 'POST') { try {
