@@ -882,6 +882,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
       <button class="btn-primary" onclick="runBreezeGivingSync()">Sync Date Range</button>
       <div class="import-status" id="giving-sync-status"></div>
+      <pre id="giving-sync-diagnostics" style="display:none;margin-top:10px;padding:10px;background:#f4f0ea;border:1px solid var(--border);border-radius:6px;font-size:.72rem;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;"></pre>
       <hr style="margin:14px 0;border:none;border-top:1px solid var(--warm-gray-light,#e0d9d0);">
       <p style="margin:0 0 8px;"><strong>Sync All History</strong> — loops through every year from start year to today, one year at a time.</p>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
@@ -1555,7 +1556,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-18-v60';
+var DEPLOY_VERSION = '2026-04-18-v61';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -5976,8 +5977,16 @@ function runBreezeGivingSync() {
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
     var msg = 'Done. ' + (d.imported||0) + ' contributions imported, ' + (d.skipped||0) + ' already existed.';
+    if (d.dupesRemoved) msg += ' ' + d.dupesRemoved + ' dupes removed.';
+    if (d.fundsRenamed) msg += ' ' + d.fundsRenamed + ' funds renamed.';
+    if (d.fundsMade) msg += ' ' + d.fundsMade + ' funds created.';
     if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' error(s).';
     status.textContent = msg; status.className = 'import-status ok';
+    var diagEl = document.getElementById('giving-sync-diagnostics');
+    if (diagEl) {
+      diagEl.style.display = 'block';
+      diagEl.textContent = JSON.stringify(d.diagnostics || d, null, 2);
+    }
   }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
