@@ -129,6 +129,9 @@ Added 2026-04-15, phased 2026-04-15.
 
 ## Recent Changes (newest first)
 
+### 2026-04-18
+- **v60**: Add comprehensive diagnostics to Breeze giving sync response. `diagnostics` object now includes: (1) `apiFundsSample` — what `/api/funds` returned after bulk fetch; (2) `givingListSample` — raw structure of first 3 giving/list entries (shows keys, fund/funds fields); (3) `auditLogSample` — parsed details of first 3 audit log entries, showing all fund-*, fname-*, amount-* fields; (4) `breezeFundNamesAfterHarvest` — complete map of all fund IDs+names gathered from both sources; (5) `unresolvedFundIds` — fund IDs that would become "Breeze Fund XXXXX" placeholders. Purpose: diagnose why fund names aren't resolving and which ID system the audit log uses.
+
 ### 2026-04-17
 - **v53**: Fix Breeze giving sync hitting Cloudflare D1 per-invocation limit. Root cause: per-entry sequential D1 awaits inside the processing loop (one UPDATE per entry for batch-date correction, one per fund for linking). Replaced with a two-pass approach: Pass 1 pre-scans all entries to collect needed batches/funds; all creates/updates are then executed via db.batch() (each batch = 1 D1 call). Pass 2 builds entry inserts with no D1 calls in the loop. Total D1 calls reduced from O(entries) to ~10 regardless of sync size. Also added "Clear Giving by Year" danger-zone button + API endpoint so a single year can be wiped without touching others.
 - **v52**: Fix cross-chunk split-payment imports. Increased CSV chunk size from 500 → 5000 rows so an entire year of giving data is processed in one API call; nth-occurrence tracking (v51) now reliably handles all split-fund rows. Added "Look Up Payment ID" card in Settings import section (GET /admin/api/giving/by-payment-id) to see which fund/amount was recorded for any Breeze payment ID.
