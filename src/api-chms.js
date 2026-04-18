@@ -2440,6 +2440,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       const d = parseDetails(entry.details);
       if (!d) continue;
       const date     = parseDate(d.date);
+      // Skip entries whose contribution date falls outside the requested range.
+      // The audit log filters by LOG date (when entered), not contribution date,
+      // so late-December entries logged in January appear here with prior-year dates.
+      if (date < start || date > end) continue;
       const batchKey = d.batch_num ? `Breeze Batch #${d.batch_num}` : `Breeze Import ${date}`;
       if (!batchByDesc[batchKey]) {
         if (!newBatchesNeeded.has(batchKey)) newBatchesNeeded.set(batchKey, { date, desc: batchKey });
@@ -2517,6 +2521,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         const checkNum = d.check_number || '';
         const notes    = d.note || '';
         const date     = parseDate(d.date);
+        if (date < start || date > end) { skipped++; continue; }
         const batchKey = d.batch_num ? `Breeze Batch #${d.batch_num}` : `Breeze Import ${date}`;
         const batchId  = batchByDesc[batchKey];
         if (!batchId) { errors.push({ id: entry.id, error: 'batch not found: ' + batchKey }); skipped++; continue; }
@@ -2546,7 +2551,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
     ).run();
 
-    return json({ ok: true, imported, skipped, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end } });
+    return json({ ok: true, imported, skipped, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, seenIdsCount: seenIds.size, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end } });
   } catch (givingErr) {
     return json({ error: 'Giving sync error: ' + givingErr.message }, 500);
   } }
