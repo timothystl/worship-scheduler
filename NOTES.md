@@ -130,6 +130,7 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-18
+- **v61**: Show sync diagnostics in UI. After "Sync Date Range" completes, full JSON diagnostics object renders in a scrollable pre block directly below the status message. Also improved the status line to report dupes removed, funds renamed, and funds created.
 - **v60**: Add comprehensive diagnostics to Breeze giving sync response. `diagnostics` object now includes: (1) `apiFundsSample` — what `/api/funds` returned after bulk fetch; (2) `givingListSample` — raw structure of first 3 giving/list entries (shows keys, fund/funds fields); (3) `auditLogSample` — parsed details of first 3 audit log entries, showing all fund-*, fname-*, amount-* fields; (4) `breezeFundNamesAfterHarvest` — complete map of all fund IDs+names gathered from both sources; (5) `unresolvedFundIds` — fund IDs that would become "Breeze Fund XXXXX" placeholders. Purpose: diagnose why fund names aren't resolving and which ID system the audit log uses.
 
 ### 2026-04-17
