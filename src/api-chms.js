@@ -2254,7 +2254,8 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const real = (await db.prepare(
       "SELECT id, name FROM funds WHERE breeze_id='' OR breeze_id IS NULL ORDER BY sort_order, name"
     ).all()).results || [];
-    return json({ breeze_funds: rows, real_funds: real });
+    const subdomain = env.BREEZE_SUBDOMAIN || '';
+    return json({ breeze_funds: rows, real_funds: real, breeze_subdomain: subdomain });
   }
 
   // ── Fund Mapping (re-link or rename Breeze fund placeholders) ────
@@ -2486,12 +2487,31 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     if (placeholderIds.length > 0) {
       await Promise.allSettled(placeholderIds.map(async fid => {
         try {
-          const r = await fetch(`https://${subdomain}.breezechms.com/api/funds/${fid}`, { headers: hdrs });
-          if (!r.ok) return;
-          const raw = await r.text();
-          if (!raw.trim()) return;
-          const data = JSON.parse(raw);
-          const name = data?.name || data?.fund_name || (Array.isArray(data) && data[0]?.name) || '';
+          // Try GET /api/funds/{id} first
+          let name = '';
+          const r1 = await fetch(`https://${subdomain}.breezechms.com/api/funds/${fid}`, { headers: hdrs });
+          if (r1.ok) {
+            const raw1 = await r1.text();
+            if (raw1.trim()) {
+              const d1 = JSON.parse(raw1);
+              name = d1?.name || d1?.fund_name || (Array.isArray(d1) && d1[0]?.name) || '';
+            }
+          }
+          // Fallback: GET /api/giving/list?fund_id={id}&limit=1 — harvest name from a sample contribution
+          if (!name) {
+            const r2 = await fetch(`https://${subdomain}.breezechms.com/api/giving/list?fund_id=${fid}&limit=1`, { headers: hdrs });
+            if (r2.ok) {
+              const raw2 = await r2.text();
+              if (raw2.trim()) {
+                const d2 = JSON.parse(raw2);
+                const g = Array.isArray(d2) ? d2[0] : null;
+                if (g) {
+                  const f = (Array.isArray(g.funds) ? g.funds : []).find(f => String(f.id || f.fund_id) === fid);
+                  name = f?.name || f?.fund_name || g?.fund_name || '';
+                }
+              }
+            }
+          }
           if (name) { breezeFundNames[fid] = name; newFundsNeeded.set(fid, name); }
         } catch {}
       }));
