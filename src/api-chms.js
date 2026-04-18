@@ -2322,12 +2322,32 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     // double-counting because the two endpoints use different IDs for the same payment.
     let givingListFiltered = 0;
     let givingListFundHarvest = 0;
+    const diag = {
+      apiFundsCount: Object.keys(breezeFundNames).length,
+      apiFundsSample: Object.entries(breezeFundNames).slice(0, 5).map(([id, name]) => ({ id, name })),
+      givingListSample: [],
+      auditLogSample: [],
+      breezeFundNamesAfterHarvest: null,
+      unresolvedFundIds: [],
+    };
     try {
       const glUrl = `https://${subdomain}.breezechms.com/api/giving/list?start=${start}&end=${end}&details=1&limit=10000`;
       const glRes = await fetch(glUrl, { headers: hdrs });
       if (glRes.ok) {
         const gl = await glRes.json();
         if (Array.isArray(gl)) {
+          // Capture raw structure of first 3 entries for diagnostics
+          diag.givingListSample = gl.slice(0, 3).map(g => ({
+            id: g.id,
+            date: g.date,
+            amount: g.amount,
+            fund_id: g.fund_id,
+            fund_name: g.fund_name,
+            fund: g.fund,
+            funds: g.funds,
+            // Show all keys present
+            keys: Object.keys(g),
+          }));
           for (const g of gl) {
             // Client-side date filter — API may not honour start/end params reliably
             const rawGDate = (g.date || '');
@@ -2348,9 +2368,25 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       }
     } catch (e) { /* giving/list is best-effort — fund names only */ }
 
+    // Record all harvested fund names after both /api/funds and giving/list
+    diag.breezeFundNamesAfterHarvest = Object.entries(breezeFundNames).map(([id, name]) => ({ id, name }));
+
     // All contributions come from the audit log only.
     const allEntries = entries;
     if (allEntries.length === 0) return json({ ok: true, imported: 0, skipped: 0, total: 0, date_range: { start, end } });
+
+    // Capture raw audit log details for first 3 entries
+    diag.auditLogSample = allEntries.slice(0, 3).map(e => {
+      let d = null;
+      try { d = JSON.parse(e.details); } catch {}
+      return {
+        entry_id: e.id,
+        object_json: e.object_json,
+        details_keys: d ? Object.keys(d) : [],
+        details_fund_fields: d ? Object.entries(d).filter(([k]) => k.startsWith('fund') || k.startsWith('fname') || k.startsWith('amount')).reduce((o, [k, v]) => { o[k] = v; return o; }, {}) : {},
+        details_raw_snippet: e.details ? String(e.details).slice(0, 500) : '',
+      };
+    });
 
     // Helpers
     const parseDetails = raw => { try { return JSON.parse(raw); } catch { return null; } };
@@ -2459,6 +2495,11 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         }
       }
     }
+
+    // Record which fund IDs will be created as placeholders (for diagnostics)
+    diag.unresolvedFundIds = [...newFundsNeeded.entries()]
+      .filter(([, name]) => name.startsWith('Breeze Fund '))
+      .map(([id, name]) => ({ id, placeholderName: name, inBreezeHarvest: !!breezeFundNames[id] }));
 
     // ── Batch-create new batches ────────────────────────────────────
     let batchesMade = 0;
@@ -2592,7 +2633,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
     ).run();
 
-    return json({ ok: true, imported, skipped, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, seenIdsCount: seenIds.size, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end } });
+    return json({ ok: true, imported, skipped, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, seenIdsCount: seenIds.size, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end }, diagnostics: diag });
   } catch (givingErr) {
     return json({ error: 'Giving sync error: ' + givingErr.message }, 500);
   } }
