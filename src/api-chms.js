@@ -2331,7 +2331,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       unresolvedFundIds: [],
     };
     try {
-      const glUrl = `https://${subdomain}.breezechms.com/api/giving/list?start=${start}&end=${end}&details=1&limit=10000`;
+      // No date filter — harvest fund names from all-time giving to catch every fund ID ever used.
+      // We only use this for names, so fetching beyond the sync window is safe and ensures
+      // a fund used once in an old year is still resolved if it reappears in the sync window.
+      const glUrl = `https://${subdomain}.breezechms.com/api/giving/list?details=1&limit=10000`;
       const glRes = await fetch(glUrl, { headers: hdrs });
       if (glRes.ok) {
         const gl = await glRes.json();
@@ -2349,11 +2352,6 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
             keys: Object.keys(g),
           }));
           for (const g of gl) {
-            // Client-side date filter — API may not honour start/end params reliably
-            const rawGDate = (g.date || '');
-            const mdyGM = rawGDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            const normGDate = mdyGM ? `${mdyGM[3]}-${mdyGM[1].padStart(2,'0')}-${mdyGM[2].padStart(2,'0')}` : rawGDate.slice(0, 10);
-            if (normGDate.length === 10 && (normGDate < start || normGDate > end)) { givingListFiltered++; continue; }
             // Harvest fund names — handle both 'funds' array and top-level fund_id/fund_name
             const rawFunds = Array.isArray(g.funds) ? g.funds :
                              (g.fund && typeof g.fund === 'object' ? [g.fund] :
