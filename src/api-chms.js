@@ -2605,6 +2605,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       }
       if (lateFundIds.size) {
         await Promise.allSettled([...lateFundIds].map(async fid => {
+          if (!/^\d+$/.test(fid)) return;
           try {
             const r = await fetch(`https://${subdomain}.breezechms.com/api/funds/${fid}`, { headers: hdrs });
             if (r.ok) {
@@ -2612,7 +2613,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
               const name = fd?.name || fd?.fund_name || (Array.isArray(fd) && fd[0]?.name) || '';
               if (name) breezeFundNames[fid] = name;
             }
-          } catch {}
+          } catch (e) {
+            diag.lateFundFetchWarnings = diag.lateFundFetchWarnings || [];
+            diag.lateFundFetchWarnings.push(`fund ${fid}: ${e.message}`);
+          }
         }));
       }
     }

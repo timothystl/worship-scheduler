@@ -129,6 +129,9 @@ Added 2026-04-15, phased 2026-04-15.
 
 ## Recent Changes (newest first)
 
+### 2026-04-19
+- **v69**: Code review improvements: add numeric guard on fund IDs before URL interpolation; replace silent catch{} with `diag.lateFundFetchWarnings` logging; update DEPLOY_VERSION date.
+
 ### 2026-04-18
 - **v69**: Resolve fund names for late-entry fund IDs. Funds that appear only in date-filtered (late) entries were never reaching the individual API lookup, so they displayed as raw Breeze IDs in the lateEntries diagnostic. Now adds a targeted resolution pass for those IDs before Pass 2. Also fixes giving-list fallback fund lookup to prefer `fund_id` over row `id`.
 - **v68**: Fix giving list harvest returning empty. Breeze requires date params — without them it returns []. Now uses fixed wide range (2020-01-01 to today) so all-time fund names are captured regardless of sync window.
