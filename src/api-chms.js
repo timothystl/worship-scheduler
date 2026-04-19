@@ -2352,10 +2352,11 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     };
     let glRaw = [];
     try {
-      // Wide fixed date range — Breeze returns empty without date params.
-      // Using 2020-01-01 to today captures all-time fund names regardless of sync window.
-      const glHarvestEnd = new Date().toISOString().slice(0, 10);
-      const glUrl = `https://${subdomain}.breezechms.com/api/giving/list?start=2020-01-01&end=${glHarvestEnd}&details=1&limit=10000`;
+      // Use the sync window (with grace period) instead of all-time. The all-time
+      // range with limit=10000 was silently truncating early-year entries — a church
+      // with 15,000+ all-time contributions loses ~2025-01 entries entirely.
+      // A single year has ~3,000 contributions, safely under the 10,000 limit.
+      const glUrl = `https://${subdomain}.breezechms.com/api/giving/list?start=${lateStart}&end=${end}&details=1&limit=10000`;
       const glRes = await fetch(glUrl, { headers: hdrs });
       if (glRes.ok) {
         const gl = await glRes.json();
