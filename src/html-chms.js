@@ -1556,7 +1556,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-19-v70';
+var DEPLOY_VERSION = '2026-04-19-v71';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -5977,8 +5977,9 @@ function runBreezeGivingSync() {
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
     var msg = 'Done. ' + (d.imported||0) + ' imported';
+    if (d.lateImported) msg += ', ' + d.lateImported + ' cross-year late entries imported';
     if (d.skipped) msg += ', ' + d.skipped + ' already existed';
-    if (d.skippedDateFilter) msg += ', ' + d.skippedDateFilter + ' outside date range (logged late — see diagnostics)';
+    if (d.skippedDateFilter) msg += ', ' + d.skippedDateFilter + ' outside date range (see diagnostics)';
     if (d.dupesRemoved) msg += ', ' + d.dupesRemoved + ' dupes removed';
     if (d.fundsRenamed) msg += ', ' + d.fundsRenamed + ' funds renamed';
     if (d.fundsMade) msg += ', ' + d.fundsMade + ' funds created';
@@ -6028,9 +6029,9 @@ function runBreezeGivingAll() {
         status.className = 'import-status err';
         return;
       }
-      totalImported += d.imported || 0;
+      totalImported += (d.imported || 0) + (d.lateImported || 0);
       totalSkipped  += d.skipped  || 0;
-      status.textContent = yr + ': ' + (d.imported||0) + ' imported — running total: ' + totalImported + ' imported, ' + totalSkipped + ' skipped';
+      status.textContent = yr + ': ' + (d.imported||0) + ' imported' + (d.lateImported ? ', ' + d.lateImported + ' late' : '') + ' — running total: ' + totalImported + ' imported, ' + totalSkipped + ' skipped';
       doYear();
     }).catch(function(e) {
       btn.disabled = false;
