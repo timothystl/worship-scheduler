@@ -2293,6 +2293,12 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     const start = b.start || (new Date().getFullYear() + '-01-01');
     const end   = b.end   || new Date().toISOString().slice(0, 10);
     const hdrs = { 'Api-key': apiKey };
+    // G9: accept contributions whose log date falls in this window but whose contribution
+    // date is up to 45 days before start (covers Dec entries logged in Jan of the next year).
+    // seenIds prevents double-import if the prior year was also synced.
+    const lateStartObj = new Date(start);
+    lateStartObj.setDate(lateStartObj.getDate() - 45);
+    const lateStart = lateStartObj.toISOString().slice(0, 10);
 
     // Pre-fetch all Breeze fund names so we never create "Breeze Fund XXXXX" placeholders.
     // /api/funds returns empty for some accounts — also harvested from giving/list below.
@@ -2310,7 +2316,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     } catch {} // best-effort — also populated from giving/list fund entries below
 
     // Fetch log entries
-    const logUrl = `https://${subdomain}.breezechms.com/api/account/list_log?action=contribution_added&details=1&limit=3000&start=${start}&end=${end}`;
+    const logUrl = `https://${subdomain}.breezechms.com/api/account/list_log?action=contribution_added&details=1&limit=10000&start=${start}&end=${end}`;
     const logRes = await fetch(logUrl, { headers: hdrs });
     if (!logRes.ok) return json({ error: `Breeze log API error: ${logRes.status}` }, 502);
     let entries; try { entries = await logRes.json(); } catch { return json({ error: 'Invalid JSON from Breeze log' }, 502); }
@@ -2491,10 +2497,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
       const d = parseDetails(entry.details);
       if (!d) continue;
       const date     = parseDate(d.date);
-      // Skip entries whose contribution date falls outside the requested range.
-      // The audit log filters by LOG date (when entered), not contribution date,
-      // so late-December entries logged in January appear here with prior-year dates.
-      if (date < start || date > end) continue;
+      // Exclude entries whose contribution date is truly out of range.
+      // Entries within the 45-day grace window before `start` are imported
+      // with their actual contribution date (G9 fix — covers Dec entries logged in Jan).
+      if (date < lateStart || date > end) continue;
       const batchKey = d.batch_num ? `Breeze Batch #${d.batch_num}` : `Breeze Import ${date}`;
       if (!batchByDesc[batchKey]) {
         if (!newBatchesNeeded.has(batchKey)) newBatchesNeeded.set(batchKey, { date, desc: batchKey });
@@ -2635,16 +2641,10 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
     }
 
     // ── Pass 2: build entry inserts (no D1 calls in this loop) ──────
-    let imported = 0, skipped = 0, skippedDateFilter = 0;
+    let imported = 0, lateImported = 0, skipped = 0, skippedDateFilter = 0;
     const errors = [];
     const lateEntries = [];
     const entryInserts = [];
-
-    // Build a quick fundId→name lookup for late entry reporting
-    const fundNameById = {};
-    for (const [breezeId, localId] of Object.entries(fundByBreezeId)) {
-      if (breezeFundNames[breezeId]) fundNameById[localId] = breezeFundNames[breezeId];
-    }
 
     for (const entry of allEntries) {
       try {
@@ -2659,10 +2659,11 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
         const checkNum = d.check_number || '';
         const notes    = d.note || '';
         const date     = parseDate(d.date);
-        if (date < start || date > end) {
+
+        // Truly out-of-range entries (older than the 45-day grace window, or future-dated)
+        if (date < lateStart || date > end) {
           skippedDateFilter++;
           for (const fl of extractFunds(d, d.amount || '0')) {
-            const fundLocalId = fundByBreezeId[fl.breezeFundId];
             lateEntries.push({
               date,
               amount: parseFloat(fl.amount || '0').toFixed(2),
@@ -2674,6 +2675,9 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
           }
           continue;
         }
+
+        // Import the entry — whether it's in-window (date >= start) or a grace-window
+        // late entry (lateStart <= date < start). Contribution date is stored as-is.
         const batchKey = d.batch_num ? `Breeze Batch #${d.batch_num}` : `Breeze Import ${date}`;
         const batchId  = batchByDesc[batchKey];
         if (!batchId) { errors.push({ id: entry.id, error: 'batch not found: ' + batchKey }); skipped++; continue; }
@@ -2689,7 +2693,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
             ).bind(batchId, personId, fundId, cents, method, checkNum, notes, contribId, date)
           );
         }
-        imported++;
+        if (date < start) lateImported++; else imported++;
       } catch (e) { errors.push({ id: entry.id, error: e.message }); }
     }
 
@@ -2713,7 +2717,7 @@ h1{font-size:20pt;margin:0 0 3px;font-family:Georgia,serif;}
        ORDER BY ge.contribution_date DESC`
     ).all()).results || [];
 
-    return json({ ok: true, imported, skipped, skippedDateFilter, lateEntries, ghostFundContribs, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, seenIdsCount: seenIds.size, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end }, diagnostics: diag });
+    return json({ ok: true, imported, lateImported, skipped, skippedDateFilter, lateEntries, ghostFundContribs, dupesRemoved, fundsRenamed, fundsMade, batchesMade, breezeFundsFound: Object.keys(breezeFundNames).length, givingListFundHarvest, givingListFiltered, seenIdsCount: seenIds.size, errors: errors.slice(0, 20), total: allEntries.length, from_log: entries.length, date_range: { start, end }, lateGraceDays: 45, diagnostics: diag });
   } catch (givingErr) {
     return json({ error: 'Giving sync error: ' + givingErr.message }, 500);
   } }
