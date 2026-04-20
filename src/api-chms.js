@@ -1015,6 +1015,29 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     return json({ from, to, rows, grand_total_cents: grand });
   }
 
+  if (seg === 'reports/giving-trend' && method === 'GET') {
+    if (!isFinance) return json({ error: 'Forbidden' }, 403);
+    const yearsParam = url.searchParams.get('years') || String(new Date().getFullYear());
+    const years = yearsParam.split(',').map(y => y.trim()).filter(y => /^\d{4}$/.test(y)).slice(0, 10);
+    if (!years.length) return json({ error: 'No valid years' }, 400);
+    const placeholders = years.map(() => '?').join(',');
+    const rows = (await db.prepare(
+      `SELECT substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4) as yr,
+              substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),6,2) as mo,
+              SUM(ge.amount) as total_cents
+       FROM giving_entries ge
+       JOIN giving_batches gb ON ge.batch_id=gb.id
+       WHERE substr(COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date),1,4) IN (${placeholders})
+       GROUP BY yr, mo ORDER BY yr, mo`
+    ).bind(...years).all()).results || [];
+    const monthly = {};
+    years.forEach(y => { monthly[y] = []; });
+    rows.forEach(r => {
+      if (monthly[r.yr]) monthly[r.yr].push({ month: r.mo, total_cents: r.total_cents });
+    });
+    return json({ years, monthly });
+  }
+
   if (seg === 'reports/giving-by-method' && method === 'GET') {
     const from = url.searchParams.get('from') || new Date().getFullYear() + '-01-01';
     const to   = url.searchParams.get('to')   || new Date().getFullYear() + '-12-31';
