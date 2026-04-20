@@ -75,7 +75,7 @@ Full detail in `NOTES.md`. Summary:
 
 ### Dashboard
 - [x] **DB5** — Last worship card: show both services AND the combined total on a single card (not two separate cards). Done 2026-04-17 (v27).
-- [ ] **DB6** — Dashboard customization: ability to add, remove, and reorder/move cards on the dashboard. (noted 2026-04-17)
+- [x] **DB6** — Dashboard customization: ability to add, remove, and reorder/move cards on the dashboard. Done 2026-04-20 (v79) — show/hide cards via "⚙ Customize" button; preferences in localStorage.
 - [x] **DB7** — Anniversary dashboard spouse pairing misses some households — fixed 2026-04-17 (v42). Secondary household lookup finds partner when only one spouse has anniversary_date set.
 - [x] **DB8** — Anniversary pairing: further fixes 2026-04-17 (v49, v50). (v49) Secondary lookup broadened beyond head/spouse family_role. (v50) Removed member_type filter from secondary lookup — common pattern is one member + one visitor spouse; visitor was excluded and partner showed solo.
 
@@ -84,7 +84,7 @@ Full detail in `NOTES.md`. Summary:
 
 ### Photos
 - [x] **PH1** — Household picture: upload photo for a household via hh-modal upload button → R2 → DB. Done 2026-04-17 (v46).
-- [ ] **PH2** — Crop profile picture: add a crop/resize tool when uploading a profile photo. (noted 2026-04-17)
+- [x] **PH2** — Crop profile picture: add a crop/resize tool when uploading a profile photo. Done 2026-04-20 (v79).
 - [x] **PH3** — Black bar appearing above some household cards — fixed 2026-04-17 (v45). Wrapped photo img in a container div with background:var(--linen); onerror hides the whole container.
 
 ### People / Filters
@@ -93,8 +93,8 @@ Full detail in `NOTES.md`. Summary:
 ### Attendance / Reports
 - [x] **AT1** — Attendance table collapse/expand toggle. Done 2026-04-17 (v46).
 - [x] **AT2** — Attendance graph direction fixed: ORDER BY ASC so oldest dates plot left. Done 2026-04-17 (v46).
-- [ ] **AT3** — Attendance graphs: drag to resize charts. (noted 2026-04-17)
-- [ ] **AT4** — Year-over-year giving/attendance report: overlapping graphs to compare current year vs prior year on the same chart. (noted 2026-04-17)
+- [x] **AT3** — Attendance graphs: drag to resize charts. Done 2026-04-20 (v79).
+- [x] **AT4** — Year-over-year giving/attendance report: overlapping graphs to compare current year vs prior year on the same chart. Done 2026-04-20 (v79) — Giving Trend tile in Reports tab; YoY attendance was already implemented.
 
 ### Communications / Email
 - [ ] **EM1** — Connect member email list to the newsletter the church sends out (integrate or export for mailing). Requires email infrastructure (Resend or similar). (noted 2026-04-17)

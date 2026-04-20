@@ -713,6 +713,15 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
   </div>
   <div class="report-tiles require-finance" style="margin-top:0;padding-top:0;">
     <div class="report-tile">
+      <div class="tile-icon">&#128200;</div>
+      <div class="tile-title">Giving Trend</div>
+      <div class="tile-desc">
+        <div style="font-size:.82rem;color:var(--warm-gray);margin-bottom:8px;">Year-over-year giving comparison by month.</div>
+        <div id="rpt-trend-years" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+        <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;" onclick="runGivingTrend()">Run Report</button>
+      </div>
+    </div>
+    <div class="report-tile">
       <div class="tile-icon">&#128140;</div>
       <div class="tile-title">Batch Send Statements</div>
       <div class="tile-desc">
@@ -741,6 +750,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
         </div>
       </div>
       <div id="att-chart-wrap" style="overflow-x:auto;overflow-y:hidden;"></div>
+      <div id="att-chart-resize" style="height:8px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin-top:2px;opacity:0.4;" onmousedown="attChartResizeStart(event)" title="Drag to resize chart"><div style="width:32px;height:3px;background:var(--warm-gray);border-radius:2px;"></div></div>
     </div>
     <!-- Controls row -->
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
@@ -1488,6 +1498,34 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <!-- Member Types manager modal -->
 <!-- Follow-up modal -->
+<div class="modal-overlay" id="dash-customize-modal">
+  <div class="modal" style="max-width:380px;">
+    <h2>Customize Dashboard</h2>
+    <p style="font-size:.85rem;color:var(--warm-gray);margin-bottom:14px;">Choose which cards to show on the dashboard.</p>
+    <div id="dash-prefs-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="closeModal('dash-customize-modal')">Done</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="crop-modal">
+  <div class="modal" style="max-width:600px;padding:20px;">
+    <h2 style="margin-bottom:12px;">Crop Profile Photo</h2>
+    <div style="text-align:center;background:#222;border-radius:8px;overflow:hidden;line-height:0;user-select:none;">
+      <canvas id="crop-canvas" style="max-width:100%;cursor:crosshair;touch-action:none;"
+        onmousedown="cropMouseDown(event)"
+        onmousemove="cropMouseMove(event)"
+        onmouseup="cropMouseUp(event)"
+        onmouseleave="cropMouseUp(event)"></canvas>
+    </div>
+    <div style="font-size:.8rem;color:var(--warm-gray);margin-top:8px;text-align:center;">Drag box to reposition · Drag corners to resize</div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="cropApply()">Crop &amp; Upload</button>
+      <button class="btn-secondary" onclick="cropSkip()">Use Full Image</button>
+      <button class="btn-secondary" onclick="closeModal('crop-modal');_cropCallback=null;">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="followup-modal">
   <div class="modal" style="max-width:440px;">
     <h2>Add Follow-up Item</h2>
@@ -1559,7 +1597,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-19-v78';
+var DEPLOY_VERSION = '2026-04-20-v79';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -1581,7 +1619,9 @@ var _editGiftId = null;
 var _editGiftFilterYear = '';
 var _userRole = 'admin';
 var _batchSearch = '';
-var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line', _attTableVisible = true;
+var _attOrder = 'desc', _attGroupBy = 'none', _attChartMode = 'line', _attTableVisible = true, _attChartH = 210;
+var _cropImg = null, _cropCallback = null, _cropRect = {x:0,y:0,w:0,h:0}, _cropScale = 1, _cropDrag = null;
+var _dashPrefs = null;
 var _selectMode = false, _selectedPeople = new Set();
 var _editingHouseholdId = null;
 var _churchConfig = {};
@@ -2343,6 +2383,32 @@ function printDirectory() {
 // ── DASHBOARD ─────────────────────────────────────────────────────────
 var _dashData = null;
 var _dashMonth = new Date().getMonth() + 1; // 1-12, default current month
+var DASH_PREF_DEFAULTS = {followUp:true, firstGivers:true, notSeen:true, birthdays:true, anniversaries:true, membership:true};
+var DASH_PREF_LABELS = {followUp:'Follow-up Queue', firstGivers:'First-Time Givers', notSeen:'Not Seen Recently', birthdays:'Birthdays', anniversaries:'Anniversaries', membership:'Membership by Type'};
+function dashGetPrefs() {
+  if (!_dashPrefs) {
+    try { _dashPrefs = Object.assign({}, DASH_PREF_DEFAULTS, JSON.parse(localStorage.getItem('dashCardPrefs')||'{}')); }
+    catch(e) { _dashPrefs = Object.assign({}, DASH_PREF_DEFAULTS); }
+  }
+  return _dashPrefs;
+}
+function dashSavePref(key, val) {
+  _dashPrefs[key] = val;
+  try { localStorage.setItem('dashCardPrefs', JSON.stringify(_dashPrefs)); } catch(e) {}
+  if (_dashData) renderDashboard(_dashData);
+}
+function openDashCustomize() {
+  var prefs = dashGetPrefs();
+  var list = document.getElementById('dash-prefs-list');
+  if (list) {
+    list.innerHTML = Object.keys(DASH_PREF_LABELS).map(function(k) {
+      return '<label style="display:flex;align-items:center;gap:10px;font-size:.9rem;cursor:pointer;">'
+        + '<input type="checkbox" '+(prefs[k]?'checked':'')+' onchange="dashSavePref(\''+k+'\',this.checked)" style="width:16px;height:16px;">'
+        + '<span>'+DASH_PREF_LABELS[k]+'</span></label>';
+    }).join('');
+  }
+  openModal('dash-customize-modal');
+}
 function loadDashboard() {
   var body = document.getElementById('dash-body');
   if (!body) return;
@@ -2411,6 +2477,7 @@ function dashCopyAnniversaries() {
 function renderDashboard(d) {
   var body = document.getElementById('dash-body');
   if (!body) return;
+  var prefs = dashGetPrefs();
   var pvColors = ['#2E7EA6','#C9973A','#5A9E6F','#9B59B6','#E87040'];
   var maxType = d.typeCounts && d.typeCounts.length ? d.typeCounts[0].n : 1;
   var yr = new Date().getFullYear();
@@ -2420,6 +2487,9 @@ function renderDashboard(d) {
   var isFinanceRole = _userRole === 'admin' || _userRole === 'finance';
   var isStaffRole   = _userRole === 'admin' || _userRole === 'staff';
   var canEditRole   = _userRole === 'admin' || _userRole === 'finance' || _userRole === 'staff';
+  html += '<div style="display:flex;justify-content:flex-end;margin-bottom:4px;">'
+    + '<button class="btn-secondary" style="font-size:.75rem;padding:3px 10px;" onclick="openDashCustomize()">&#9881; Customize</button>'
+    + '</div>';
   html += '<div class="dash-quick">'
     + (canEditRole ? dashQBtn('<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>', 'Add Person', "openPersonEdit(null);showTab('people')") : '')
     + (isFinanceRole ? dashQBtn('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L2 7h20l-6-4z"/>', 'Record Giving', "showTab('giving')") : '')
@@ -2437,7 +2507,7 @@ function renderDashboard(d) {
     + '</div>';
 
   // ── Follow-up queue — staff+ only ─────────────────────────────
-  if (isStaffRole) {
+  if (isStaffRole && prefs.followUp) {
   var fuItems = d.followUpItems || [];
   var fuTypeLabels = { pastoral_call:'Pastoral Call', prayer:'Prayer Follow-up', first_gift:'First Gift', not_seen:'Not Seen', newsletter:'Newsletter', general:'General' };
   var fuTypeColors = { pastoral_call:'#2E7EA6', prayer:'#9B59B6', first_gift:'#C9973A', not_seen:'#E87040', newsletter:'#5A9E6F', general:'#666' };
@@ -2474,7 +2544,7 @@ function renderDashboard(d) {
 
   // ── First-time givers — finance+ only ─────────────────────────
   var firstGivers = isFinanceRole ? (d.firstGivers || []) : [];
-  if (firstGivers.length) {
+  if (prefs.firstGivers && firstGivers.length) {
     html += '<div class="dash-section-hdr"><span>First-Time Givers</span>'
       + '<span style="font-size:12px;color:var(--warm-gray);font-weight:400;">last 60 days</span></div>';
     html += '<div class="dash-card" style="padding:0;"><div class="dash-card-body">'
@@ -2494,7 +2564,7 @@ function renderDashboard(d) {
 
   // ── Not seen recently ──────────────────────────────────────────
   var notSeen = d.notSeenRecently || [];
-  if (notSeen.length) {
+  if (prefs.notSeen && notSeen.length) {
     html += '<div class="dash-section-hdr"><span>Not Seen Recently</span>'
       + '<span style="font-size:12px;color:var(--warm-gray);font-weight:400;">>8 weeks since last visit</span></div>';
     html += '<div class="dash-card" style="padding:0;"><div class="dash-card-body">'
@@ -2522,63 +2592,67 @@ function renderDashboard(d) {
   var bdList = d.birthdays || [], annList = d.anniversaries || [];
 
   // ── Birthdays card ─────────────────────────────────────────────
-  html += '<div class="dash-card">'
-    + '<div class="dash-card-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">'
-    + '<span>Birthdays</span>'
-    + '<div style="display:flex;align-items:center;gap:4px;">'
-    + '<button style="'+navBtn+'" onclick="dashMonthNav(-1)" title="Previous month">&#8249;</button>'
-    + '<span style="font-size:12px;font-weight:600;min-width:66px;text-align:center;">'+mnArr[curMonth-1]+'</span>'
-    + '<button style="'+navBtn+'" onclick="dashMonthNav(1)" title="Next month">&#8250;</button>'
-    + '<button id="dash-copy-bd-btn" style="'+navBtn+'margin-left:2px;" onclick="dashCopyBirthdays()" title="Copy for bulletin">&#128203;</button>'
-    + '</div></div>'
-    + '<div class="dash-card-body">';
-  if (!bdList.length) {
-    html += '<div style="padding:16px 18px;color:var(--faint);font-size:13px;font-style:italic;">No birthdays in '+mnArr[curMonth-1]+'.</div>';
-  } else {
-    html += bdList.map(function(p) {
-      var name = ((p.first_name||'')+' '+(p.last_name||'')).trim();
-      var ini = ((p.first_name||'').charAt(0)+(p.last_name||'').charAt(0)).toUpperCase();
-      var bg = pvColors[p.id % pvColors.length];
-      var parts = (p.dob||'').split('-');
-      var dateStr = parts.length >= 3 ? mnShort[parseInt(parts[1])-1]+' '+parseInt(parts[2]) : p.dob;
-      return '<div class="dash-bday" onclick="openPersonDetail('+p.id+')" style="cursor:pointer;">'
-        + '<div class="dash-avatar" style="background:'+bg+';">'+ini+'</div>'
-        + '<div style="flex:1;"><div class="dash-item-name">'+esc(name)+'</div></div>'
-        + '<div style="font-size:12px;color:var(--warm-gray);">'+dateStr+'</div>'
-        + '</div>';
-    }).join('');
+  if (prefs.birthdays) {
+    html += '<div class="dash-card">'
+      + '<div class="dash-card-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">'
+      + '<span>Birthdays</span>'
+      + '<div style="display:flex;align-items:center;gap:4px;">'
+      + '<button style="'+navBtn+'" onclick="dashMonthNav(-1)" title="Previous month">&#8249;</button>'
+      + '<span style="font-size:12px;font-weight:600;min-width:66px;text-align:center;">'+mnArr[curMonth-1]+'</span>'
+      + '<button style="'+navBtn+'" onclick="dashMonthNav(1)" title="Next month">&#8250;</button>'
+      + '<button id="dash-copy-bd-btn" style="'+navBtn+'margin-left:2px;" onclick="dashCopyBirthdays()" title="Copy for bulletin">&#128203;</button>'
+      + '</div></div>'
+      + '<div class="dash-card-body">';
+    if (!bdList.length) {
+      html += '<div style="padding:16px 18px;color:var(--faint);font-size:13px;font-style:italic;">No birthdays in '+mnArr[curMonth-1]+'.</div>';
+    } else {
+      html += bdList.map(function(p) {
+        var name = ((p.first_name||'')+' '+(p.last_name||'')).trim();
+        var ini = ((p.first_name||'').charAt(0)+(p.last_name||'').charAt(0)).toUpperCase();
+        var bg = pvColors[p.id % pvColors.length];
+        var parts = (p.dob||'').split('-');
+        var dateStr = parts.length >= 3 ? mnShort[parseInt(parts[1])-1]+' '+parseInt(parts[2]) : p.dob;
+        return '<div class="dash-bday" onclick="openPersonDetail('+p.id+')" style="cursor:pointer;">'
+          + '<div class="dash-avatar" style="background:'+bg+';">'+ini+'</div>'
+          + '<div style="flex:1;"><div class="dash-item-name">'+esc(name)+'</div></div>'
+          + '<div style="font-size:12px;color:var(--warm-gray);">'+dateStr+'</div>'
+          + '</div>';
+      }).join('');
+    }
+    html += '</div></div>';
   }
-  html += '</div></div>';
 
   // ── Anniversaries card ─────────────────────────────────────────
-  html += '<div class="dash-card">'
-    + '<div class="dash-card-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">'
-    + '<span>Anniversaries</span>'
-    + '<div style="display:flex;align-items:center;gap:4px;">'
-    + '<span style="font-size:12px;font-weight:400;color:var(--warm-gray);">'+mnArr[curMonth-1]+'</span>'
-    + '<button id="dash-copy-ann-btn" style="'+navBtn+'margin-left:2px;" onclick="dashCopyAnniversaries()" title="Copy for bulletin">&#128203;</button>'
-    + '</div></div>'
-    + '<div class="dash-card-body">';
-  if (!annList.length) {
-    html += '<div style="padding:16px 18px;color:var(--faint);font-size:13px;font-style:italic;">No anniversaries in '+mnArr[curMonth-1]+'.</div>';
-  } else {
-    html += annList.map(function(p) {
-      var name = ((p.first_name||'')+' '+(p.last_name||'')).trim();
-      var ini = (p.first_name||'').split(' ').map(function(n){return n.charAt(0);}).join('').slice(0,2).toUpperCase() || (p.last_name||'').charAt(0).toUpperCase();
-      var bg = pvColors[p.id % pvColors.length];
-      var parts = (p.anniversary_date||'').split('-');
-      var dateStr = parts.length >= 3 ? mnShort[parseInt(parts[1])-1]+' '+parseInt(parts[2]) : p.anniversary_date;
-      return '<div class="dash-bday" onclick="openPersonDetail('+p.id+')" style="cursor:pointer;">'
-        + '<div class="dash-avatar" style="background:'+bg+';">'+ini+'</div>'
-        + '<div style="flex:1;"><div class="dash-item-name">'+esc(name)+'</div></div>'
-        + '<div style="font-size:12px;color:var(--warm-gray);">'+dateStr+'</div>'
-        + '</div>';
-    }).join('');
+  if (prefs.anniversaries) {
+    html += '<div class="dash-card">'
+      + '<div class="dash-card-hdr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">'
+      + '<span>Anniversaries</span>'
+      + '<div style="display:flex;align-items:center;gap:4px;">'
+      + '<span style="font-size:12px;font-weight:400;color:var(--warm-gray);">'+mnArr[curMonth-1]+'</span>'
+      + '<button id="dash-copy-ann-btn" style="'+navBtn+'margin-left:2px;" onclick="dashCopyAnniversaries()" title="Copy for bulletin">&#128203;</button>'
+      + '</div></div>'
+      + '<div class="dash-card-body">';
+    if (!annList.length) {
+      html += '<div style="padding:16px 18px;color:var(--faint);font-size:13px;font-style:italic;">No anniversaries in '+mnArr[curMonth-1]+'.</div>';
+    } else {
+      html += annList.map(function(p) {
+        var name = ((p.first_name||'')+' '+(p.last_name||'')).trim();
+        var ini = (p.first_name||'').split(' ').map(function(n){return n.charAt(0);}).join('').slice(0,2).toUpperCase() || (p.last_name||'').charAt(0).toUpperCase();
+        var bg = pvColors[p.id % pvColors.length];
+        var parts = (p.anniversary_date||'').split('-');
+        var dateStr = parts.length >= 3 ? mnShort[parseInt(parts[1])-1]+' '+parseInt(parts[2]) : p.anniversary_date;
+        return '<div class="dash-bday" onclick="openPersonDetail('+p.id+')" style="cursor:pointer;">'
+          + '<div class="dash-avatar" style="background:'+bg+';">'+ini+'</div>'
+          + '<div style="flex:1;"><div class="dash-item-name">'+esc(name)+'</div></div>'
+          + '<div style="font-size:12px;color:var(--warm-gray);">'+dateStr+'</div>'
+          + '</div>';
+      }).join('');
+    }
+    html += '</div></div>';
   }
-  html += '</div></div>';
 
   // Membership breakdown
-  html += '<div class="dash-card"><div class="dash-card-hdr">'
+  if (prefs.membership) html += '<div class="dash-card"><div class="dash-card-hdr">'
     + '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--teal);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>'
     + 'Membership by Type</div>'
     + '<div class="dash-type-bar">'
@@ -3515,49 +3589,151 @@ function handlePhotoFileSelected(input) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var img = new Image();
-    img.onload = function() {
-      var MAX = 400;
-      var w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      canvas.toBlob(function(blob) {
-        var pid = _currentPvPerson && _currentPvPerson.id;
-        if (!pid) return;
-        var overlay = document.getElementById('pv-photo-overlay');
-        if (overlay) { overlay.style.opacity = '1'; overlay.innerHTML = '<span style="color:white;font-size:12px;">Uploading\u2026</span>'; }
-        var fd = new FormData();
-        fd.append('photo', blob, 'photo.jpg');
-        fetch('/admin/api/people/' + pid + '/photo', { method: 'POST', body: fd, credentials: 'same-origin' })
-          .then(function(r) { return r.json(); })
-          .then(function(d) {
-            if (overlay) { overlay.style.opacity = ''; overlay.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>'; }
-            if (d && d.ok && d.photo_url) {
-              _currentPvPerson.photo_url = d.photo_url;
-              var photoEl = document.getElementById('pv-photo');
-              if (photoEl) {
-                var imgEl = document.createElement('img');
-                imgEl.src = d.photo_url + '?t=' + Date.now();
-                imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
-                photoEl.innerHTML = '';
-                photoEl.appendChild(imgEl);
-              }
-            } else {
-              alert('Upload failed: ' + ((d && d.error) || 'unknown error'));
-            }
-          }).catch(function() {
-            if (overlay) overlay.style.opacity = '';
-            alert('Upload failed. Please try again.');
-          });
-      }, 'image/jpeg', 0.85);
-    };
+    img.onload = function() { showCropModal(img, uploadPersonPhoto); };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+function uploadPersonPhoto(blob) {
+  var pid = _currentPvPerson && _currentPvPerson.id;
+  if (!pid) return;
+  var overlay = document.getElementById('pv-photo-overlay');
+  if (overlay) { overlay.style.opacity = '1'; overlay.innerHTML = '<span style="color:white;font-size:12px;">Uploading\u2026</span>'; }
+  var fd = new FormData();
+  fd.append('photo', blob, 'photo.jpg');
+  fetch('/admin/api/people/' + pid + '/photo', { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (overlay) { overlay.style.opacity = ''; overlay.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>'; }
+      if (d && d.ok && d.photo_url) {
+        _currentPvPerson.photo_url = d.photo_url;
+        var photoEl = document.getElementById('pv-photo');
+        if (photoEl) {
+          var imgEl = document.createElement('img');
+          imgEl.src = d.photo_url + '?t=' + Date.now();
+          imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
+          photoEl.innerHTML = '';
+          photoEl.appendChild(imgEl);
+        }
+      } else {
+        alert('Upload failed: ' + ((d && d.error) || 'unknown error'));
+      }
+    }).catch(function() {
+      if (overlay) overlay.style.opacity = '';
+      alert('Upload failed. Please try again.');
+    });
+}
+
+// ── CROP MODAL ────────────────────────────────────────────────────────
+function showCropModal(img, callback) {
+  _cropImg = img;
+  _cropCallback = callback;
+  var MAX_W = 540, MAX_H = 380;
+  _cropScale = Math.min(1, MAX_W / img.width, MAX_H / img.height);
+  var canvas = document.getElementById('crop-canvas');
+  canvas.width = Math.round(img.width * _cropScale);
+  canvas.height = Math.round(img.height * _cropScale);
+  var dim = Math.min(img.width, img.height);
+  _cropRect = { x: Math.round((img.width - dim) / 2), y: Math.round((img.height - dim) / 2), w: dim, h: dim };
+  _cropDraw();
+  openModal('crop-modal');
+}
+function _cropDraw() {
+  var canvas = document.getElementById('crop-canvas');
+  if (!canvas || !_cropImg) return;
+  var ctx = canvas.getContext('2d');
+  var s = _cropScale;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(_cropImg, 0, 0, canvas.width, canvas.height);
+  var cx = _cropRect.x * s, cy = _cropRect.y * s, cw = _cropRect.w * s, ch = _cropRect.h * s;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, canvas.width, cy);
+  ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch);
+  ctx.fillRect(0, cy, cx, ch);
+  ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch);
+  ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(cx, cy, cw, ch);
+  var hs = 8;
+  ctx.fillStyle = 'white';
+  [[cx, cy],[cx+cw, cy],[cx, cy+ch],[cx+cw, cy+ch]].forEach(function(pt) {
+    ctx.fillRect(pt[0]-hs/2, pt[1]-hs/2, hs, hs);
+  });
+}
+function _cropHitCorner(mx, my) {
+  var s = _cropScale, hs = 10;
+  var cx = _cropRect.x*s, cy = _cropRect.y*s, cw = _cropRect.w*s, ch = _cropRect.h*s;
+  var corners = [{k:'tl',x:cx,y:cy},{k:'tr',x:cx+cw,y:cy},{k:'bl',x:cx,y:cy+ch},{k:'br',x:cx+cw,y:cy+ch}];
+  for (var i=0; i<corners.length; i++) {
+    if (Math.abs(mx-corners[i].x)<hs && Math.abs(my-corners[i].y)<hs) return corners[i].k;
+  }
+  return null;
+}
+function _cropCanvasXY(e) {
+  var r = document.getElementById('crop-canvas').getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+function cropMouseDown(e) {
+  var xy = _cropCanvasXY(e), mx = xy[0], my = xy[1];
+  var corner = _cropHitCorner(mx, my);
+  var s = _cropScale;
+  var cx = _cropRect.x*s, cy = _cropRect.y*s, cw = _cropRect.w*s, ch = _cropRect.h*s;
+  var inside = mx>=cx && mx<=cx+cw && my>=cy && my<=cy+ch;
+  _cropDrag = { type: corner || (inside ? 'move' : null), sx: mx, sy: my, rx: _cropRect.x, ry: _cropRect.y, rw: _cropRect.w, rh: _cropRect.h };
+  e.preventDefault();
+}
+function cropMouseMove(e) {
+  if (!_cropDrag || !_cropDrag.type) return;
+  var xy = _cropCanvasXY(e), mx = xy[0], my = xy[1];
+  var s = _cropScale;
+  var dx = (mx - _cropDrag.sx) / s, dy = (my - _cropDrag.sy) / s;
+  var iw = _cropImg.width, ih = _cropImg.height;
+  var r = {x: _cropDrag.rx, y: _cropDrag.ry, w: _cropDrag.rw, h: _cropDrag.rh};
+  var MIN = 40;
+  if (_cropDrag.type === 'move') {
+    r.x = Math.max(0, Math.min(iw - r.w, r.x + dx));
+    r.y = Math.max(0, Math.min(ih - r.h, r.y + dy));
+  } else {
+    var d = (Math.abs(dx) > Math.abs(dy)) ? dx : dy;
+    if (_cropDrag.type === 'tl') { var nw=Math.max(MIN,r.w-d),nh=Math.max(MIN,r.h-d); r.x=r.x+(r.w-nw); r.y=r.y+(r.h-nh); r.w=nw; r.h=nh; }
+    else if (_cropDrag.type === 'tr') { var nw=Math.max(MIN,r.w+d),nh=Math.max(MIN,r.h+d); r.w=nw; r.y=r.y+(r.h-nh); r.h=nh; }
+    else if (_cropDrag.type === 'bl') { var nw=Math.max(MIN,r.w-d),nh=Math.max(MIN,r.h+d); r.x=r.x+(r.w-nw); r.w=nw; r.h=nh; }
+    else if (_cropDrag.type === 'br') { var nw=Math.max(MIN,r.w+d),nh=Math.max(MIN,r.h+d); r.w=nw; r.h=nh; }
+    r.x = Math.max(0, Math.min(iw - r.w, r.x));
+    r.y = Math.max(0, Math.min(ih - r.h, r.y));
+    r.w = Math.min(r.w, iw - r.x);
+    r.h = Math.min(r.h, ih - r.y);
+  }
+  _cropDrag.sx = mx; _cropDrag.sy = my;
+  _cropDrag.rx = r.x; _cropDrag.ry = r.y; _cropDrag.rw = r.w; _cropDrag.rh = r.h;
+  _cropRect = r;
+  _cropDraw();
+}
+function cropMouseUp() { _cropDrag = null; }
+function cropApply() {
+  if (!_cropImg || !_cropCallback) return;
+  var MAX = 400;
+  var sw = _cropRect.w, sh = _cropRect.h;
+  var scale = Math.min(1, MAX / sw, MAX / sh);
+  var ow = Math.round(sw * scale), oh = Math.round(sh * scale);
+  var canvas = document.createElement('canvas');
+  canvas.width = ow; canvas.height = oh;
+  canvas.getContext('2d').drawImage(_cropImg, _cropRect.x, _cropRect.y, sw, sh, 0, 0, ow, oh);
+  closeModal('crop-modal');
+  canvas.toBlob(function(blob) { _cropCallback(blob); _cropCallback = null; }, 'image/jpeg', 0.85);
+}
+function cropSkip() {
+  if (!_cropImg || !_cropCallback) return;
+  var MAX = 400, img = _cropImg;
+  var w = img.width, h = img.height;
+  if (w > MAX || h > MAX) {
+    if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+    else { w = Math.round(w * MAX / h); h = MAX; }
+  }
+  var canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  closeModal('crop-modal');
+  canvas.toBlob(function(blob) { _cropCallback(blob); _cropCallback = null; }, 'image/jpeg', 0.85);
 }
 
 function syncPersonFromBreeze(breezeId, personId) {
@@ -5322,7 +5498,7 @@ function createBatch() {
 
 // ── REPORTS ────────────────────────────────────────────────────────────
 function initReports() {
-  // Nothing to auto-load
+  initReportTrendYears();
 }
 function showRptOutput(html) {
   var o = document.getElementById('rpt-output');
@@ -5420,6 +5596,76 @@ function runGivingSummary() {
     );
   });
 }
+function initReportTrendYears() {
+  var el = document.getElementById('rpt-trend-years');
+  if (!el || el.children.length) return;
+  var cur = new Date().getFullYear();
+  for (var y = cur; y >= cur - 4; y--) {
+    var chk = document.createElement('label');
+    chk.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;';
+    chk.innerHTML = '<input type="checkbox" value="'+y+'" '+(y>=cur-2?'checked':'')+' style="width:14px;height:14px;"> <span>'+y+'</span>';
+    el.appendChild(chk);
+  }
+}
+function runGivingTrend() {
+  initReportTrendYears();
+  var checked = Array.from(document.querySelectorAll('#rpt-trend-years input:checked')).map(function(c){return c.value;});
+  if (!checked.length) { alert('Please select at least one year.'); return; }
+  api('/admin/api/reports/giving-trend?years=' + encodeURIComponent(checked.join(','))).then(function(d) {
+    showRptOutput(renderGivingTrendChart(d));
+  });
+}
+function renderGivingTrendChart(d) {
+  var palette = ['#2E7EA6','#C9973A','#5A9E6F','#9B59B6','#E74C3C'];
+  var mShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var W=800,H=220,pL=60,pR=16,pT=16,pB=36,cW=W-pL-pR,cH=H-pT-pB;
+  var allV = [];
+  (d.years||[]).forEach(function(yr) {
+    (d.monthly[yr]||[]).forEach(function(r) { if (r.total_cents) allV.push(r.total_cents); });
+  });
+  if (!allV.length) return '<div style="padding:20px;color:var(--warm-gray);">No giving data for selected years.</div>';
+  var maxV = Math.max.apply(null, allV) * 1.1;
+  var pxM = function(i) { return pL + i * (cW / 11); };
+  var pyV = function(v) { return pT + cH - (v / maxV) * cH; };
+  var grid = '', ylbls = '', xlbls = '', lines = '';
+  var gridVals = [0, Math.round(maxV*0.25/1.1), Math.round(maxV*0.5/1.1), Math.round(maxV*0.75/1.1), Math.round(maxV/1.1)];
+  gridVals.forEach(function(v) {
+    var yy = pyV(v);
+    grid += '<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylbls += '<text x="'+(pL-4)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">$'+Math.round(v/100).toLocaleString()+'</text>';
+  });
+  for (var xi = 0; xi < 12; xi++) {
+    xlbls += '<text x="'+pxM(xi).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+mShort[xi]+'</text>';
+  }
+  var legend = '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;justify-content:center;">';
+  (d.years||[]).forEach(function(yr, yi) {
+    var color = palette[yi % palette.length];
+    var pts = [];
+    for (var mo = 1; mo <= 12; mo++) {
+      var ms = mo < 10 ? '0'+mo : ''+mo;
+      var row = (d.monthly[yr]||[]).find(function(r){return r.month===ms;});
+      if (row && row.total_cents) pts.push({x: pxM(mo-1), y: pyV(row.total_cents), v: row.total_cents, mi: mo-1});
+    }
+    if (!pts.length) return;
+    var pathD = pts.map(function(p,j){return(j?'L ':'M ')+p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ');
+    lines += '<path d="'+pathD+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round"/>';
+    pts.forEach(function(p) {
+      lines += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3.5" fill="'+color+'"><title>'+mShort[p.mi]+' '+yr+': $'+Math.round(p.v/100).toLocaleString()+'</title></circle>';
+    });
+    var yearTotal = (d.monthly[yr]||[]).reduce(function(s,r){return s+(r.total_cents||0);},0);
+    legend += '<span style="display:flex;align-items:center;gap:5px;font-size:.82rem;">'
+      + '<span style="display:inline-block;width:14px;height:14px;background:'+color+';border-radius:3px;flex-shrink:0;"></span>'
+      + yr+' <span style="color:var(--warm-gray);">($'+Math.round(yearTotal/100).toLocaleString()+')</span></span>';
+  });
+  legend += '</div>';
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid+lines+xlbls+ylbls+'</svg>';
+  return '<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px 16px 8px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+    + '<div style="font-weight:700;color:var(--steel-anchor);font-size:.95rem;">Giving Trend — Monthly Totals by Year</div>'
+    + '<button class="btn-secondary" style="font-size:.8rem;padding:4px 10px;" onclick="window.print()">Print</button></div>'
+    + svg + legend + '</div>';
+}
+
 var _stmtData = null;
 function toggleStmtMode() {
   var mode = document.querySelector('input[name="rpt-stmt-mode"]:checked').value;
@@ -6458,6 +6704,29 @@ function setAttChartMode(m) {
   renderAttendanceChart(_loadedServices);
 }
 
+var _attResizing = false, _attResizeStartY = 0, _attResizeStartH = 0, _attResizeRaf = 0;
+function attChartResizeStart(e) {
+  _attResizing = true;
+  _attResizeStartY = e.clientY;
+  _attResizeStartH = _attChartH;
+  e.preventDefault();
+  document.addEventListener('mousemove', _attResizeMove);
+  document.addEventListener('mouseup', _attResizeEnd);
+}
+var _attResizeMove = function(e) {
+  if (!_attResizing) return;
+  cancelAnimationFrame(_attResizeRaf);
+  _attResizeRaf = requestAnimationFrame(function() {
+    _attChartH = Math.max(120, Math.min(600, _attResizeStartH + e.clientY - _attResizeStartY));
+    renderAttendanceChart(_loadedServices);
+  });
+};
+var _attResizeEnd = function() {
+  _attResizing = false;
+  document.removeEventListener('mousemove', _attResizeMove);
+  document.removeEventListener('mouseup', _attResizeEnd);
+};
+
 function renderAttendanceChart(services) {
   var today = new Date().toISOString().slice(0,10);
   var byDate = {};
@@ -6507,7 +6776,7 @@ function renderAttendanceChart(services) {
     +'<div><div class="att-stat-val">'+dataPts.length+'</div><div class="att-stat-lbl">Sundays</div></div>';
 
   var n=dataPts.length;
-  var H=210,pL=32,pR=12,pT=10,pB=30;
+  var H=_attChartH,pL=32,pR=12,pT=10,pB=30;
   var cw=document.getElementById('att-chart-wrap');
 
   if (_attChartMode === 'yoy') {
