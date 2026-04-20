@@ -978,6 +978,15 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       <div class="import-status" id="export-status"></div>
     </div>
     <div class="import-card">
+      <h3>&#9993; Automated Emails (EM2)</h3>
+      <p style="font-size:.88rem;color:var(--warm-gray);margin-bottom:10px;">Daily cron sends birthday emails to active members and anniversary emails to couples at 9am Central. Use these buttons to trigger manually or test.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" style="font-size:.88rem;" onclick="runEmailTest('birthday')">&#127874; Send Birthday Emails (Today)</button>
+        <button class="btn-secondary" style="font-size:.88rem;" onclick="runEmailTest('anniversary')">&#10084; Send Anniversary Emails (Today)</button>
+      </div>
+      <div class="import-status" id="email-test-status" style="margin-top:8px;"></div>
+    </div>
+    <div class="import-card">
       <h3>&#127968; Household Head Assignment</h3>
       <p id="hq4-status-text">Loading…</p>
       <p style="font-size:.82rem;color:var(--warm-gray);">Heads are used for display names and anniversary pairing. Promotes a spouse (or first member) to Head when none is assigned.</p>
@@ -1600,7 +1609,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-20-v82';
+var DEPLOY_VERSION = '2026-04-20-v83';
 window.onerror = function(msg, src, line, col, err) {
   var b = document.getElementById('js-error-banner');
   if (!b) { b = document.createElement('div'); b.id = 'js-error-banner';
@@ -6184,6 +6193,20 @@ function clearAllFunds() {
   }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
 
+function runEmailTest(type) {
+  var status = document.getElementById('email-test-status');
+  status.textContent = 'Sending\u2026'; status.className = 'import-status';
+  var endpoint = type === 'birthday' ? 'email/run-birthday' : 'email/run-anniversary';
+  api('/admin/api/' + endpoint, {method:'POST'}).then(function(d) {
+    if (d.error) { status.textContent = 'Error: ' + d.error; status.className = 'import-status err'; return; }
+    var label = type === 'birthday' ? 'Birthday' : 'Anniversary';
+    var msg = label + ' emails: ' + d.sent + ' sent';
+    if (d.skipped) msg += ', ' + d.skipped + ' already sent today';
+    if (d.errors && d.errors.length) msg += '. Errors: ' + d.errors.join('; ');
+    else msg += '.';
+    status.textContent = msg; status.className = 'import-status ok';
+  }).catch(function() { status.textContent = 'Request failed.'; status.className = 'import-status err'; });
+}
 function fixHouseholdHeads() {
   var status = document.getElementById('hq4-status');
   status.textContent = 'Working\u2026'; status.className = 'import-status';
