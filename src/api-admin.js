@@ -2,6 +2,7 @@
 import { html, json, isAuthed, authCookieHeader, getAuthRole, getAuthInfo, hashPassword, verifyPassword } from './auth.js';
 import { handleChmsApi } from './api-chms.js';
 import { LOGIN_HTML } from './html-templates.js';
+import { sendBirthdayEmails, sendAnniversaryEmails } from './api-emails.js';
 
 export const SCHEDULER_KEYS = [
   'ws_people','ws_schedule_v2','ws_history','ws_last_served',
@@ -159,6 +160,24 @@ export async function handleAdminApi(req, env, url, method) {
   }
 
   if (seg.startsWith('scheduler/')) return handleSchedulerDataApi(req, env, url, method);
+
+  // ── Email triggers (admin only) — manual test / emergency resend ──────────
+  if (seg === 'email/run-birthday' && method === 'POST') {
+    const reqRole = await getAuthRole(req, env);
+    if (reqRole !== 'admin') return json({ error: 'Access denied' }, 403);
+    try {
+      const result = await sendBirthdayEmails(env);
+      return json(result);
+    } catch (e) { return json({ error: e.message }, 500); }
+  }
+  if (seg === 'email/run-anniversary' && method === 'POST') {
+    const reqRole = await getAuthRole(req, env);
+    if (reqRole !== 'admin') return json({ error: 'Access denied' }, 403);
+    try {
+      const result = await sendAnniversaryEmails(env);
+      return json(result);
+    } catch (e) { return json({ error: e.message }, 500); }
+  }
 
   // ── Users management (admin only) ────────────────────────────────
   if (seg.startsWith('users')) {

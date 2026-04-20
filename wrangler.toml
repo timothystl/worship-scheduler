@@ -26,3 +26,6 @@ id = "3db4fdc395084ae0a9e8295c460ba08e"
 [[r2_buckets]]
 binding = "PHOTOS"
 bucket_name = "tlc-chms-photos"
+
+[triggers]
+crons = ["0 14 * * *"]

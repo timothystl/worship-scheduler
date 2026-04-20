@@ -18,6 +18,7 @@ import {
 import { handleAdminLogin, handleAdminApi } from './src/api-admin.js';
 import { LOGIN_HTML, PUBLIC_HTML, ADMIN_HTML } from './src/html-templates.js';
 import { CHMS_HTML, CHMS_MANIFEST_JSON, SW_JS, BACKLOG_HTML } from './src/html-chms.js';
+import { sendBirthdayEmails, sendAnniversaryEmails } from './src/api-emails.js';
 
 // ── MAIN FETCH HANDLER ────────────────────────────────────────────────
 export default {
@@ -34,7 +35,17 @@ export default {
         headers: { 'Content-Type': 'application/json' }
       });
     }
-  }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try { await initDb(env.DB); } catch (e) { console.error('Cron DB init error:', e.message); return; }
+      const [bday, ann] = await Promise.all([
+        sendBirthdayEmails(env).catch(e => ({ error: e.message })),
+        sendAnniversaryEmails(env).catch(e => ({ error: e.message })),
+      ]);
+      console.log('Daily email cron:', JSON.stringify({ birthdays: bday, anniversaries: ann }));
+    })());
+  },
 };
 
 async function _fetch(req, env) {
