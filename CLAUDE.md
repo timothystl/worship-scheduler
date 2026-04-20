@@ -90,6 +90,11 @@ Before building, these secrets must be added to the ChMS Cloudflare Worker:
 - Bulk sync button in Settings → pushes all active members with email addresses to Brevo list in batches
 - Auto-sync on person save: if email changes AND person is a member, upsert contact in Brevo
 - Brevo handles unsubscribe/opt-out natively — no opt-out field needed in DB
+- **Reconciliation view** (Settings card): "Check Brevo Sync" button fetches all contacts currently in the Brevo list, compares against ChMS active members with email addresses, and shows:
+  - Total ChMS members with email vs. total in Brevo list
+  - Members missing from Brevo (with "Add All Missing" button)
+  - Contacts in Brevo not found in ChMS members (for awareness — may be website sign-ups or past members)
+  - This gives confidence that all members are covered and makes it easy to catch gaps
 
 ### EM2 Plan (Birthday/anniversary emails via Resend)
 - Daily cron trigger (add to existing Cloudflare cron schedule)
