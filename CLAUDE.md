@@ -79,11 +79,10 @@ Combine ChMS + Scheduler + Website admin into one Worker.
 3. **Long term**: Consider a thin "people API" in ChMS that website admin and any future apps can query (Option B) — but only when the pain of duplicated data is actually felt.
 
 ### Prerequisites for EM1/EM2
-Before building, these secrets must be added to the ChMS Cloudflare Worker:
-- `BREVO_API_KEY` — from Brevo → Account → SMTP & API → API Keys
-- `BREVO_LIST_ID` — the Brevo contact list ID to sync members to (Brevo → Contacts → Lists)
-- `RESEND_FROM_EMAIL` — sender address for birthday/anniversary emails (e.g. `Timothy Lutheran <noreply@timothystl.org>`)
-- `RESEND_API_KEY` — already present for scheduler; confirm same key works for ChMS worker
+- `RESEND_API_KEY` — **already in this worker** (used by `src/api-scheduler.js`)
+- `EMAIL_FROM` — **already in this worker** (e.g. `Timothy Lutheran <noreply@timothystl.org>`) — EM2 will reuse this
+- `BREVO_API_KEY` — **needs to be added** (Brevo → Account → SMTP & API → API Keys)
+- `BREVO_LIST_ID` — **needs to be added** (Brevo → Contacts → Lists, the numeric ID in the URL)
 
 ### EM1 Plan (Brevo newsletter sync)
 - "Add to newsletter" button on person profile (staff+) → POST to Brevo Contacts API, adds/updates contact in the configured list
@@ -166,11 +165,12 @@ Full detail in `NOTES.md`. Summary:
 
 ### Communications / Email
 - [ ] **EM1** — Brevo newsletter sync: (1) "Add to newsletter" button on person profile → Brevo Contacts API, (2) bulk sync in Settings, (3) auto-sync on person save if email changes. Needs `BREVO_API_KEY` and `BREVO_LIST_ID` secrets added to Worker. Plan written in Architecture section above. (noted 2026-04-17, scoped 2026-04-20)
-- [ ] **EM2** — Automated birthday/anniversary emails via Resend: daily cron, birthday to individual member, anniversary to couple (one email if shared address). Needs `RESEND_FROM_EMAIL` secret + confirm `RESEND_API_KEY` available in ChMS worker. Plan written in Architecture section above. (noted 2026-04-17, scoped 2026-04-20)
-- [ ] **SMS1** — SMS birthday/anniversary + bulk messaging. Requires Twilio account (~$1.50/month for church volume). Needs `sms_opt_in` field on people + `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` secrets. Build after EM1/EM2. (noted 2026-04-20)
+- [ ] **EM2** — Automated birthday/anniversary emails via Resend. **Zero blockers — ready to build.** `RESEND_API_KEY` and `EMAIL_FROM` secrets already exist in this worker (used by scheduler). Daily cron, birthday to individual member, anniversary to couple (one email if shared address). Start here tomorrow. (noted 2026-04-17, scoped 2026-04-20)
+- [ ] **EM1** — Brevo newsletter sync. Needs `BREVO_API_KEY` + `BREVO_LIST_ID` added to Cloudflare Worker secrets before building (Cloudflare Dashboard → Workers → this worker → Settings → Variables). Build after EM2. (noted 2026-04-17, scoped 2026-04-20)
+- [ ] **SMS1** — SMS birthday/anniversary + bulk messaging. Requires Twilio account (~$1.50/month for church volume). Needs `sms_opt_in` field on people + `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` secrets. Build after EM1. (noted 2026-04-20)
 
 ### Scheduler
-- [ ] **SC1** — Absorb scheduler app into ChMS: move volunteer scheduling logic into this Worker, reuse D1 person records and Resend config. Recommended approach per Architecture section. Large effort — needs scoping session. (noted 2026-04-17) — see Phase 6 N2.
+- [ ] **SC1** — Scheduler is ~80% merged already. Backend (`src/api-scheduler.js`) and frontend (`src/scheduler-html.js` → `/scheduler`) are already in this worker. `RESEND_API_KEY` and `EMAIL_FROM` already present. **Remaining work**: make scheduler accessible as a tab inside the ChMS SPA instead of a standalone page at `/scheduler`. Smaller effort than originally estimated. (noted 2026-04-17, re-scoped 2026-04-20)
 
 ### Breeze Integration
 - [ ] **BR1** — Reverse sync (app → Breeze): Breeze API supports write operations (add/update people, add contributions). Feasible for narrow workflows (e.g. new person entered here → push to Breeze, or walk-in gift batch → push to Breeze). Full bidirectional sync is complex due to conflict resolution. Needs scoping conversation: which specific data entry workflows would benefit? (noted 2026-04-19)
