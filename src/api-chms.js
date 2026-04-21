@@ -106,7 +106,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const birthdays = (await db.prepare(
       `SELECT id, first_name, last_name, dob FROM people
        WHERE active=1 AND (status IS NULL OR status='active') AND dob != ''
-         AND LOWER(member_type) NOT IN ('visitor','inactive','other','organization')
+         AND LOWER(member_type) = 'member'
          AND strftime('%m', dob) = ?
        ORDER BY strftime('%d', dob)`
     ).bind(dashMonthStr).all()).results || [];
