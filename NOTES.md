@@ -130,6 +130,7 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-21
+- **v86**: Giving by Fund report improvements. (1) Total givers count now shown below the report title (parallel query on `COUNT(DISTINCT person_id)`). (2) New `POST /admin/api/giving/reconcile-orphans` endpoint: fetches Breeze giving/list for a date range, finds DB entries whose `breeze_id` no longer exists in Breeze, removes them (same safety check as the sync orphan pass). (3) "Reconcile Orphans" button added to the report — runs the cleanup for the same date range as the report and reloads if any orphans were removed. Addresses 2025 discrepancy: app $547,367 vs Breeze $537,624 due to stale pre-G10 orphaned entries.
 - **v85**: G10 fix — Orphan cleanup pass added to Breeze giving sync. When Breeze edits a contribution it creates a new payment ID; the old DB entry becomes stale ("orphaned"). The supplement pass (v74) already imports the corrected version from giving/list; this new pass detects DB entries in the sync window whose `breeze_id` no longer appears in giving/list and removes them if a current replacement exists for the same person+date. This resolves G10 (correction pass was always 0) and allows G11/G12/G13/G14 corrections made in Breeze to apply automatically on next sync. Response now includes `orphansRemoved` count; status message updated accordingly.
 
 ### 2026-04-20
