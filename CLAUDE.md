@@ -74,33 +74,21 @@ Combine ChMS + Scheduler + Website admin into one Worker.
 - Not recommended: website admin (CMS/content) is a genuinely different domain from membership management. Merging adds complexity without much benefit.
 
 ### Recommended Path
-1. **Now**: Build EM1/EM2 directly in ChMS using Brevo + Resend APIs (Option A). No inter-app dependencies.
-2. **Medium term**: Absorb Scheduler into ChMS (SC1, Option C). Reuse Resend config and person records.
+1. ~~**Now**: Build EM1/EM2~~ ✅ Done (v83/v84).
+2. **Next**: Absorb Scheduler into ChMS (SC1, Option C) — backend already merged, UI integration remaining.
 3. **Long term**: Consider a thin "people API" in ChMS that website admin and any future apps can query (Option B) — but only when the pain of duplicated data is actually felt.
 
 ### Prerequisites for EM1/EM2
 - `RESEND_API_KEY` — **already in this worker** (used by `src/api-scheduler.js`)
-- `EMAIL_FROM` — **already in this worker** (e.g. `Timothy Lutheran <noreply@timothystl.org>`) — EM2 will reuse this
-- `BREVO_API_KEY` — **needs to be added** (Brevo → Account → SMTP & API → API Keys)
-- `BREVO_LIST_ID` — **needs to be added** (Brevo → Contacts → Lists, the numeric ID in the URL)
+- `EMAIL_FROM` — **already in this worker** (e.g. `Timothy Lutheran <noreply@timothystl.org>`)
+- `BREVO_API_KEY` — **already in this worker** (added 2026-04-20)
+- `BREVO_LIST_ID` — **already in this worker** (added 2026-04-20)
 
-### EM1 Plan (Brevo newsletter sync)
-- "Add to newsletter" button on person profile (staff+) → POST to Brevo Contacts API, adds/updates contact in the configured list
-- Bulk sync button in Settings → pushes all active members with email addresses to Brevo list in batches
-- Auto-sync on person save: if email changes AND person is a member, upsert contact in Brevo
-- Brevo handles unsubscribe/opt-out natively — no opt-out field needed in DB
-- **Reconciliation view** (Settings card): "Check Brevo Sync" button fetches all contacts currently in the Brevo list, compares against ChMS active members with email addresses, and shows:
-  - Total ChMS members with email vs. total in Brevo list
-  - Members missing from Brevo (with "Add All Missing" button)
-  - Contacts in Brevo not found in ChMS members (for awareness — may be website sign-ups or past members)
-  - This gives confidence that all members are covered and makes it easy to catch gaps
+### EM1 — Done (v84)
+Brevo sync built: "Add to Newsletter" button on profile, bulk sync + reconciliation view in Settings, auto-sync on member email change.
 
-### EM2 Plan (Birthday/anniversary emails via Resend)
-- Daily cron trigger (add to existing Cloudflare cron schedule)
-- Birthday: query active members with `dob` matching today's month/day → send personal email via Resend
-- Anniversary: query active couples with `anniversary_date` matching today → send to couple; if they share an email address, one email addressed to both ("Dear Bob and Alice,")
-- No opt-out needed for these (transactional/personal, small volume)
-- Email templates stored as constants in `src/api-admin.js` (same file as scheduler email logic)
+### EM2 — Done (v83)
+Birthday/anniversary emails built: daily cron at 9am Central, Resend, dedup via audit_log, admin test buttons in Settings.
 
 ---
 
@@ -132,13 +120,13 @@ Full detail in `NOTES.md`. Summary:
 - [x] **G6** — Giving CSV import reconciliation fixes (v47, v51, 2026-04-17): (1) Negative entries (refunds/adjustments) were silently dropped — fixed. (2) "nan" fund name (blank exported by Excel) now maps to General Fund. (3) Float person IDs (`43826663.0`) now stripped. (4) Split-fund multi-row payments: Breeze exports one row per fund with same Payment ID; second row was treated as duplicate and fund allocation dropped — fixed with nth-occurrence tracking. Import now shows expandable list of skipped payment IDs as diagnostic.
 - [x] **G7** — Giving by Fund report now groups funds by numeric code prefix (e.g., all "40085 *" variants under one collapsible group with subtotal). Done 2026-04-17 (v48).
 - [x] **G8** — Re-import all giving years (2022–2026) after G6 fixes. Completed 2026-04-17 — all years 2021–2026 verified correct.
-- [ ] **G10** — Correction pass bug (correctedCount always 0): `contribution_updated` audit events reference a NEW/DIFFERENT payment ID than the original `contribution_added` event for the same contribution (e.g. Anne Gonzalez added as 489967480, updated event references 489967631). The v76 correction pass does `SELECT ... WHERE breeze_id IN (updatedPaymentIds)` but those IDs are never in the DB — so corrections never apply. Fix: rewrite to match by `(breeze_person_id + contribution_date)` from the update event, OR do a full reconciliation pass iterating all `glByPaymentId` entries against DB by breeze_id and comparing amounts. (noted 2026-04-19)
-- [ ] **G11** — Wrong-amount DB entries to manually verify and correct (decimal-omission pattern — amount entered without decimal in Breeze, stored as 100× too large): (1) Anne Gonzalez: Mar 2 2025, breeze_id=489967480 — DB likely ~$47,000, should be $47.00. (2) Pat Hunt: Sep 14 2025, breeze_id=502910208 — DB likely ~$100,000, should be $100.00. (3) Horst Herrmann: Dec 7 2025, breeze_id=508741044 — DB likely ~$900,000, should be $900.00. (4) John Hagan: Dec 7 2025, breeze_id=508740979 — DB likely ~$50,000, should be $50.00. Use Edit Gift modal to correct each. (noted 2026-04-19)
-- [ ] **G12** — Wrong-fund DB entry to verify and correct: Leah Sieveking Nov 2 2025, breeze_id=505718823 — audit log shows fund changed from Noah Comfort Dog (1718222) to General Fund (1718214). DB likely still has old fund. Use Edit Gift modal to correct. (noted 2026-04-19)
-- [ ] **G13** — Ghost fund 1771128 → General Fund (1718214): Code fix added in v77 (hardcoded redirect + migration pass on sync). After running next sync, verify Sue Koch (Apr 27 2025, breeze_id=495182958, $40) and Thanh Nguyen (Feb 22 2026, breeze_id=512469513, $25) both show General Fund. User edited these in Breeze on 2026-04-19, which likely created new payment IDs — after sync, check for duplicate entries by person+date and delete old ones via Edit Gift modal if needed. (noted 2026-04-19)
-- [ ] **G14** — $68.43 fund-change test: User changed the Feb 9 2025 $68.43 gift in Breeze from "Other" to "General Fund" on 2026-04-19. Audit log confirmed new payment ID 514675972 was created; old entry breeze_id=488482959 still in DB. On next sync: expect old entry 488482959 removed by dedup pass and new entry 514675972 added with General Fund. Run 2025 or 2025-2026 sync to verify. (noted 2026-04-19)
-- [ ] **G15** — Ron Rall split to verify: May 25 2025, audit log shows `contribution_updated` with split change to $3,735.45 General Fund + $1,500 PNG Mission Fund (total $5,235.45). Confirm DB has correct split amounts and both funds. (noted 2026-04-19)
-- [ ] **G16** — Kathy Carr fund change to verify: Feb 2 2025, audit log shows update to TUB Bees fund (1718237). Confirm DB has correct fund for her Feb 2 2025 contribution. (noted 2026-04-19)
+- [x] **G10** — Correction pass bug fixed (v85, 2026-04-21). Added orphan cleanup pass: after sync, DB entries in the window whose `breeze_id` no longer appears in giving/list are deleted if a current replacement exists for the same person+date. The supplement pass (v74) already imports the corrected version; this cleans up the stale old entry. Handles all cases where Breeze creates a new payment ID on edit.
+- [ ] **G11** — Wrong-amount entries: re-run 2025 sync; if user corrected these in Breeze (new payment IDs), orphan cleanup should auto-resolve. Verify: Anne Gonzalez Mar 2 2025 ($47), Pat Hunt Sep 14 2025 ($100), Horst Herrmann Dec 7 2025 ($900), John Hagan Dec 7 2025 ($50). Use Edit Gift modal only if still wrong after sync.
+- [ ] **G12** — Leah Sieveking Nov 2 2025 fund change: re-run 2025 sync; orphan cleanup should auto-resolve if corrected in Breeze. Verify; use Edit Gift modal if still wrong.
+- [ ] **G13** — Sue Koch Apr 27 2025 and Thanh Nguyen Feb 22 2026 (ghost fund): re-run sync for those years; orphan cleanup should remove old entries and supplement pass should add new ones with General Fund. Verify no duplicates remain.
+- [ ] **G14** — $68.43 fund change test (Feb 9 2025): re-run 2025 sync; orphan cleanup should remove old entry 488482959 and new entry 514675972 (General Fund) should remain. Verify.
+- [ ] **G15** — Ron Rall split to verify: May 25 2025, audit log shows `contribution_updated` with split change to $3,735.45 General Fund + $1,500 PNG Mission Fund (total $5,235.45). Re-run 2025 sync and confirm DB has correct split amounts and both funds. (noted 2026-04-19)
+- [ ] **G16** — Kathy Carr fund change to verify: Feb 2 2025, audit log shows update to TUB Bees fund (1718237). Re-run 2025 sync and confirm DB has correct fund. (noted 2026-04-19)
 
 ### Dashboard
 - [x] **DB5** — Last worship card: show both services AND the combined total on a single card (not two separate cards). Done 2026-04-17 (v27).
@@ -164,10 +152,9 @@ Full detail in `NOTES.md`. Summary:
 - [x] **AT4** — Year-over-year giving/attendance report: overlapping graphs to compare current year vs prior year on the same chart. Done 2026-04-20 (v79) — Giving Trend tile in Reports tab; YoY attendance was already implemented.
 
 ### Communications / Email
-- [ ] **EM1** — Brevo newsletter sync: (1) "Add to newsletter" button on person profile → Brevo Contacts API, (2) bulk sync in Settings, (3) auto-sync on person save if email changes. Needs `BREVO_API_KEY` and `BREVO_LIST_ID` secrets added to Worker. Plan written in Architecture section above. (noted 2026-04-17, scoped 2026-04-20)
-- [x] **EM2** — Automated birthday/anniversary emails via Resend. Daily cron (`0 14 * * *`), birthday to member, anniversary to couple (shared email → one combined email). Dedup via audit_log. Admin test buttons in Settings. Done 2026-04-20 (v83).
 - [x] **EM1** — Brevo newsletter sync: (1) "Add to newsletter" button on person profile → Brevo Contacts API, (2) bulk sync in Settings, (3) auto-sync on person save if email changes, (4) reconciliation view shows ChMS vs Brevo comparison with "Add All Missing" button. Done 2026-04-20 (v84).
-- [ ] **SMS1** — SMS birthday/anniversary + bulk messaging. **Preferred provider: Brevo SMS** — already have an account, `BREVO_API_KEY` will be in the worker for EM1, no new signup needed (~€0.07/SMS, slightly more than Twilio but zero friction). Alternative: Twilio (~$0.008/SMS + $1/month phone number). Needs `sms_opt_in` field on people. Build after EM1. (noted 2026-04-20)
+- [x] **EM2** — Automated birthday/anniversary emails via Resend. Daily cron (`0 14 * * *`), birthday to member, anniversary to couple (shared email → one combined email). Dedup via audit_log. Admin test buttons in Settings. Done 2026-04-20 (v83).
+- [ ] **SMS1** — SMS birthday/anniversary + bulk messaging. **Preferred provider: Brevo SMS** — already have an account, `BREVO_API_KEY` already in worker, no new signup needed (~€0.07/SMS). Alternative: Twilio (~$0.008/SMS + $1/month). Needs `sms_opt_in` field on people. (noted 2026-04-20)
 
 ### Scheduler
 - [ ] **SC1** — Scheduler is ~80% merged already. Backend (`src/api-scheduler.js`) and frontend (`src/scheduler-html.js` → `/scheduler`) are already in this worker. `RESEND_API_KEY` and `EMAIL_FROM` already present. **Remaining work**: make scheduler accessible as a tab inside the ChMS SPA instead of a standalone page at `/scheduler`. Smaller effort than originally estimated. (noted 2026-04-17, re-scoped 2026-04-20)
@@ -246,7 +233,7 @@ Run through this at the end of any session before pushing, or at the start of a 
 - [ ] `DEPLOY_VERSION` is bumped
 - [ ] `NOTES.md` Recent Changes has an entry for this version
 - [ ] `CLAUDE.md` Queued Items updated — new items added, completed items checked off
-- [ ] Pushed to `claude/continue-volunteer-app-xhY9J`, not main
+- [ ] Pushed to `claude/review-claude-md-f62iL`, not main
 
 ---
 
@@ -264,5 +251,5 @@ Run through this at the end of any session before pushing, or at the start of a 
 
 ## Dev Branch
 
-Working branch: `claude/continue-volunteer-app-xhY9J`
+Working branch: `claude/review-claude-md-f62iL`
 Push to this branch. Do not push directly to main.
