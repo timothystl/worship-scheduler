@@ -130,6 +130,10 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-22
+- **v102**: Three more reports (R8, R1, R10).
+  - **R8** — Giving × Attendance overlay. New `GET /admin/api/reports/giving-vs-attendance?from=&to=` groups both by Sunday-of-week. New "Giving × Attendance" tile on Reports tab. Dual-axis chart: green attendance bars (left axis) + teal giving line (right axis). Overview cards show Weeks, Total Attendance, Total Given, Avg per Attender, and Pearson correlation with qualitative label.
+  - **R1** — Age-group breakdown. Computed via SQLite `julianday('now') - julianday(dob)` for buckets Under 18 / 18–29 / 30–44 / 45–64 / 65+ / Unknown. Membership Summary gets a "By Age Group" table (count + share). Giving by Fund gets a richer age-group table (givers, gifts, total, avg/giver, share). Attendance age groups deferred — needs per-person attendance (R6).
+  - **R10** — Avg / Giver stat added to Giving by Fund overview (5th tile). "Average Gift" relabeled to "Avg / Gift" for symmetry. Age-group rows also include per-group Avg/Giver.
 - **v101**: Three fixes on v99 reports. (1) `openProfile` calls in R2/R5 drill-downs didn't exist — function is `openPersonDetail`. Three occurrences renamed; clicking a row on Giving Insights / Contact Completeness drill-down now opens the person's profile. (2) Giving Trend Easter/Christmas markers now use day-of-year mapping (Jan 1 → leftmost, Dec 31 → rightmost) instead of month-fraction, so Dec 25 stays inside the chart viewbox. (3) Resize handler duplicated the trend-chart build inline and was missing the marker code — added Easter/Christmas markers to the resize branch so they persist after drag-resize.
 - **v100**: Fix Giving Insights 500 — SQL referenced `ge.amount_cents` but the actual column in `giving_entries` is `amount` (stored as integer cents). Replaced four occurrences in the new `reports/giving-insights` endpoint with `SUM(ge.amount) AS total_cents` / `SUM(ge.amount) AS prior_total_cents`.
 - **v99**: Reporting pack — four improvements to the Reports tab.

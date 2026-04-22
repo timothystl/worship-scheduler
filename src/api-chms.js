@@ -1098,7 +1098,33 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       `SELECT t.name, COUNT(DISTINCT pt.person_id) as n FROM tags t
        LEFT JOIN person_tags pt ON pt.tag_id=t.id GROUP BY t.id ORDER BY t.name`
     ).all()).results || [];
-    return json({ counts, total, tag_counts: tagCounts });
+    // R1: Age-group breakdown (only among active, non-organization)
+    const ageSql = `
+      SELECT
+        CASE
+          WHEN dob = '' OR dob IS NULL THEN 'unknown'
+          WHEN (julianday('now') - julianday(dob)) / 365.25 < 18 THEN 'under_18'
+          WHEN (julianday('now') - julianday(dob)) / 365.25 < 30 THEN 'a18_29'
+          WHEN (julianday('now') - julianday(dob)) / 365.25 < 45 THEN 'a30_44'
+          WHEN (julianday('now') - julianday(dob)) / 365.25 < 65 THEN 'a45_64'
+          ELSE 'a65_plus'
+        END AS age_group,
+        COUNT(*) AS n
+      FROM people
+      WHERE status='active' AND LOWER(member_type) != 'organization'
+      GROUP BY age_group`;
+    const ageRows = (await db.prepare(ageSql).all()).results || [];
+    const ageMap = {};
+    for (const r of ageRows) ageMap[r.age_group] = r.n || 0;
+    const ageBuckets = [
+      { key: 'under_18', label: 'Under 18', n: ageMap.under_18 || 0 },
+      { key: 'a18_29',   label: '18–29',    n: ageMap.a18_29   || 0 },
+      { key: 'a30_44',   label: '30–44',    n: ageMap.a30_44   || 0 },
+      { key: 'a45_64',   label: '45–64',    n: ageMap.a45_64   || 0 },
+      { key: 'a65_plus', label: '65+',      n: ageMap.a65_plus || 0 },
+      { key: 'unknown',  label: 'Unknown (no DOB)', n: ageMap.unknown || 0 },
+    ];
+    return json({ counts, total, tag_counts: tagCounts, age_groups: ageBuckets });
   }
 
   // ── Contact info completeness (R5) ──────────────────────────────────
@@ -1248,6 +1274,45 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     });
   }
 
+  // ── Giving × Attendance overlay (R8) ────────────────────────────────
+  // Weekly buckets: attendance (sum per week) and giving (sum per week).
+  // Week = Sunday of that week (derived from service_date / effective gift date).
+  // Finance-gated (matches reports/giving-*).
+  if (seg === 'reports/giving-vs-attendance' && method === 'GET') {
+    const from = url.searchParams.get('from') || '';
+    const to   = url.searchParams.get('to')   || '';
+    if (!from || !to) return json({ error: 'from and to required' }, 400);
+    // Include special services too (not just service_type='sunday') so Christmas etc. land in the week
+    const attRows = (await db.prepare(
+      `SELECT date(service_date, '-' || strftime('%w', service_date) || ' days') AS week_start,
+              SUM(attendance) AS total_att
+       FROM worship_services
+       WHERE attendance > 0 AND service_date BETWEEN ? AND ?
+       GROUP BY week_start
+       ORDER BY week_start`
+    ).bind(from, to).all()).results || [];
+    const effDate = "COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date)";
+    const giveRows = (await db.prepare(
+      `SELECT date(${effDate}, '-' || strftime('%w', ${effDate}) || ' days') AS week_start,
+              SUM(ge.amount) AS total_cents,
+              COUNT(DISTINCT ge.person_id) AS givers
+       FROM giving_entries ge
+       JOIN giving_batches gb ON gb.id = ge.batch_id
+       WHERE ${effDate} BETWEEN ? AND ?
+       GROUP BY week_start
+       ORDER BY week_start`
+    ).bind(from, to).all()).results || [];
+    const byWeek = {};
+    for (const r of attRows) byWeek[r.week_start] = { week_start: r.week_start, attendance: r.total_att || 0, giving_cents: 0, givers: 0 };
+    for (const r of giveRows) {
+      if (!byWeek[r.week_start]) byWeek[r.week_start] = { week_start: r.week_start, attendance: 0, giving_cents: 0, givers: 0 };
+      byWeek[r.week_start].giving_cents = r.total_cents || 0;
+      byWeek[r.week_start].givers = r.givers || 0;
+    }
+    const weeks = Object.values(byWeek).sort((a,b) => a.week_start.localeCompare(b.week_start));
+    return json({ from, to, weeks });
+  }
+
 
   if (seg === 'reports/giving-summary' && method === 'GET') {
     const from = url.searchParams.get('from') || new Date().getFullYear() + '-01-01';
@@ -1284,11 +1349,39 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     ]);
     const rows = rowsResult.results || [];
     const grand = rows.reduce((s,r) => s + r.total_cents, 0);
+    // R1: Giving by age group (joining on person's dob)
+    const ageRows = (await db.prepare(
+      `SELECT
+         CASE
+           WHEN p.dob = '' OR p.dob IS NULL THEN 'unknown'
+           WHEN (julianday('now') - julianday(p.dob)) / 365.25 < 18 THEN 'under_18'
+           WHEN (julianday('now') - julianday(p.dob)) / 365.25 < 30 THEN 'a18_29'
+           WHEN (julianday('now') - julianday(p.dob)) / 365.25 < 45 THEN 'a30_44'
+           WHEN (julianday('now') - julianday(p.dob)) / 365.25 < 65 THEN 'a45_64'
+           ELSE 'a65_plus'
+         END AS age_group,
+         COUNT(DISTINCT p.id) AS givers,
+         COUNT(ge.id)         AS contributions,
+         COALESCE(SUM(ge.amount), 0) AS total_cents
+       FROM giving_entries ge
+       LEFT JOIN giving_batches gb ON ge.batch_id = gb.id
+       LEFT JOIN people p ON p.id = ge.person_id
+       WHERE COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) BETWEEN ? AND ?
+       GROUP BY age_group`
+    ).bind(from, to).all()).results || [];
+    const ageMap = {};
+    for (const r of ageRows) ageMap[r.age_group] = r;
+    const ageBuckets = ['under_18','a18_29','a30_44','a45_64','a65_plus','unknown'].map(function(k) {
+      const label = { under_18:'Under 18', a18_29:'18–29', a30_44:'30–44', a45_64:'45–64', a65_plus:'65+', unknown:'Unknown (no DOB)' }[k];
+      const r = ageMap[k] || {};
+      return { key: k, label, givers: r.givers || 0, contributions: r.contributions || 0, total_cents: r.total_cents || 0 };
+    });
     return json({
       from, to, rows, grand_total_cents: grand,
       total_givers: giverResult?.n ?? 0,
       total_transactions: txnResult?.n ?? 0,
       by_method: methodResult.results || [],
+      by_age_group: ageBuckets,
     });
   }
 
