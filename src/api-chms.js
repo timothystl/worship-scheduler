@@ -190,7 +190,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     // Most recent attendance
     // DB3: Last 2 services (show both Sunday services)
     const recentAttendance = (await db.prepare(
-      `SELECT service_date, service_name, attendance
+      `SELECT service_date, service_time, service_name, attendance
        FROM worship_services WHERE attendance > 0
        ORDER BY service_date DESC, service_time DESC LIMIT 2`
     ).all()).results || [];
