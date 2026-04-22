@@ -273,6 +273,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
           'Review new visitors in the people list',
           'Send newsletter to new contacts',
           'Follow up with first-time givers',
+          'Follow up with prayer requests',
           'Check in with members not seen recently',
         ];
         for (let i = 0; i < defaults.length; i++) {
@@ -282,6 +283,23 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
           'SELECT * FROM engagement_tasks WHERE week_key=? ORDER BY sort_order, id'
         ).bind(weeklyTasksWeek).all()).results || [];
       }
+    }
+    // Open prayer requests (FU1) — staff+ sees these
+    let prayerOpen = [], prayerOpenTotal = 0;
+    if (canEdit) {
+      prayerOpen = (await db.prepare(
+        `SELECT pr.id, pr.person_id, pr.requester_name, pr.requester_email, pr.request_text,
+                pr.source, pr.status, pr.submitted_at,
+                p.first_name, p.last_name
+         FROM prayer_requests pr
+         LEFT JOIN people p ON p.id = pr.person_id
+         WHERE pr.status IN ('open','praying')
+         ORDER BY pr.submitted_at DESC, pr.id DESC
+         LIMIT 5`
+      ).all()).results || [];
+      prayerOpenTotal = (await db.prepare(
+        "SELECT COUNT(*) AS n FROM prayer_requests WHERE status IN ('open','praying')"
+      ).first())?.n || 0;
     }
     return json({
       totalPeople, totalHouseholds, memberCount, memberHHCount,
@@ -302,7 +320,9 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       followupQueue:   canEdit ? followupQueueBatch : [],
       followupQueueTotal: canEdit ? followupQueueTotal : 0,
       // weekly task checklist
-      weeklyTasks, weeklyTasksWeek
+      weeklyTasks, weeklyTasksWeek,
+      // prayer requests (FU1)
+      prayerOpen, prayerOpenTotal
     });
   }
 
@@ -1372,6 +1392,86 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     if (!canEdit) return json({ error: 'Access denied' }, 403);
     const pid = parseInt(dismissFGMatch[1]);
     await db.prepare('UPDATE people SET first_gift_noted=1 WHERE id=?').bind(pid).run();
+    return json({ ok: true });
+  }
+
+  // ── Prayer Requests (FU1) ───────────────────────────────────────────
+  // GET  /admin/api/prayer-requests?status=open|praying|answered|closed|all
+  // POST /admin/api/prayer-requests                 { person_id?, requester_name?, requester_email?, request_text, submitted_at? }
+  // PUT  /admin/api/prayer-requests/:id             { status?, resolution_note?, request_text? }
+  // DELETE /admin/api/prayer-requests/:id
+  if (seg === 'prayer-requests' && method === 'GET') {
+    if (!canEdit) return json({ error: 'Access denied' }, 403);
+    const status = url.searchParams.get('status') || 'open';
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 500);
+    let where = '';
+    const binds = [];
+    if (status === 'open')      { where = "pr.status = 'open'"; }
+    else if (status === 'praying') { where = "pr.status = 'praying'"; }
+    else if (status === 'answered') { where = "pr.status = 'answered'"; }
+    else if (status === 'closed')   { where = "pr.status = 'closed'"; }
+    else if (status === 'active')   { where = "pr.status IN ('open','praying')"; }
+    else { where = '1=1'; } // 'all'
+    const rows = (await db.prepare(
+      `SELECT pr.id, pr.person_id, pr.requester_name, pr.requester_email, pr.request_text,
+              pr.source, pr.status, pr.resolution_note, pr.submitted_at, pr.resolved_at, pr.created_at,
+              p.first_name, p.last_name
+       FROM prayer_requests pr
+       LEFT JOIN people p ON p.id = pr.person_id
+       WHERE ${where}
+       ORDER BY pr.submitted_at DESC, pr.id DESC
+       LIMIT ?`
+    ).bind(...binds, limit).all()).results || [];
+    return json({ requests: rows });
+  }
+  if (seg === 'prayer-requests' && method === 'POST') {
+    if (!canEdit) return json({ error: 'Access denied' }, 403);
+    let b = {}; try { b = await req.json(); } catch {}
+    const text = String(b.request_text || '').trim().slice(0, 5000);
+    if (!text) return json({ error: 'request_text required' }, 400);
+    const pid = b.person_id ? parseInt(b.person_id, 10) : null;
+    const reqName  = String(b.requester_name  || '').trim().slice(0, 200);
+    const reqEmail = String(b.requester_email || '').trim().slice(0, 200);
+    const submittedAt = b.submitted_at && /^\d{4}-\d{2}-\d{2}/.test(String(b.submitted_at))
+      ? String(b.submitted_at).slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const r = await db.prepare(
+      `INSERT INTO prayer_requests(person_id, requester_name, requester_email, request_text, source, submitted_at, status)
+       VALUES(?, ?, ?, ?, 'manual', ?, 'open')`
+    ).bind(pid, reqName, reqEmail, text, submittedAt).run();
+    return json({ ok: true, id: r.meta.last_row_id });
+  }
+  const prMatch = seg.match(/^prayer-requests\/(\d+)$/);
+  if (prMatch && method === 'PUT') {
+    if (!canEdit) return json({ error: 'Access denied' }, 403);
+    let b = {}; try { b = await req.json(); } catch {}
+    const prid = parseInt(prMatch[1]);
+    const sets = [], binds = [];
+    if (b.status !== undefined) {
+      const allowed = ['open', 'praying', 'answered', 'closed'];
+      if (!allowed.includes(b.status)) return json({ error: 'Invalid status' }, 400);
+      sets.push('status=?'); binds.push(b.status);
+      if (b.status === 'answered' || b.status === 'closed') {
+        sets.push('resolved_at=?'); binds.push(new Date().toISOString().slice(0, 10));
+      } else {
+        sets.push("resolved_at=''");
+      }
+    }
+    if (b.resolution_note !== undefined) {
+      sets.push('resolution_note=?'); binds.push(String(b.resolution_note || '').slice(0, 2000));
+    }
+    if (b.request_text !== undefined) {
+      sets.push('request_text=?'); binds.push(String(b.request_text || '').slice(0, 5000));
+    }
+    if (!sets.length) return json({ error: 'Nothing to update' }, 400);
+    binds.push(prid);
+    await db.prepare(`UPDATE prayer_requests SET ${sets.join(',')} WHERE id=?`).bind(...binds).run();
+    return json({ ok: true });
+  }
+  if (prMatch && method === 'DELETE') {
+    if (!canEdit) return json({ error: 'Access denied' }, 403);
+    const prid = parseInt(prMatch[1]);
+    await db.prepare('DELETE FROM prayer_requests WHERE id=?').bind(prid).run();
     return json({ ok: true });
   }
 

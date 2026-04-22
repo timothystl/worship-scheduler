@@ -224,7 +224,23 @@ export const DB_INIT = [
     sort_order   INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_engagement_tasks_week ON engagement_tasks(week_key)`
+  `CREATE INDEX IF NOT EXISTS idx_engagement_tasks_week ON engagement_tasks(week_key)`,
+  // Prayer requests (FU1) — from website form, paper card entry, or staff input
+  `CREATE TABLE IF NOT EXISTS prayer_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id       INTEGER,
+    requester_name  TEXT    NOT NULL DEFAULT '',
+    requester_email TEXT    NOT NULL DEFAULT '',
+    request_text    TEXT    NOT NULL DEFAULT '',
+    source          TEXT    NOT NULL DEFAULT 'manual',
+    status          TEXT    NOT NULL DEFAULT 'open',
+    resolution_note TEXT    NOT NULL DEFAULT '',
+    submitted_at    TEXT    NOT NULL DEFAULT (date('now')),
+    resolved_at     TEXT    NOT NULL DEFAULT '',
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_prayer_requests_status ON prayer_requests(status, submitted_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_prayer_requests_person ON prayer_requests(person_id)`
 ];
 
 

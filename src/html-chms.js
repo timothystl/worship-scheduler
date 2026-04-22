@@ -1606,6 +1606,36 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="prayer-modal">
+  <div class="modal" style="max-width:500px;">
+    <h2>Add Prayer Request</h2>
+    <p style="font-size:.83rem;color:var(--warm-gray);margin-bottom:10px;">Record a paper prayer card or a request received in person. Website submissions arrive here automatically.</p>
+    <input type="hidden" id="prayer-req-personid">
+    <div class="field"><label>Linked person (optional)</label>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn-secondary" style="padding:5px 12px;font-size:.85rem;" onclick="prayerPickPerson()">Search…</button>
+        <span id="prayer-req-personlabel" style="flex:1;font-size:.85rem;color:var(--charcoal);"></span>
+        <button class="btn-secondary" style="padding:3px 8px;font-size:.75rem;" onclick="prayerClearPerson()" title="Clear linked person">&#10005;</button>
+      </div>
+    </div>
+    <div class="field"><label>Requester name (if not linked)</label>
+      <input type="text" id="prayer-req-name" placeholder="e.g. Jane Doe" style="width:100%;">
+    </div>
+    <div class="field"><label>Requester email (optional)</label>
+      <input type="email" id="prayer-req-email" placeholder="optional" style="width:100%;">
+    </div>
+    <div class="field"><label>Date received</label>
+      <input type="date" id="prayer-req-date" style="width:100%;">
+    </div>
+    <div class="field"><label>Prayer request</label>
+      <textarea id="prayer-req-text" placeholder="What are we praying for?" style="width:100%;height:110px;resize:vertical;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="savePrayerRequest()">Save</button>
+      <button class="btn-secondary" onclick="closeModal('prayer-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="member-types-modal">
   <div class="modal">
     <h2>Member Types</h2>
@@ -1651,7 +1681,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-22-v105';
+var DEPLOY_VERSION = '2026-04-22-v106';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -2461,8 +2491,8 @@ function printDirectory() {
 // ── DASHBOARD ─────────────────────────────────────────────────────────
 var _dashData = null;
 var _dashMonth = new Date().getMonth() + 1; // 1-12, default current month
-var DASH_PREF_DEFAULTS = {weeklyTasks:true, followUp:true, newContacts:true, reviewQueue:false, firstGivers:true, notSeen:true, birthdays:true, anniversaries:true, membership:true};
-var DASH_PREF_LABELS = {weeklyTasks:'This Week\'s Tasks', followUp:'Follow-up Queue', newContacts:'New Contacts', reviewQueue:'Visitor Review Batch', firstGivers:'First-Time Givers', notSeen:'Not Seen Recently', birthdays:'Birthdays', anniversaries:'Anniversaries', membership:'Membership by Type'};
+var DASH_PREF_DEFAULTS = {weeklyTasks:true, prayers:true, followUp:true, newContacts:true, reviewQueue:false, firstGivers:true, notSeen:true, birthdays:true, anniversaries:true, membership:true};
+var DASH_PREF_LABELS = {weeklyTasks:'This Week\'s Tasks', prayers:'Prayer Requests', followUp:'Follow-up Queue', newContacts:'New Contacts', reviewQueue:'Visitor Review Batch', firstGivers:'First-Time Givers', notSeen:'Not Seen Recently', birthdays:'Birthdays', anniversaries:'Anniversaries', membership:'Membership by Type'};
 function dashGetPrefs() {
   if (!_dashPrefs) {
     try { _dashPrefs = Object.assign({}, DASH_PREF_DEFAULTS, JSON.parse(localStorage.getItem('dashCardPrefs')||'{}')); }
@@ -2582,6 +2612,85 @@ function dismissFirstGift(personId) {
     if (d.error) { alert(d.error); return; }
     var row = document.getElementById('fg-row-' + personId);
     if (row) row.remove();
+  });
+}
+
+// ── Prayer Requests (FU1) ──────────────────────────────────────────────
+function prayerSetStatus(id, status) {
+  var note = '';
+  if (status === 'answered' || status === 'closed') {
+    note = prompt('Resolution note (optional):', '') || '';
+    if (note === null) return; // user hit Cancel on prompt
+  }
+  var body = { status: status };
+  if (note) body.resolution_note = note;
+  api('/admin/api/prayer-requests/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(d) {
+    if (d.error) { alert(d.error); return; }
+    loadDashboard();
+  });
+}
+function openAddPrayerModal() {
+  var m = document.getElementById('prayer-modal');
+  if (!m) return;
+  document.getElementById('prayer-req-name').value  = '';
+  document.getElementById('prayer-req-email').value = '';
+  document.getElementById('prayer-req-text').value  = '';
+  document.getElementById('prayer-req-date').value  = new Date().toISOString().slice(0, 10);
+  document.getElementById('prayer-req-personid').value = '';
+  document.getElementById('prayer-req-personlabel').textContent = '';
+  openModal('prayer-modal');
+  setTimeout(function(){ document.getElementById('prayer-req-name').focus(); }, 60);
+}
+function prayerPickPerson() {
+  var q = prompt('Search for person by name or email:');
+  if (!q) return;
+  api('/admin/api/people?q=' + encodeURIComponent(q) + '&limit=5').then(function(d) {
+    var rows = (d && d.people) || d || [];
+    if (!rows.length) { alert('No matches.'); return; }
+    var options = rows.slice(0, 5).map(function(p, i) {
+      return (i+1) + '. ' + ((p.first_name||'') + ' ' + (p.last_name||'')).trim() + (p.email ? ' <' + p.email + '>' : '');
+    }).join('\n');
+    var pick = prompt('Pick a match (1-' + rows.length + '), or 0 to cancel:\n\n' + options);
+    var idx = parseInt(pick, 10);
+    if (!idx || idx < 1 || idx > rows.length) return;
+    var chosen = rows[idx - 1];
+    document.getElementById('prayer-req-personid').value = chosen.id;
+    document.getElementById('prayer-req-personlabel').textContent = ((chosen.first_name||'') + ' ' + (chosen.last_name||'')).trim() + (chosen.email ? ' <' + chosen.email + '>' : '');
+    if (!document.getElementById('prayer-req-name').value) {
+      document.getElementById('prayer-req-name').value = ((chosen.first_name||'') + ' ' + (chosen.last_name||'')).trim();
+    }
+    if (!document.getElementById('prayer-req-email').value && chosen.email) {
+      document.getElementById('prayer-req-email').value = chosen.email;
+    }
+  });
+}
+function prayerClearPerson() {
+  document.getElementById('prayer-req-personid').value = '';
+  document.getElementById('prayer-req-personlabel').textContent = '';
+}
+function savePrayerRequest() {
+  var txt = document.getElementById('prayer-req-text').value.trim();
+  if (!txt) { alert('Please enter the prayer request.'); return; }
+  var pidStr = document.getElementById('prayer-req-personid').value;
+  var body = {
+    request_text: txt,
+    requester_name:  document.getElementById('prayer-req-name').value.trim(),
+    requester_email: document.getElementById('prayer-req-email').value.trim(),
+    submitted_at:    document.getElementById('prayer-req-date').value
+  };
+  if (pidStr) body.person_id = parseInt(pidStr, 10);
+  api('/admin/api/prayer-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(d) {
+    if (d.error) { alert(d.error); return; }
+    closeModal('prayer-modal');
+    loadDashboard();
   });
 }
 
@@ -2727,6 +2836,48 @@ function renderDashboard(d) {
     html += '</div></div>';
   }
 
+  // ── Prayer Requests (FU1) — editors+ only ─────────────────────
+  if (canEditRole && prefs.prayers) {
+    var pr       = d.prayerOpen || [];
+    var prTotal  = d.prayerOpenTotal || 0;
+    html += '<div class="dash-section-hdr">'
+      + '<span>Prayer Requests</span>'
+      + '<span style="font-size:12px;color:var(--warm-gray);font-weight:400;">'
+      + (prTotal ? prTotal + ' open' : 'none open') + '</span>'
+      + '<button class="btn-secondary" style="font-size:.72rem;padding:3px 10px;margin-left:auto;" onclick="openAddPrayerModal()">+ Add</button>'
+      + '</div>';
+    html += '<div class="dash-card" style="padding:0;"><div class="dash-card-body">';
+    if (pr.length) {
+      html += pr.map(function(r) {
+        var who = r.person_id
+          ? ((r.first_name || '') + ' ' + (r.last_name || '')).trim()
+          : (r.requester_name || '(anonymous)');
+        var preview = (r.request_text || '').length > 140 ? (r.request_text.slice(0, 140) + '…') : r.request_text;
+        var statusLabel = r.status === 'praying' ? 'Praying' : 'Open';
+        var statusBg = r.status === 'praying' ? 'var(--pale-sage)' : 'var(--linen)';
+        var srcLabel = r.source && r.source !== 'manual' ? ' · ' + r.source : '';
+        return '<div class="dash-row-item" id="pr-row-' + r.id + '" style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--linen);">'
+          + '<div style="flex:1;min-width:0;">'
+          +   '<div style="font-weight:600;color:var(--steel-anchor);' + (r.person_id ? 'cursor:pointer;' : '') + '"'
+          +     (r.person_id ? ' onclick="openPersonDetail(' + r.person_id + ')"' : '') + '>' + esc(who) + '</div>'
+          +   '<div style="font-size:.78rem;color:var(--warm-gray);">' + esc(r.submitted_at || '') + ' · '
+          +     '<span style="background:' + statusBg + ';padding:1px 6px;border-radius:4px;">' + statusLabel + '</span>' + esc(srcLabel) + '</div>'
+          +   '<div style="font-size:.85rem;color:var(--charcoal);margin-top:5px;white-space:pre-wrap;">' + esc(preview) + '</div>'
+          + '</div>'
+          + '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">'
+          +   (r.status === 'open'
+              ? '<button class="btn-sm" style="padding:3px 8px;font-size:.72rem;background:var(--pale-sage);border:1px solid var(--soft-sage);border-radius:6px;cursor:pointer;color:var(--on-pale-sage);" onclick="prayerSetStatus(' + r.id + ',\'praying\')" title="Mark as actively praying">Praying</button>'
+              : '')
+          +   '<button class="btn-sm" style="padding:3px 8px;font-size:.72rem;background:var(--linen);border:1px solid var(--border);border-radius:6px;cursor:pointer;" onclick="prayerSetStatus(' + r.id + ',\'answered\')" title="Mark answered">Answered</button>'
+          +   '<button class="btn-sm" style="padding:3px 8px;font-size:.72rem;background:var(--linen);border:1px solid var(--border);border-radius:6px;cursor:pointer;" onclick="prayerSetStatus(' + r.id + ',\'closed\')" title="Close without marking answered">Close</button>'
+          + '</div></div>';
+      }).join('');
+    } else {
+      html += '<div style="padding:14px 16px;color:var(--warm-gray);font-size:.85rem;">No open prayer requests. Click + Add to enter a paper card request.</div>';
+    }
+    html += '</div></div>';
+  }
+
   // ── Follow-up queue — staff+ only ─────────────────────────────
   if (isStaffRole && prefs.followUp) {
   var fuItems = d.followUpItems || [];
@@ -2772,7 +2923,9 @@ function renderDashboard(d) {
     html += '<div class="dash-section-hdr">'
       + '<span>New Contacts</span>'
       + '<span style="font-size:12px;color:var(--warm-gray);font-weight:400;">'
-      + (ncTotal ? ncTotal + ' awaiting follow-up' : 'all caught up') + '</span></div>';
+      + (ncTotal ? ncTotal + ' awaiting follow-up' : 'all caught up') + '</span>'
+      + '<button class="btn-secondary" style="font-size:.72rem;padding:3px 10px;margin-left:auto;" onclick="openPersonEdit(null)" title="Enter a paper contact card">+ Add</button>'
+      + '</div>';
     html += '<div class="dash-card" style="padding:0;"><div class="dash-card-body">';
     if (nc.length) {
       html += nc.map(function(p) {
