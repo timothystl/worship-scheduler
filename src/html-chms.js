@@ -1651,7 +1651,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-22-v105';
+var DEPLOY_VERSION = '2026-04-22-v106';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -3035,13 +3035,25 @@ function saveFollowUpItem(pid, type, notes, onErr) {
     .then(function() { closeModal('followup-modal'); loadDashboard(); })
     .catch(function() { if (onErr) onErr(); });
 }
+function fmtServiceTime(t) {
+  if (!t) return '';
+  var parts = String(t).split(':');
+  var h = parseInt(parts[0], 10);
+  var m = parseInt(parts[1] || '0', 10);
+  if (isNaN(h)) return '';
+  var suffix = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12; if (h12 === 0) h12 = 12;
+  return m ? h12 + ':' + String(m).padStart(2,'0') + ' ' + suffix : h12 + ' ' + suffix;
+}
 function dashStatServices(svcs) {
   if (!svcs.length) return dashStat('\u2014', 'Last Service', 'No attendance yet');
   var total = svcs.reduce(function(s,x){return s+(x.attendance||0);},0);
   var date = svcs[0].service_date || '';
-  var lines = svcs.map(function(s){
+  var ordered = svcs.slice().sort(function(a,b){ return String(a.service_time||'').localeCompare(String(b.service_time||'')); });
+  var lines = ordered.map(function(s){
+    var label = fmtServiceTime(s.service_time) || s.service_name || 'Service';
     return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--warm-gray);margin-top:3px;">'
-      +'<span>'+esc(s.service_name||'Service')+'</span>'
+      +'<span>'+esc(label)+'</span>'
       +'<span style="font-weight:600;">'+s.attendance+'</span>'
       +'</div>';
   }).join('');
