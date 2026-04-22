@@ -166,6 +166,25 @@ Full detail in `NOTES.md`. Summary:
 ### Breeze Integration
 - [ ] **BR1** — Reverse sync (app → Breeze): Breeze API supports write operations (add/update people, add contributions). Feasible for narrow workflows (e.g. new person entered here → push to Breeze, or walk-in gift batch → push to Breeze). Full bidirectional sync is complex due to conflict resolution. Needs scoping conversation: which specific data entry workflows would benefit? (noted 2026-04-19)
 
+### Reports / Insights (noted 2026-04-22)
+- [ ] **R1** — Age group breakdown across Membership Summary, Giving, Attendance. Default buckets: Under 18, 18–29, 30–44, 45–64, 65+. Requires `dob` on person.
+- [ ] **R2** — Giving insights report: top givers (top N by year), lapsed givers (gave in prior year, nothing this year), giving frequency distribution, average gift amount trends.
+- [ ] **R3** — People insights report: new members over time (by join month), age distribution histogram, member-type trend.
+- [ ] **R4** — Member tenure report. Needs `member_since` / `join_date` field — check if we have it on the person schema; may require Breeze field mapping.
+- [ ] **R5** — Contact info completeness report: counts of people missing email / phone / address / dob; drill-down list per category.
+- [ ] **R6** — Person-by-person attendance tracking. Currently we track service totals only. Needs schema (attendance record per person per service) + check-in UI. Substantial new feature — worth a dedicated scoping conversation.
+- [ ] **R7** — Easter/Christmas markers on Giving Trend chart: vertical lines at Easter Sunday and Christmas Eve for each plotted year.
+- [ ] **R8** — Giving × Attendance overlay chart: dual-axis plot (weekly attendance + weekly giving) to surface correlation.
+- [ ] **R9** — Pie chart for Giving by Method. Complement to the existing table.
+- [ ] **R10** — Average giving stats overlay (average per giver, average per gift) on Giving by Fund / Trend reports.
+
+### Engagement & Data Quality (noted 2026-04-22)
+- [ ] **FU1** — Prayer request tracking. New schema (request text, person, date, status, resolution note), capture UI, list view with filters, admin follow-up workflow.
+- [ ] **FU2** — New-contact follow-up tracking. Captures first-contact date per person and a follow-up queue/workflow to move visitors → regulars → members.
+- [ ] **DC1** — Annual friend/visitor review on dashboard. Each week surface a small batch of stale visitor/friend records (e.g. inactive > N months) for triage: archive / engage / move to next step. Spreads full-DB review over the year.
+- [ ] **WC1** — Electronic contact card intake. Public web form (or existing website form) POSTs to a ChMS endpoint; creates/merges a person record and drops into the FU2 follow-up queue.
+- [ ] **DB9** — Dashboard weekly workflow card. Consolidated card listing this week's engagement + data-cleanup tasks (DC1 batch, FU2 new contacts, prayer follow-ups, etc.).
+
 ---
 
 ## Code Review Standards
