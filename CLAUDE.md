@@ -168,14 +168,14 @@ Full detail in `NOTES.md`. Summary:
 
 ### Reports / Insights (noted 2026-04-22)
 - [ ] **R1** — Age group breakdown across Membership Summary, Giving, Attendance. Default buckets: Under 18, 18–29, 30–44, 45–64, 65+. Requires `dob` on person.
-- [ ] **R2** — Giving insights report: top givers (top N by year), lapsed givers (gave in prior year, nothing this year), giving frequency distribution, average gift amount trends.
+- [x] **R2** — Giving insights report: top givers (top N by year), lapsed givers (gave in prior year, nothing this year), giving frequency distribution, average gift amount trends. Done 2026-04-22 (v99). New `GET /admin/api/reports/giving-insights?year=YYYY` endpoint; new "Giving Insights" tile in Reports tab. Renders four blocks: top 25 givers (clickable to profile), lapsed givers (prior-year donors absent this year, sortable by prior total), frequency histogram (1 / 2-5 / 6-12 / 13-26 / 27+ gifts per giver this year), and 5-year trend table (givers/gifts/total/avg gift/avg per giver).
 - [ ] **R3** — People insights report: new members over time (by join month), age distribution histogram, member-type trend.
 - [ ] **R4** — Member tenure report. Needs `member_since` / `join_date` field — check if we have it on the person schema; may require Breeze field mapping.
-- [ ] **R5** — Contact info completeness report: counts of people missing email / phone / address / dob; drill-down list per category.
+- [x] **R5** — Contact info completeness report: counts of people missing email / phone / address / dob / photo; drill-down list per category. Done 2026-04-22 (v99). New `GET /admin/api/reports/contact-completeness?scope=active|member&field=...` endpoint. New "Contact Completeness" tile renders progress bars (green = complete) for each field with scope toggle (all active vs. members only); clicking a row drills to the list of missing records (clickable to profile).
 - [ ] **R6** — Person-by-person attendance tracking. Currently we track service totals only. Needs schema (attendance record per person per service) + check-in UI. Substantial new feature — worth a dedicated scoping conversation.
-- [ ] **R7** — Easter/Christmas markers on Giving Trend chart: vertical lines at Easter Sunday and Christmas Eve for each plotted year.
+- [x] **R7** — Easter/Christmas markers on Giving Trend chart. Done 2026-04-22 (v99). Easter computed per-year via Meeus/Jones/Butcher Gregorian algorithm, rendered as dashed vertical line in that year's color with "E" label. Christmas is shared Dec 25 dashed line in warm-gray with "C" label. Legend updated to explain the markers.
 - [ ] **R8** — Giving × Attendance overlay chart: dual-axis plot (weekly attendance + weekly giving) to surface correlation.
-- [ ] **R9** — Pie chart for Giving by Method. Complement to the existing table.
+- [x] **R9** — Pie chart for Giving by Method. Done 2026-04-22 (v99). New reusable `renderPieChart(items, diameter)` helper (SVG slices with hover tooltips + legend). Added "Share by Method" block above the existing table on the Giving by Method report.
 - [ ] **R10** — Average giving stats overlay (average per giver, average per gift) on Giving by Fund / Trend reports.
 
 ### Engagement & Data Quality (noted 2026-04-22)
