@@ -743,6 +743,16 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
     </div>
     <div class="report-tile">
+      <div class="tile-icon">&#128202;</div>
+      <div class="tile-title">Giving &times; Attendance</div>
+      <div class="tile-desc">
+        <div style="font-size:.82rem;color:var(--warm-gray);margin-bottom:8px;">Weekly giving vs. weekly attendance &mdash; see correlation between engagement and giving.</div>
+        <div class="field" style="margin:8px 0 4px;"><label>From</label><input type="date" id="rpt-gva-from" name="rpt-gva-from" style="font-size:.82rem;padding:4px 8px;"></div>
+        <div class="field" style="margin:4px 0;"><label>To</label><input type="date" id="rpt-gva-to" name="rpt-gva-to" style="font-size:.82rem;padding:4px 8px;"></div>
+        <button class="btn-primary" style="font-size:.8rem;padding:5px 12px;margin-top:6px;" onclick="runGivingVsAttendance()">Run Report</button>
+      </div>
+    </div>
+    <div class="report-tile">
       <div class="tile-icon">&#128140;</div>
       <div class="tile-title">Batch Send Statements</div>
       <div class="tile-desc">
@@ -1641,7 +1651,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-22-v101';
+var DEPLOY_VERSION = '2026-04-22-v102';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -1833,6 +1843,8 @@ window.addEventListener('load', function() {
   var ry = document.getElementById('rpt-insights-year'); if (ry) ry.value = y;
   var mf = document.getElementById('rpt-method-from');   if (mf && !mf.value) mf.value = y + '-01-01';
   var mt = document.getElementById('rpt-method-to');     if (mt && !mt.value) mt.value = y + '-12-31';
+  var gvf = document.getElementById('rpt-gva-from');     if (gvf && !gvf.value) gvf.value = y + '-01-01';
+  var gvt = document.getElementById('rpt-gva-to');       if (gvt && !gvt.value) gvt.value = y + '-12-31';
   // Attendance date range defaults
   document.getElementById('att-from').value = (y - 5) + '-01-01';
   document.getElementById('att-to').value = y + '-12-31';
@@ -5639,6 +5651,19 @@ function runMembership() {
     var tagRows = (d.tag_counts||[]).map(function(r) {
       return '<tr><td>' + esc(r.name) + '</td><td style="text-align:right;">' + r.n + '</td></tr>';
     }).join('');
+    // R1: Age-group breakdown
+    var ageGroups = d.age_groups || [];
+    var ageTotal = ageGroups.reduce(function(s, b){ return s + (b.n || 0); }, 0);
+    var ageRows = ageGroups.map(function(b) {
+      var pct = ageTotal > 0 ? Math.round(b.n * 1000 / ageTotal) / 10 : 0;
+      return '<tr><td>' + esc(b.label) + '</td><td style="text-align:right;">' + b.n + '</td>'
+        + '<td style="text-align:right;color:var(--warm-gray);">' + pct.toFixed(1) + '%</td></tr>';
+    }).join('');
+    var ageBlock = ageGroups.length ? '<h4 style="margin:20px 0 8px;font-family:var(--font-head);color:var(--steel-anchor);font-size:.95rem;">By Age Group</h4>'
+      + '<table class="rpt-table"><thead><tr><th>Age Group</th><th style="text-align:right;">Count</th><th style="text-align:right;">Share</th></tr></thead><tbody>'
+      + ageRows
+      + '<tr class="rpt-total"><td>Total</td><td style="text-align:right;">' + ageTotal + '</td><td></td></tr>'
+      + '</tbody></table>' : '';
     showRptOutput(
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
       + '<h3 style="font-family:var(--font-head);color:var(--steel-anchor);">Membership Summary</h3>'
@@ -5647,6 +5672,7 @@ function runMembership() {
       + rows
       + '<tr class="rpt-total"><td>Total</td><td style="text-align:right;">' + (d.total||0) + '</td></tr>'
       + '</tbody></table>'
+      + ageBlock
       + (tagRows ? '<h4 style="margin:20px 0 8px;font-family:var(--font-head);color:var(--steel-anchor);font-size:.95rem;">By Tag</h4>'
         + '<table class="rpt-table"><thead><tr><th>Tag</th><th style="text-align:right;">People</th></tr></thead><tbody>' + tagRows + '</tbody></table>' : '')
     );
@@ -5763,15 +5789,34 @@ function runGivingSummary() {
         + '<td style="text-align:right;">' + fmtMoney(m.total_cents||0) + '</td>'
         + '<td style="text-align:right;color:var(--warm-gray);">' + pct.toFixed(1) + '%</td></tr>';
     }).join('');
+    var avgPerGiver = givers > 0 ? Math.round(grand / givers) : 0;
     var overview = '<div class="rpt-overview">'
       + '<div class="rpt-stat"><div class="rpt-stat-num">' + givers.toLocaleString() + '</div><div class="rpt-stat-lbl">Total Givers</div></div>'
       + '<div class="rpt-stat"><div class="rpt-stat-num">' + txns.toLocaleString() + '</div><div class="rpt-stat-lbl">Total Transactions</div></div>'
       + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(grand) + '</div><div class="rpt-stat-lbl">Total Given</div></div>'
-      + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(avgGift) + '</div><div class="rpt-stat-lbl">Average Gift</div></div>'
+      + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(avgGift) + '</div><div class="rpt-stat-lbl">Avg / Gift</div></div>'
+      + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(avgPerGiver) + '</div><div class="rpt-stat-lbl">Avg / Giver</div></div>'
       + '</div>';
     var methodTable = methodRows
       ? '<h4 style="font-family:var(--font-head);color:var(--steel-anchor);margin:18px 0 6px 0;">Method Overview</h4>'
         + '<table class="rpt-table" style="max-width:560px;margin-bottom:18px;"><thead><tr><th>Method</th><th style="text-align:right;">Gifts</th><th style="text-align:right;">Total</th><th style="text-align:right;">Share</th></tr></thead><tbody>' + methodRows + '</tbody></table>'
+      : '';
+    // R1: By age group
+    var ageGroups = d.by_age_group || [];
+    var ageTotalGive = ageGroups.reduce(function(s, b){ return s + (b.total_cents || 0); }, 0);
+    var ageRowsHtml = ageGroups.map(function(b) {
+      var pct = ageTotalGive > 0 ? Math.round((b.total_cents||0) * 1000 / ageTotalGive) / 10 : 0;
+      var avgPerG = (b.givers||0) > 0 ? Math.round((b.total_cents||0) / b.givers) : 0;
+      return '<tr><td>' + esc(b.label) + '</td>'
+        + '<td style="text-align:right;">' + (b.givers||0) + '</td>'
+        + '<td style="text-align:right;">' + (b.contributions||0) + '</td>'
+        + '<td style="text-align:right;">' + fmtMoney(b.total_cents||0) + '</td>'
+        + '<td style="text-align:right;">' + fmtMoney(avgPerG) + '</td>'
+        + '<td style="text-align:right;color:var(--warm-gray);">' + pct.toFixed(1) + '%</td></tr>';
+    }).join('');
+    var ageTable = (ageGroups.some(function(b){ return (b.givers||0) > 0; }))
+      ? '<h4 style="font-family:var(--font-head);color:var(--steel-anchor);margin:18px 0 6px 0;">By Age Group</h4>'
+        + '<table class="rpt-table" style="max-width:720px;margin-bottom:18px;"><thead><tr><th>Age Group</th><th style="text-align:right;">Givers</th><th style="text-align:right;">Gifts</th><th style="text-align:right;">Total</th><th style="text-align:right;">Avg / Giver</th><th style="text-align:right;">Share</th></tr></thead><tbody>' + ageRowsHtml + '</tbody></table>'
       : '';
     var reconBtn = '<button id="rpt-reconcile-btn" class="btn-secondary" style="font-size:.8rem;padding:4px 10px;" '
       + 'onclick="reconcileGivingOrphans(\'' + esc(from) + '\',\'' + esc(to) + '\')">Reconcile Orphans</button>';
@@ -5783,6 +5828,7 @@ function runGivingSummary() {
       + '<div style="display:flex;gap:8px;">' + diagBtn + reconBtn + '<button class="btn-secondary" style="font-size:.8rem;padding:4px 10px;" onclick="window.print()">Print</button></div></div>'
       + overview
       + methodTable
+      + ageTable
       + '<h4 style="font-family:var(--font-head);color:var(--steel-anchor);margin:6px 0 6px 0;">By Fund</h4>'
       + '<table class="rpt-table"><thead><tr><th>Fund</th><th style="text-align:right;">Gifts</th><th style="text-align:right;">Total</th></tr></thead><tbody>'
       + rows
@@ -6177,6 +6223,96 @@ function runGivingInsights() {
       + topBlock + lapsedBlock + freqBlock + trendBlock
     );
   });
+}
+
+// ── R8: Giving × Attendance overlay ─────────────────────────────────────
+function runGivingVsAttendance() {
+  var from = document.getElementById('rpt-gva-from').value;
+  var to   = document.getElementById('rpt-gva-to').value;
+  if (!from || !to) { alert('Please select a date range.'); return; }
+  api('/admin/api/reports/giving-vs-attendance?from=' + from + '&to=' + to).then(function(d) {
+    if (d.error) { alert(d.error); return; }
+    showRptOutput(renderGivingVsAttendance(d));
+  });
+}
+
+function renderGivingVsAttendance(d) {
+  var weeks = d.weeks || [];
+  if (!weeks.length) return '<div style="padding:20px;color:var(--warm-gray);">No data in the selected range.</div>';
+  var W = 820, H = 280, pL = 58, pR = 58, pT = 20, pB = 50, cW = W - pL - pR, cH = H - pT - pB;
+  var maxAtt  = Math.max.apply(null, weeks.map(function(w){ return w.attendance || 0; }).concat([1])) * 1.1;
+  var maxGive = Math.max.apply(null, weeks.map(function(w){ return w.giving_cents || 0; }).concat([1])) * 1.1;
+  var bw = cW / weeks.length;
+  // Gridlines + Y labels (left = attendance, right = giving)
+  var grid = '', ylLbls = '', yrLbls = '';
+  for (var i = 0; i <= 4; i++) {
+    var yy = pT + cH - (cH * i / 4);
+    grid += '<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylLbls += '<text x="'+(pL-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#5A9E6F" font-size="9">'+Math.round(maxAtt * i / 4).toLocaleString()+'</text>';
+    yrLbls += '<text x="'+(W-pR+6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="start" fill="#2E7EA6" font-size="9">$'+Math.round(maxGive * i / 4 / 100).toLocaleString()+'</text>';
+  }
+  // Attendance bars (green) + giving line (teal)
+  var bars = '', linePts = [], xlbls = '', labelEvery = Math.max(1, Math.ceil(weeks.length / 16));
+  weeks.forEach(function(w, i) {
+    var x = pL + i * bw;
+    var bh = (w.attendance || 0) / maxAtt * cH;
+    var by = pT + cH - bh;
+    bars += '<rect x="'+x.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+Math.max(1, bw-2).toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="#5A9E6F" opacity="0.55">'
+      + '<title>'+esc(w.week_start)+': attendance '+(w.attendance||0).toLocaleString()+'</title></rect>';
+    var lx = x + bw/2;
+    var ly = pT + cH - ((w.giving_cents || 0) / maxGive * cH);
+    linePts.push({ x: lx, y: ly, v: w.giving_cents || 0, w: w.week_start });
+    if (i % labelEvery === 0) {
+      var d2 = new Date(w.week_start + 'T00:00:00');
+      var label = (d2.getMonth()+1) + '/' + d2.getDate();
+      xlbls += '<text x="'+lx.toFixed(1)+'" y="'+(H-pB+14)+'" text-anchor="middle" fill="#9A8A78" font-size="9" transform="rotate(-35 '+lx.toFixed(1)+','+(H-pB+14)+')">'+label+'</text>';
+    }
+  });
+  var linePath = linePts.map(function(p,j){ return (j?'L ':'M ')+p.x.toFixed(1)+','+p.y.toFixed(1); }).join(' ');
+  var line = '<path d="'+linePath+'" fill="none" stroke="#2E7EA6" stroke-width="2.25" stroke-linejoin="round"/>';
+  linePts.forEach(function(p) {
+    line += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="#2E7EA6"><title>'+esc(p.w)+': giving $'+Math.round(p.v/100).toLocaleString()+'</title></circle>';
+  });
+  // Axis titles
+  var axisTitles = '<text x="'+(pL-40)+'" y="'+(pT+cH/2)+'" text-anchor="middle" fill="#5A9E6F" font-size="10" font-weight="700" transform="rotate(-90 '+(pL-40)+','+(pT+cH/2)+')">Attendance</text>'
+    + '<text x="'+(W-pR+40)+'" y="'+(pT+cH/2)+'" text-anchor="middle" fill="#2E7EA6" font-size="10" font-weight="700" transform="rotate(90 '+(W-pR+40)+','+(pT+cH/2)+')">Giving ($)</text>';
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;">'+grid+bars+line+xlbls+ylLbls+yrLbls+axisTitles+'</svg>';
+  // Stats + simple Pearson correlation across weeks that have both non-zero
+  var pairs = weeks.filter(function(w){ return (w.attendance||0) > 0 && (w.giving_cents||0) > 0; });
+  var corr = null;
+  if (pairs.length >= 3) {
+    var n = pairs.length;
+    var mx = pairs.reduce(function(s,w){return s+w.attendance;}, 0) / n;
+    var my = pairs.reduce(function(s,w){return s+w.giving_cents;}, 0) / n;
+    var num = 0, dx = 0, dy = 0;
+    pairs.forEach(function(w) {
+      num += (w.attendance - mx) * (w.giving_cents - my);
+      dx  += (w.attendance - mx) * (w.attendance - mx);
+      dy  += (w.giving_cents - my) * (w.giving_cents - my);
+    });
+    corr = (dx > 0 && dy > 0) ? (num / Math.sqrt(dx * dy)) : null;
+  }
+  var totalAtt = weeks.reduce(function(s,w){return s+(w.attendance||0);}, 0);
+  var totalGive = weeks.reduce(function(s,w){return s+(w.giving_cents||0);}, 0);
+  var avgPerAttender = totalAtt > 0 ? Math.round(totalGive / totalAtt) : 0;
+  var corrLabel = corr === null ? '—' : (corr >= 0.7 ? 'Strong +' : corr >= 0.4 ? 'Moderate +' : corr >= 0.1 ? 'Weak +' : corr <= -0.7 ? 'Strong −' : corr <= -0.4 ? 'Moderate −' : corr <= -0.1 ? 'Weak −' : 'None');
+  var corrVal = corr === null ? '—' : corr.toFixed(2);
+  var overview = '<div class="rpt-overview">'
+    + '<div class="rpt-stat"><div class="rpt-stat-num">' + weeks.length + '</div><div class="rpt-stat-lbl">Weeks</div></div>'
+    + '<div class="rpt-stat"><div class="rpt-stat-num">' + totalAtt.toLocaleString() + '</div><div class="rpt-stat-lbl">Total Attendance</div></div>'
+    + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(totalGive) + '</div><div class="rpt-stat-lbl">Total Given</div></div>'
+    + '<div class="rpt-stat"><div class="rpt-stat-num">' + fmtMoney(avgPerAttender) + '</div><div class="rpt-stat-lbl">Avg / Attender</div></div>'
+    + '<div class="rpt-stat"><div class="rpt-stat-num">' + corrVal + '</div><div class="rpt-stat-lbl">Correlation — ' + corrLabel + '</div></div>'
+    + '</div>';
+  var legend = '<div style="display:flex;gap:18px;justify-content:center;margin-top:8px;font-size:.82rem;">'
+    + '<span><span style="display:inline-block;width:14px;height:14px;background:#5A9E6F;opacity:.55;vertical-align:middle;margin-right:5px;"></span>Attendance (bars, left axis)</span>'
+    + '<span><span style="display:inline-block;width:14px;height:3px;background:#2E7EA6;vertical-align:middle;margin-right:5px;"></span>Giving (line, right axis)</span>'
+    + '</div>';
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    + '<h3 style="font-family:var(--font-head);color:var(--steel-anchor);">Giving × Attendance — ' + esc(fmtDate(d.from)) + ' to ' + esc(fmtDate(d.to)) + '</h3>'
+    + '<button class="btn-secondary" style="font-size:.8rem;padding:4px 10px;" onclick="window.print()">Print</button></div>'
+    + overview
+    + '<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px;">' + svg + legend + '</div>';
 }
 
 var _stmtData = null;
