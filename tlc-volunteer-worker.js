@@ -16,6 +16,7 @@ import {
   handleSchedRsvpPortal, handleSchedRsvp, handleSchedBreezeProxy,
 } from './src/api-scheduler.js';
 import { handleAdminLogin, handleAdminApi } from './src/api-admin.js';
+import { handleIntakeApi } from './src/api-intake.js';
 import { LOGIN_HTML, PUBLIC_HTML, ADMIN_HTML } from './src/html-templates.js';
 import { CHMS_HTML, CHMS_MANIFEST_JSON, SW_JS, BACKLOG_HTML } from './src/html-chms.js';
 import { sendBirthdayEmails, sendAnniversaryEmails } from './src/api-emails.js';
@@ -93,6 +94,16 @@ async function _fetch(req, env) {
       if (!await isAuthed(req, env)) return html(LOGIN_HTML);
       // Redirect authenticated users to CHMS (Volunteers tab is integrated there)
       return new Response(null, { status: 302, headers: { 'Location': '/chms' } });
+    }
+    // Public intake endpoints (gated by X-Intake-Key header, NOT user session).
+    // Called server-to-server from the timothystl.org admin worker.
+    if (path.startsWith('/api/intake/')) {
+      try {
+        return await handleIntakeApi(req, env, path);
+      } catch (e) {
+        console.error('Intake API error [' + method + ' ' + path + ']:', e?.message, e?.stack);
+        return json({ error: 'Internal server error' }, 500);
+      }
     }
     if (path.startsWith('/admin/api/')) {
       if (!await isAuthed(req, env)) return json({ error: 'Unauthorized' }, 401);
