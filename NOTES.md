@@ -130,6 +130,7 @@ Added 2026-04-15, phased 2026-04-15.
 ## Recent Changes (newest first)
 
 ### 2026-04-22
+- **v100**: Fix Giving Insights 500 — SQL referenced `ge.amount_cents` but the actual column in `giving_entries` is `amount` (stored as integer cents). Replaced four occurrences in the new `reports/giving-insights` endpoint with `SUM(ge.amount) AS total_cents` / `SUM(ge.amount) AS prior_total_cents`.
 - **v99**: Reporting pack — four improvements to the Reports tab.
   - **R7** — Easter/Christmas markers on Giving Trend chart. Easter computed per-year via Meeus/Jones/Butcher Gregorian algorithm and rendered as a dashed vertical line in each year's color with an "E" label. Christmas is a shared Dec 25 dashed line in warm-gray with a "C" label. Legend updated.
   - **R9** — Pie chart on Giving by Method. New reusable `renderPieChart(items, diameter)` helper (SVG slices + legend). Renders a "Share by Method" block above the existing table.

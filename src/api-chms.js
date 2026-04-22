@@ -1164,7 +1164,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     // Top givers in `year`
     const topGivers = (await db.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.member_type,
-              COUNT(*) AS gifts, SUM(ge.amount_cents) AS total_cents
+              COUNT(*) AS gifts, SUM(ge.amount) AS total_cents
        FROM giving_entries ge
        JOIN giving_batches gb ON gb.id = ge.batch_id
        JOIN people p ON p.id = ge.person_id
@@ -1177,7 +1177,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     // Lapsed givers: gave in prior year, nothing in this year
     const lapsed = (await db.prepare(
       `SELECT p.id, p.first_name, p.last_name, p.member_type,
-              SUM(ge.amount_cents) AS prior_total_cents,
+              SUM(ge.amount)       AS prior_total_cents,
               COUNT(*)             AS prior_gifts,
               MAX(${effDate})      AS last_gift_date
        FROM giving_entries ge
@@ -1222,7 +1222,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     for (const y of trendYears) {
       const s = y + '-01-01', e = y + '-12-31';
       const r = await db.prepare(
-        `SELECT COUNT(*) AS gifts, COUNT(DISTINCT ge.person_id) AS givers, SUM(ge.amount_cents) AS total_cents
+        `SELECT COUNT(*) AS gifts, COUNT(DISTINCT ge.person_id) AS givers, SUM(ge.amount) AS total_cents
          FROM giving_entries ge
          JOIN giving_batches gb ON gb.id = ge.batch_id
          WHERE ${effDate} >= ? AND ${effDate} <= ?`
