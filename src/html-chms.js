@@ -782,10 +782,12 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
       </div>
       <div id="att-chart-wrap" style="overflow-x:auto;overflow-y:hidden;"></div>
       <div id="att-chart-resize" style="height:8px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin-top:2px;opacity:0.4;" onmousedown="attChartResizeStart(event)" title="Drag to resize chart"><div style="width:32px;height:3px;background:var(--warm-gray);border-radius:2px;"></div></div>
+      <div id="att-special-wrap" style="margin-top:14px;"></div>
     </div>
     <!-- Controls row -->
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <button class="btn-primary" style="font-size:.85rem;" onclick="openNewSundayEntry()">+ Add Sunday</button>
+      <button class="btn-secondary" style="font-size:.8rem;" onclick="openSpecialServiceEntry()">+ Special</button>
       <button class="btn-secondary" style="font-size:.8rem;" onclick="seedYearSundays()">&#128197; Pre-fill Year Sundays</button>
       <div style="flex:1;"></div>
       <input type="date" id="att-from" name="att-from" style="font-size:.78rem;padding:3px 6px;border:1px solid var(--border);border-radius:6px;">
@@ -1681,7 +1683,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-23-v108';
+var DEPLOY_VERSION = '2026-04-23-v109';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -7914,6 +7916,7 @@ function byServiceResizeStart(e) { _rptResizeStart(e, 'byService', _byServiceRpt
 function givingTrendResizeStart(e) { _rptResizeStart(e, 'givingTrend', _givingTrendH); }
 
 function renderAttendanceChart(services) {
+  renderSpecialServicesChart(services);
   var today = new Date().toISOString().slice(0,10);
   var byDate = {};
   services.forEach(function(s) {
@@ -8050,6 +8053,16 @@ function renderAttendanceChart(services) {
     avgPts.push([px(ai),py((vals[ai]+vals[ai-1]+vals[ai-2]+vals[ai-3])/4)]);
   }
   var avgLine=avgPts.length>1?'<path d="'+avgPts.map(function(p2,j){return(j?'L ':'M ')+p2[0].toFixed(1)+','+p2[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#C9973A" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"/>':'';
+  // Interpolate x position for any date even if it's not a Sunday data point
+  var xAtAnyDate=function(ds){
+    if(!dataPts.length||ds<dataPts[0]||ds>dataPts[dataPts.length-1])return -1;
+    var lo=0,hi=dataPts.length-1;
+    while(lo<hi-1){var mid=Math.floor((lo+hi)/2);if(dataPts[mid]<=ds)lo=mid;else hi=mid;}
+    if(dataPts[lo]===ds)return px(lo);
+    if(dataPts[hi]===ds)return px(hi);
+    var t=(new Date(ds)-new Date(dataPts[lo]))/(new Date(dataPts[hi])-new Date(dataPts[lo]));
+    return px(lo)+t*(px(hi)-px(lo));
+  };
   var markers='';
   var yearsInRange={};
   dataPts.forEach(function(d){yearsInRange[d.slice(0,4)]=1;});
@@ -8059,18 +8072,16 @@ function renderAttendanceChart(services) {
     var eg=Math.floor((eb-ef+1)/3),eh=(19*ea+eb-edd-eg+15)%30;
     var eii=Math.floor(ec/4),ek=ec%4,el=(32+2*ee+2*eii-eh-ek)%7;
     var emm=Math.floor((ea+11*eh+22*el)/451);
-    var emo=Math.floor((eh+el-7*emm+114)/31),edy=(eh+el-7*emm+114)%31+1;
-    var eDate=yr+'-'+(emo<10?'0'+emo:''+emo)+'-'+(edy<10?'0'+edy:''+edy);
-    var ei=dataPts.indexOf(eDate);
-    if(ei>=0){
-      var ex=px(ei);
+    var emo=Math.floor((eh+el-7*emm+114)/31),edy2=(eh+el-7*emm+114)%31+1;
+    var eDate=yr+'-'+(emo<10?'0'+emo:''+emo)+'-'+(edy2<10?'0'+edy2:''+edy2);
+    var ex=xAtAnyDate(eDate);
+    if(ex>=0){
       markers+='<line x1="'+ex.toFixed(1)+'" y1="'+pT+'" x2="'+ex.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#5A9E6F" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
       markers+='<text x="'+ex.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#5A9E6F" font-size="8">Easter</text>';
     }
     [yr+'-12-24',yr+'-12-25'].forEach(function(xd,xi){
-      var xii=dataPts.indexOf(xd);
-      if(xii>=0){
-        var xx=px(xii);
+      var xx=xAtAnyDate(xd);
+      if(xx>=0){
         markers+='<line x1="'+xx.toFixed(1)+'" y1="'+pT+'" x2="'+xx.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#9B59B6" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
         markers+='<text x="'+xx.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#9B59B6" font-size="8">'+(xi===0?'Xmas Eve':'Christmas')+'</text>';
       }
@@ -8084,11 +8095,99 @@ function renderAttendanceChart(services) {
   var avgLegend='<div style="display:flex;gap:16px;margin-top:4px;flex-wrap:wrap;">'
     +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:20px;height:2px;background:#2E7EA6;"></span>Weekly</span>'
     +(avgLine?'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:20px;height:2px;background:#C9973A;border-top:2px dashed #C9973A;"></span>4-wk avg</span>':'')
+    +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:2px;height:12px;background:#5A9E6F;border-left:2px dashed #5A9E6F;"></span>Easter</span>'
+    +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:2px;height:12px;background:#9B59B6;border-left:2px dashed #9B59B6;"></span>Christmas</span>'
     +'</div>';
   if(cw) cw.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="min-width:'+W+'px;width:100%;height:'+H+'px;">'+grid
     +'<path d="'+area+'" fill="rgba(46,126,166,0.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#2E7EA6" stroke-width="2" stroke-linejoin="round"/>'
     +avgLine+markers+dots+xlbls+ylbls+'</svg>'+avgLegend;
+}
+
+function renderSpecialServicesChart(services) {
+  var wrap = document.getElementById('att-special-wrap');
+  if (!wrap) return;
+  var today = new Date().toISOString().slice(0,10);
+  var specials = (services || []).filter(function(s) {
+    return s.service_type !== 'sunday' && (s.attendance||0) > 0 && s.service_date <= today;
+  }).sort(function(a,b){return a.service_date<b.service_date?-1:a.service_date>b.service_date?1:0;});
+  if (!specials.length) { wrap.innerHTML=''; return; }
+  var n=specials.length;
+  var vals=specials.map(function(s){return s.attendance||0;});
+  var maxV=Math.max.apply(null,vals)*1.15||1;
+  var W=Math.max(400,n*44), H=130, pL=34, pR=12, pT=22, pB=28;
+  var cW=W-pL-pR, cH=H-pT-pB;
+  var slotW=cW/n, barW=Math.max(6,Math.min(30,slotW*0.65));
+  var bx2=function(i){return pL+(i+0.5)*slotW;};
+  var by2=function(v){return pT+cH-(v/maxV)*cH;};
+  var baseY=pT+cH;
+  var typeColor={special:'#C9973A',midweek:'#9B59B6'};
+  var bars='',xlbls='',ylbls='',grid='';
+  [0,Math.round(maxV/1.15)].forEach(function(v){
+    var yy=by2(v);
+    grid+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#f0ece8" stroke-width="1"/>';
+    ylbls+='<text x="'+(pL-3)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" fill="#9A8A78" font-size="9">'+Math.round(v)+'</text>';
+  });
+  var labelStep=Math.max(1,Math.ceil(n/14));
+  specials.forEach(function(s,i){
+    var bxv=bx2(i), bv=s.attendance||0, byv=by2(bv), bhv=baseY-byv;
+    var color=typeColor[s.service_type]||'#888';
+    var tip=s.service_date+' · '+esc(s.service_name||s.service_type)+': '+bv;
+    bars+='<rect x="'+(bxv-barW/2).toFixed(1)+'" y="'+byv.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bhv.toFixed(1)+'" fill="'+color+'" rx="2" opacity="0.85"><title>'+tip+'</title></rect>';
+    bars+='<text x="'+bxv.toFixed(1)+'" y="'+(byv-2).toFixed(1)+'" text-anchor="middle" fill="#5a4a3a" font-size="8">'+bv+'</text>';
+    if(i%labelStep===0){
+      var dp=s.service_date.split('-');
+      xlbls+='<text x="'+bxv.toFixed(1)+'" y="'+(H-4)+'" text-anchor="middle" fill="#9A8A78" font-size="8">'+MONTH_NAMES[parseInt(dp[1])-1]+' '+parseInt(dp[2])+'\''+dp[0].slice(2)+'</text>';
+    }
+  });
+  wrap.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:6px;">Special &amp; Midweek Services</div>'
+    +'<div style="overflow-x:auto;"><svg viewBox="0 0 '+W+' '+H+'" style="min-width:'+W+'px;width:100%;height:'+H+'px;">'+grid+bars+xlbls+ylbls+'</svg></div>'
+    +'<div style="display:flex;gap:14px;margin-top:4px;flex-wrap:wrap;">'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:12px;height:10px;background:#C9973A;border-radius:2px;opacity:.85;"></span>Special (Christmas, Easter Vigil, etc.)</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:12px;height:10px;background:#9B59B6;border-radius:2px;opacity:.85;"></span>Midweek (Ash Wednesday, Lent, etc.)</span>'
+    +'</div>';
+}
+
+function openSpecialServiceEntry() {
+  var el = document.getElementById('att-add-form');
+  el.style.display = '';
+  el.innerHTML = '<div style="font-family:var(--font-head);font-size:1rem;color:var(--steel-anchor);margin-bottom:14px;">Add Special / Midweek Service</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    + '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--warm-gray);">Date</label><input type="date" id="spf-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
+    + '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--warm-gray);">Type</label>'
+    + '<select id="spf-type" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;">'
+    + '<option value="special">Special (Christmas, Easter Vigil, Good Friday…)</option>'
+    + '<option value="midweek">Midweek (Ash Wednesday, Lent, Advent…)</option>'
+    + '</select></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    + '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--warm-gray);">Service Name</label>'
+    + '<input type="text" id="spf-name" list="spf-name-suggestions" placeholder="e.g. Christmas Eve" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;">'
+    + '<datalist id="spf-name-suggestions"><option value="Christmas Eve"><option value="Christmas Day"><option value="Good Friday"><option value="Maundy Thursday"><option value="Easter Vigil"><option value="Ash Wednesday"><option value="Thanksgiving Eve"><option value="Advent Midweek"><option value="Lenten Midweek"></datalist></div>'
+    + '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--steel-anchor);">Attendance</label><input type="number" id="spf-att" min="0" placeholder="0" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:1rem;font-weight:700;"></div>'
+    + '</div>'
+    + '<div style="margin-bottom:12px;"><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--warm-gray);">Time (optional)</label><input type="time" id="spf-time" placeholder="e.g. 19:00" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
+    + '<div style="display:flex;gap:8px;"><button class="btn-primary" onclick="saveSpecialService()">Save</button><button class="btn-secondary" onclick="document.getElementById(\'att-add-form\').style.display=\'none\'">Cancel</button></div>';
+}
+
+function saveSpecialService() {
+  var date = document.getElementById('spf-date').value;
+  var name = (document.getElementById('spf-name').value || '').trim();
+  var att  = parseInt(document.getElementById('spf-att').value) || 0;
+  var type = document.getElementById('spf-type').value;
+  var time = document.getElementById('spf-time').value || '';
+  if (!date) { alert('Please enter a date.'); return; }
+  if (!name) { alert('Please enter a service name.'); return; }
+  if (!att)  { alert('Please enter attendance.'); return; }
+  api('/admin/api/attendance', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ service_date:date, service_name:name, service_type:type, service_time:time, attendance:att })
+  }).then(function(d) {
+    if (d.error) { alert('Error: ' + d.error); return; }
+    document.getElementById('att-add-form').style.display = 'none';
+    loadAttendance();
+  });
 }
 
 function renderYoYChart(d, chartH) {
