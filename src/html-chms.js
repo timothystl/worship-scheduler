@@ -1681,7 +1681,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 </div>
 <script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-04-22-v106';
+var DEPLOY_VERSION = '2026-04-23-v107';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -2619,8 +2619,9 @@ function dismissFirstGift(personId) {
 function prayerSetStatus(id, status) {
   var note = '';
   if (status === 'answered' || status === 'closed') {
-    note = prompt('Resolution note (optional):', '') || '';
+    note = prompt('Resolution note (optional):', '');
     if (note === null) return; // user hit Cancel on prompt
+    note = note || '';
   }
   var body = { status: status };
   if (note) body.resolution_note = note;
