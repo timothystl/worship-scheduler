@@ -125,7 +125,7 @@ Use this as the session-to-session roadmap. Complete one phase fully before star
 ### Phase 2 — Code Quality Prep
 **Goal:** Reduce noise and isolate Breeze logic before the big refactor. No behavior changes.
 
-- [ ] **IN12** — Dead-code sweep: remove commented-out code, unused variables, leftover `console.log`s from `api-chms.js` and `html-chms.js`
+- [x] **IN12** — Dead-code sweep: removed debug `console.log` from Breeze per-person sync and dead `setFdTag` function (no callers). Done 2026-04-24 (v113).
 - [ ] **IN5** — Extract Breeze API client into `src/breeze.js` (consolidates field-ID quirks, enables mocking for IN11)
 
 **Done when:** No `console.log` artifacts in prod files; all Breeze HTTP calls live in `src/breeze.js`.
@@ -280,7 +280,7 @@ Use this as the session-to-session roadmap. Complete one phase fully before star
 - [ ] **IN9** — Staging environment. No `[env.staging]` block in `wrangler.toml`; risky changes (giving migrations, sync logic) go straight to prod. Add staging with its own D1 DB + a `staging.volunteer.timothystl.org` (or `*.workers.dev`) route.
 - [x] **IN10** — D1 backup/restore runbook. Done 2026-04-24 — see `## D1 Backup & Restore` section in this file.
 - [ ] **IN11** — Test harness. No tests in the repo. Highest-value targets: (a) Breeze CSV quirks (split-fund nth-occurrence, float person IDs, "nan" fund, negatives) — giving import has had multiple late-caught bugs (G6); (b) `hashPassword`/`verifyPassword`; (c) `disambiguateHHName`. Vitest + Miniflare works for Workers.
-- [ ] **IN12** — Dead-code sweep. Five-pass review mentions removing commented-out code, unused imports, leftover `console.log`s. No periodic cleanup has been done. One focused pass across `api-chms.js` / `html-chms.js` would likely shrink both meaningfully.
+- [x] **IN12** — Dead-code sweep. Done 2026-04-24 (v113). Removed debug `console.log('[Breeze Sync]…')` from per-person Breeze sync in `html-chms.js` and dead `setFdTag` function (comment said "keep for legacy callers" but no callers existed). Both `api-chms.js` and `html-chms.js` were otherwise clean — comments are explanatory, `console.error` calls are the intentional global error boundary.
 
 ---
 
