@@ -6,7 +6,7 @@ Read this at the start of every session. Update NOTES.md (and this file if neede
 
 ## What This App Is
 
-Church Management System (ChMS) for Timothy Lutheran Church. Built on **Cloudflare Workers + D1 (SQLite)**. Single-page app served from `src/html-chms.js` (renders as one large HTML string). API routes live in `src/api-chms.js` (people, giving, households, dashboard) and `src/api-admin.js` (auth, users, scheduler).
+Church Management System (ChMS) for Timothy Lutheran Church. Built on **Cloudflare Workers + D1 (SQLite)**. Single-page app served from `src/html-chms.js` (renders as one large HTML string). API routes live in domain modules under `src/` — all delegated from `src/api-chms.js` — plus `src/api-admin.js` (auth, users, scheduler).
 
 **Live at:** `https://chms.timothystl.org` (old `volunteer.timothystl.org/chms` redirects here)
 
@@ -36,7 +36,7 @@ Church Management System (ChMS) for Timothy Lutheran Church. Built on **Cloudfla
 ## Architecture Notes
 
 - **Auth**: Cookie-based HMAC-SHA256. Login checks `app_users` table first (per-user DB accounts), falls back to `ADMIN_PASSWORD` env-var for break-glass admin access only.
-- **Roles**: `admin | finance | staff | member` — enforced per endpoint in both API files.
+- **Roles**: `admin | finance | staff | member` — enforced in `api-chms.js` ACL block; domain modules receive pre-computed `isAdmin/isFinance/isStaff/canEdit` flags.
 - **Photos**: Stored in R2 bucket `tlc-chms-photos`; served via `/admin/r2photo/` proxy.
 - **Breeze ChMS sync**: `POST /admin/api/import/breeze` (bulk) and `POST /admin/api/import/breeze-sync-person` (per-person). See NOTES.md for field ID quirks.
 - **D1 param limit**: ~100 per statement. Use chunked queries for large IN/NOT IN lists.
@@ -415,5 +415,4 @@ Run through this at the end of any session before pushing, or at the start of a 
 
 ## Dev Branch
 
-Working branch: `claude/review-codebase-docs-ka3vu`
-Push to this branch. Do not push directly to main.
+Working branch: `claude/review-codebase-docs-ka3vu` — **merged to main 2026-04-25**. Create a new branch for each session's work. Do not push directly to main.
