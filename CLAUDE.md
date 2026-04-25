@@ -149,11 +149,11 @@ Use this as the session-to-session roadmap. Complete one phase fully before star
 
 ---
 
-### Phase 4 — Refactoring ✅ DONE 2026-04-24 (api-chms.js split; html-chms.js deferred)
+### Phase 4 — Refactoring ✅ DONE 2026-04-25
 **Goal:** Break the two monolith files into maintainable modules. No behavior changes.
 
 - [x] **IN4** — Split `api-chms.js` into domain modules: `src/api-people.js`, `src/api-giving.js`, `src/api-households.js`, `src/api-reports.js`, `src/api-import.js`, `src/api-utils.js` — all delegated from `api-chms.js`. Done 2026-04-24 (v114–v118).
-- [ ] **IN3** — Split `html-chms.js` into per-tab frontend modules: `src/frontend/{shell,people,giving,households,scheduler,reports,settings}.js` concatenated at build (or one string-returning module per tab)
+- [x] **IN3** — Split `html-chms.js` into per-tab frontend modules under `src/frontend/`: `html-head.js`, `html-tabs.js`, `js-core.js`, `js-settings.js`, `js-dashboard.js`, `js-people.js`, `js-register.js`, `js-households.js`, `js-giving.js`, `js-reports.js`, `js-export-import.js`, `js-attendance.js`, `js-volunteers.js`. `html-chms.js` reduced from 9,443 → 311 lines. Done 2026-04-25 (v120).
 
 **Done when:** `html-chms.js` and `api-chms.js` no longer exist as monoliths; IDE can syntax-highlight and navigate the embedded JS/CSS.
 
@@ -278,7 +278,7 @@ Use this as the session-to-session roadmap. Complete one phase fully before star
 ### Infrastructure / Backend Cleanup (noted 2026-04-22)
 - [ ] **IN1** — Rename Worker `breeze-proxy-worker` → something intuitive (candidate: `tlc-chms`). Name is legacy — Breeze is one integration among many now (Resend, Brevo, R2, D1, scheduler). Cloudflare has no rename button, so this is a mini-migration: change `name=` in `wrangler.toml`, `wrangler deploy` to create the new Worker, re-add every secret (`ADMIN_PASSWORD`, `RESEND_API_KEY`, `EMAIL_FROM`, `BREVO_API_KEY`, `BREVO_LIST_ID`, Breeze keys — secrets don't carry), move the `volunteer.timothystl.org/*` custom domain route off the old Worker onto the new one, verify the cron (`0 14 * * *`) lands on the new Worker, delete the old Worker. D1/KV/R2 bindings reference resources by ID so data is unaffected. Brief (≤1 min) downtime during route cutover.
 - [ ] **IN2** — Evaluate merging Workers and/or repos. Three Workers share a common subject (people) but live separately: ChMS (this), Scheduler (backend merged, UI embedded via iframe per SC1; SC2 tracks inline rewrite), Website admin. See "Multi-App Architecture" section above for options A–D. Decision needed: pursue Option C (absorb scheduler fully, leave website admin separate — currently recommended) vs Option B (thin people-API in ChMS, others stay separate). Adjacent: audit whether the three Workers live in one monorepo or three repos and consolidate if split.
-- [ ] **IN3** — Split `html-chms.js` into per-tab modules. The whole SPA is one enormous HTML-as-string file; diffs are noisy, IDE tooling can't see the embedded JS/CSS, code review is painful. Candidate: break into `src/frontend/{people,giving,households,scheduler,reports,settings,shell}.js` concatenated at build, or one string-returning module per tab imported by a shell.
+- [x] **IN3** — Split `html-chms.js` into per-tab modules. Done 2026-04-25 (v120). `html-chms.js` reduced from 9,443 → 311 lines; 13 string-fragment modules in `src/frontend/` (`html-head.js`, `html-tabs.js`, `js-core.js`, `js-settings.js`, `js-dashboard.js`, `js-people.js`, `js-register.js`, `js-households.js`, `js-giving.js`, `js-reports.js`, `js-export-import.js`, `js-attendance.js`, `js-volunteers.js`). Shell assembles them; `CHMS_HTML` unchanged byte-for-byte.
 - [x] **IN4** — Split `api-chms.js` into domain modules. Done 2026-04-24 (v114–v118). `api-chms.js` now 533 lines (was 5,151); domains in `api-people.js`, `api-giving.js`, `api-households.js`, `api-reports.js`, `api-import.js`, `api-utils.js`.
 - [x] **IN5** — Extract Breeze API client into `src/breeze.js`. Done 2026-04-24 (v114). New `makeBreezeClient(env)` factory returns null when env vars missing; all 9 endpoints wrapped; raw `Response` objects returned so all caller error handling is unchanged. `subdomain` exposed on client for photo CDN URL construction. All 12 Breeze-calling handlers in `api-chms.js` updated; `filter_json` pre-encoding preserved.
 - [x] **IN6** — Secrets inventory doc. Done 2026-04-24 — see `SECRETS.md`.
@@ -386,7 +386,7 @@ Run through this at the end of any session before pushing, or at the start of a 
 ### Frontend Consistency
 - [ ] New API calls use `api('/admin/api/...')` wrapper, not raw `fetch()`
 - [ ] New modals have a unique ID and use `openModal(id)` / `closeModal(id)`
-- [ ] `DEPLOY_VERSION` bumped in `html-chms.js` on every commit that changes the frontend
+- [ ] `DEPLOY_VERSION` bumped in `src/frontend/js-core.js` on every commit that changes the frontend
 - [ ] New tabs added to `showTab()` labels map and trigger their load function
 
 ### Data Integrity
@@ -410,7 +410,7 @@ Run through this at the end of any session before pushing, or at the start of a 
 - Dashboard birthday/anniversary: two separate cards since v23. Copy functions: `dashCopyBirthdays()` / `dashCopyAnniversaries()`. Anniversary rows are couple-paired by household+date in the API before returning.
 - `api()` helper in frontend handles 401→redirect. Always use it instead of raw `fetch` for `/admin/api/*` calls.
 - All modals have specific IDs (e.g. `person-modal`, `hh-modal`). There is no generic `modal-overlay`. Use `openModal(id)` / `closeModal(id)`.
-- DEPLOY_VERSION is at the top of the `<script>` block in `html-chms.js`. Bump it on every commit.
+- DEPLOY_VERSION is at the top of `src/frontend/js-core.js` (moved from `html-chms.js` after IN3 split). Bump it on every commit that changes the frontend.
 
 ---
 

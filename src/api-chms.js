@@ -327,7 +327,6 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const result = await handleGivingApi(req, env, url, method, seg, db, isAdmin, isFinance, isStaff, canEdit);
     if (result !== null) return result;
   }
-  }
 
   // ── Reports / Engagement / Prayer → api-reports.js ────────────────────────
   if (seg.startsWith('reports/') || seg.startsWith('engagement/') || seg.startsWith('prayer-requests') ||
