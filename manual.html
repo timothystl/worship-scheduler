@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>TLC ChMS — Operator Reference Manual</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --steel-anchor: #0A3C5C;
+  --sky-steel: #5C8FA8;
+  --amber: #D4922A;
+  --linen: #F2EDE2;
+  --warm-white: #FAF7F0;
+  --border: #E8E0D0;
+  --charcoal: #3D3530;
+  --warm-gray: #7A6E60;
+  --danger: #B85C3A;
+  --navy: #1E2D4A;
+  --sidebar-w: 250px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--charcoal);
+  background: var(--warm-white);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--steel-anchor);
+  color: #c8d8e4;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+#sidebar-header {
+  padding: 20px 16px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+#sidebar-header .app-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+#sidebar-header .doc-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 2px;
+}
+
+#sidebar nav { padding: 10px 0 30px; }
+
+#sidebar nav a {
+  display: block;
+  padding: 7px 16px 7px 18px;
+  color: rgba(200, 216, 228, 0.8);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.35;
+  border-left: 3px solid transparent;
+  transition: color .15s, border-color .15s, background .15s;
+}
+
+#sidebar nav a:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.06);
+}
+
+#sidebar nav a.active {
+  color: #fff;
+  border-left-color: var(--amber);
+  background: rgba(255,255,255,0.08);
+  font-weight: 500;
+}
+
+#sidebar nav .nav-num {
+  display: inline-block;
+  width: 18px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Main content ── */
+#main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  padding: 48px 56px 80px;
+  max-width: calc(var(--sidebar-w) + 850px);
+}
+
+/* ── Page header ── */
+#page-header {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 24px;
+  margin-bottom: 48px;
+}
+
+#page-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+#page-header .subtitle {
+  font-size: 14px;
+  color: var(--warm-gray);
+  margin-top: 6px;
+}
+
+/* ── Sections ── */
+.section {
+  margin-bottom: 64px;
+  scroll-margin-top: 28px;
+}
+
+.section h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy);
+  padding-left: 14px;
+  border-left: 4px solid var(--amber);
+  margin-bottom: 20px;
+  line-height: 1.3;
+}
+
+.section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--steel-anchor);
+  margin: 24px 0 10px;
+}
+
+.section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--charcoal);
+  margin: 18px 0 8px;
+}
+
+.section p { margin-bottom: 12px; }
+
+.section ul, .section ol {
+  margin: 0 0 14px 22px;
+}
+
+.section li { margin-bottom: 5px; }
+
+/* ── Callout boxes ── */
+.note {
+  background: #FDF6E3;
+  border: 1px solid #E8C96A;
+  border-left: 4px solid var(--amber);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.note strong { color: var(--amber); }
+
+.warning {
+  background: #FDF0EC;
+  border: 1px solid #E8B4A0;
+  border-left: 4px solid var(--danger);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.warning strong { color: var(--danger); }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0 20px;
+  font-size: 14px;
+}
+
+th {
+  background: var(--linen);
+  color: var(--charcoal);
+  font-weight: 600;
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+}
+
+td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+tr:nth-child(even) td { background: var(--linen); }
+
+/* ── Inline elements ── */
+kbd {
+  display: inline-block;
+  background: var(--charcoal);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  background: var(--linen);
+  color: var(--steel-anchor);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+pre {
+  background: var(--linen);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 14px 0;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--charcoal);
+}
+
+a { color: var(--sky-steel); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+/* ── Prompt examples ── */
+.prompt-good, .prompt-bad {
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.prompt-good {
+  background: #EDF7ED;
+  border-left: 4px solid #4CAF50;
+}
+
+.prompt-good::before {
+  content: "✓ Good: ";
+  font-weight: 600;
+  color: #2E7D32;
+}
+
+.prompt-bad {
+  background: #FDF0EC;
+  border-left: 4px solid var(--danger);
+}
+
+.prompt-bad::before {
+  content: "✗ Avoid: ";
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* ── Field list ── */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.field-item {
+  background: var(--linen);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.field-item code { background: none; border: none; padding: 0; }
+
+/* ── Print styles ── */
+@media print {
+  #sidebar { display: none !important; }
+  #main { margin-left: 0; max-width: 100%; padding: 20px; }
+  body { display: block; }
+  .section { page-break-inside: avoid; }
+  .section h2 { page-break-after: avoid; }
+  a { color: inherit; }
+  #page-header h1 { font-size: 22px; }
+}
+
+@media (max-width: 700px) {
+  #sidebar { display: none; }
+  #main { margin-left: 0; padding: 24px 18px 60px; }
+}
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div id="sidebar-header">
+    <div class="app-name">TLC ChMS</div>
+    <div class="doc-label">Operator Reference Manual</div>
+  </div>
+  <nav>
+    <a href="#s1"><span class="nav-num">1.</span> Introduction &amp; Access</a>
+    <a href="#s2"><span class="nav-num">2.</span> Logging In &amp; Roles</a>
+    <a href="#s3"><span class="nav-num">3.</span> Dashboard</a>
+    <a href="#s4"><span class="nav-num">4.</span> People</a>
+    <a href="#s5"><span class="nav-num">5.</span> Households &amp; Directory</a>
+    <a href="#s6"><span class="nav-num">6.</span> Giving</a>
+    <a href="#s7"><span class="nav-num">7.</span> Attendance</a>
+    <a href="#s8"><span class="nav-num">8.</span> Church Register</a>
+    <a href="#s9"><span class="nav-num">9.</span> Reports</a>
+    <a href="#s10"><span class="nav-num">10.</span> Settings</a>
+    <a href="#s11"><span class="nav-num">11.</span> Automatic Updates</a>
+    <a href="#s12"><span class="nav-num">12.</span> Asking Claude</a>
+    <a href="#s13"><span class="nav-num">13.</span> Developer Tasks</a>
+    <a href="#s14"><span class="nav-num">14.</span> Troubleshooting</a>
+  </nav>
+</nav>
+
+<main id="main">
+
+  <div id="page-header">
+    <h1>TLC ChMS — Operator Reference Manual</h1>
+    <div class="subtitle">Timothy Lutheran Church &bull; Last updated: April 25, 2026</div>
+  </div>
+
+  <!-- SECTION 1 -->
+  <section class="section" id="s1">
+    <h2>1. Introduction &amp; Access</h2>
+    <p>The <strong>TLC ChMS</strong> (Church Management System) is a web application built for Timothy Lutheran Church staff and volunteers. It manages people records, households, giving, attendance, the church register, and communications — all in one place, synced with Breeze ChMS where applicable.</p>
+
+    <h3>Access</h3>
+    <table>
+      <tr><th>URL</th><td><a href="https://chms.timothystl.org">https://chms.timothystl.org</a></td></tr>
+      <tr><th>Old URL</th><td><code>volunteer.timothystl.org/chms</code> — redirects automatically</td></tr>
+      <tr><th>Platform</th><td>Cloudflare Workers + D1 (SQLite). No server to maintain; runs globally on Cloudflare's edge network.</td></tr>
+      <tr><th>Browser</th><td>Any modern browser (Chrome, Firefox, Safari, Edge). No app to install.</td></tr>
+    </table>
+
+    <h3>What this manual covers</h3>
+    <p>This reference covers every tab and feature available to operators. It assumes you are logged in with at least <strong>staff</strong> role access. Some features (Giving entry, Brevo sync, user management) require <strong>finance</strong> or <strong>admin</strong> role — those are noted throughout.</p>
+
+    <div class="note"><strong>Note:</strong> The app is a single page — all tabs load without a full page refresh. If something looks wrong after returning from another app, try pressing <kbd>F5</kbd> to reload.</div>
+  </section>
+
+  <!-- SECTION 2 -->
+  <section class="section" id="s2">
+    <h2>2. Logging In &amp; Roles</h2>
+    <p>Navigate to <a href="https://chms.timothystl.org">chms.timothystl.org</a> and enter your username and password. Sessions persist via a secure cookie; you will stay logged in until you explicitly log out or the cookie expires.</p>
+
+    <h3>Roles &amp; Permissions</h3>
+    <p>Every account is assigned one of four roles. The role determines which tabs and actions are available.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Feature / Action</th>
+          <th>member</th>
+          <th>staff</th>
+          <th>finance</th>
+          <th>admin</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>View member directory</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>View full people records</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Edit people records</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Archive / mark deceased</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Enter attendance</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>View church register</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>View all reports</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>View giving records</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Enter / edit giving</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Run Breeze giving sync</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Export giving data</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>View giving reports</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Manage users / roles</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td>Brevo newsletter sync</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td>Force-remove orphan gifts</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td>Fix household heads</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td>Send test birthday/anniversary emails</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note"><strong>Note:</strong> The <strong>member</strong> role is intended for self-service directory lookup only. Most operational users will have <strong>staff</strong>, <strong>finance</strong>, or <strong>admin</strong>.</div>
+
+    <h3>Logging out</h3>
+    <p>Click your username in the top-right corner of the app and select <kbd>Log Out</kbd>, or navigate to <code>/admin/logout</code> directly.</p>
+
+    <h3>Forgotten password / account issues</h3>
+    <p>Passwords can only be reset by an <strong>admin</strong>. Go to <strong>Settings → Users</strong>, find the account, and use <kbd>Edit</kbd> to set a new password. There is no self-service password reset.</p>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section class="section" id="s3">
+    <h2>3. Dashboard</h2>
+    <p>The Dashboard is the first screen after login. It shows a set of <strong>cards</strong> — live summaries of key data. Cards refresh when you navigate back to the Dashboard tab.</p>
+
+    <h3>Available cards</h3>
+    <table>
+      <thead><tr><th>Card</th><th>What it shows</th></tr></thead>
+      <tbody>
+        <tr><td>Today's Birthdays</td><td>Members and active people with a birthday today. Includes a <kbd>Copy</kbd> button to clipboard-copy the list.</td></tr>
+        <tr><td>Today's Anniversaries</td><td>Couples with a wedding anniversary today, paired by household. <kbd>Copy</kbd> available.</td></tr>
+        <tr><td>Last Worship</td><td>Attendance count for the most recent Sunday service, both services combined with individual totals.</td></tr>
+        <tr><td>This Year's Giving</td><td>Year-to-date total giving across all funds (finance/admin only).</td></tr>
+        <tr><td>Active Members</td><td>Count of people with <code>member_type = member</code> and <code>status = active</code>.</td></tr>
+        <tr><td>Follow-Ups Due</td><td>Open follow-up items across all people, sorted by due date.</td></tr>
+        <tr><td>Engagement Queue</td><td>People flagged for pastoral follow-up (no recent contact, prayer requests, etc.).</td></tr>
+        <tr><td>Prayer Requests</td><td>Open and active prayer requests. Includes status-change buttons (Praying / Answered / Close) and a <kbd>+ Add</kbd> button. Export to CSV available.</td></tr>
+        <tr><td>New Contacts</td><td>People added in the last 30 days.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Customizing the dashboard</h3>
+    <p>Click the <kbd>⚙ Customize</kbd> button (top-right of Dashboard) to open the card visibility panel. Check or uncheck cards to show or hide them. Drag cards to reorder. Preferences are saved in your browser's <code>localStorage</code> — they persist across sessions on the same device but reset if you clear browser data.</p>
+
+    <div class="note"><strong>Note:</strong> Finance-only cards (giving totals) are automatically hidden from <strong>staff</strong> and <strong>member</strong> accounts regardless of dashboard preferences.</div>
+
+    <h3>Prayer requests</h3>
+    <p>The Prayer Requests card is a mini-workflow. Each request shows the person's name, the request text, and action buttons:</p>
+    <ul>
+      <li><kbd>Praying</kbd> — marks the request as actively being prayed for</li>
+      <li><kbd>Answered</kbd> — closes the request with an "answered" status</li>
+      <li><kbd>Close</kbd> — closes without marking answered</li>
+      <li><kbd>↓ CSV</kbd> — exports all requests to a spreadsheet</li>
+    </ul>
+    <p>New requests can be added via <kbd>+ Add</kbd>. Requests submitted through the church website contact/prayer form are automatically added here.</p>
+  </section>
+
+  <!-- SECTION 4 -->
+  <section class="section" id="s4">
+    <h2>4. People</h2>
+    <p>The <strong>People</strong> tab is the core of ChMS. It lists all active people, with search, filters, and access to individual profiles.</p>
+
+    <h3>Browsing the list</h3>
+    <p>By default, the list shows <strong>Members only</strong> (people with <code>member_type = member</code>). Click the <kbd>Members</kbd> toggle button in the toolbar to switch to <strong>all active people</strong>. Archived and deceased people are hidden unless you click <kbd>Archived</kbd>.</p>
+    <p>Use the search box to filter by name (first or last). The list updates as you type.</p>
+
+    <h3>Filtering by missing data</h3>
+    <p>Click <kbd>Filter</kbd> to open the missing-data filter panel. Checkboxes are organized by category (contact info, dates, sacraments, etc.). Selecting multiple boxes applies AND logic — results must be missing all selected fields. This is useful for data cleanup drives (e.g., "show me all members missing both email and phone").</p>
+
+    <h3>Adding a person</h3>
+    <ol>
+      <li>Click <kbd>+ Add Person</kbd>.</li>
+      <li>Fill in at minimum: first name, last name, member type.</li>
+      <li>Optionally assign to a household — type in the household field to search existing households, or leave blank to create a standalone record.</li>
+      <li>Click <kbd>Save</kbd>.</li>
+    </ol>
+    <div class="note"><strong>Note:</strong> Adding a person here does <em>not</em> automatically push them to Breeze. See the <strong>Push to Breeze</strong> action below.</div>
+
+    <h3>Person profile</h3>
+    <p>Click any person's name to open their profile. The profile is divided into collapsible sections that can be edited inline.</p>
+
+    <h4>Fields available on each profile</h4>
+    <div class="field-grid">
+      <div class="field-item"><code>first_name</code></div>
+      <div class="field-item"><code>last_name</code></div>
+      <div class="field-item"><code>email</code></div>
+      <div class="field-item"><code>phone</code></div>
+      <div class="field-item"><code>address</code> (street, city, state, zip)</div>
+      <div class="field-item"><code>member_type</code></div>
+      <div class="field-item"><code>family_role</code></div>
+      <div class="field-item"><code>gender</code></div>
+      <div class="field-item"><code>marital_status</code></div>
+      <div class="field-item"><code>dob</code> (date of birth)</div>
+      <div class="field-item"><code>baptism_date</code></div>
+      <div class="field-item"><code>confirmation_date</code></div>
+      <div class="field-item"><code>anniversary_date</code></div>
+      <div class="field-item"><code>death_date</code></div>
+      <div class="field-item"><code>first_contact_date</code></div>
+      <div class="field-item"><code>last_seen_date</code></div>
+      <div class="field-item"><code>envelope_number</code></div>
+      <div class="field-item"><code>notes</code></div>
+      <div class="field-item"><code>sms_opt_in</code></div>
+      <div class="field-item"><code>public_directory</code></div>
+      <div class="field-item"><code>dir_hide_address</code></div>
+      <div class="field-item"><code>dir_hide_phone</code></div>
+      <div class="field-item"><code>dir_hide_email</code></div>
+      <div class="field-item"><code>breeze_id</code> (read-only)</div>
+    </div>
+
+    <h4>Member types</h4>
+    <table>
+      <tr><th>Type</th><th>Meaning</th></tr>
+      <tr><td>member</td><td>Confirmed/transferred member of Timothy Lutheran</td></tr>
+      <tr><td>visitor</td><td>Regular attender, not yet a member</td></tr>
+      <tr><td>friend</td><td>Known to the congregation, not actively attending</td></tr>
+      <tr><td>associate</td><td>Member of another LCMS congregation, worships here</td></tr>
+      <tr><td>inactive</td><td>Was active; now non-responsive or moved away</td></tr>
+    </table>
+
+    <h4>Family roles</h4>
+    <p><code>head</code>, <code>spouse</code>, <code>child</code>, <code>other</code>. Every household should have exactly one <code>head</code>. Use Settings → <kbd>Fix Household Heads</kbd> to auto-assign heads to headless households.</p>
+
+    <h3>Photo upload</h3>
+    <ol>
+      <li>Open a person's profile and click the photo area (or the camera icon).</li>
+      <li>Select an image file. A crop tool appears.</li>
+      <li>Drag and resize the crop box, then click <kbd>Save Photo</kbd>.</li>
+    </ol>
+    <p>Photos are stored in Cloudflare R2 and served via <code>/admin/r2photo/</code>. The crop step ensures consistent square thumbnails.</p>
+
+    <h3>Archive, deceased, and reactivate</h3>
+    <p>At the bottom of a person's profile:</p>
+    <ul>
+      <li><kbd>Archive</kbd> — sets <code>status = archived</code>. The person disappears from the default list but remains in the database and in giving history. Use for people who have moved away or become inactive.</li>
+      <li><kbd>Mark Deceased</kbd> — sets <code>status = deceased</code> and records <code>death_date</code>. Deceased people are excluded from birthday/anniversary cards and email/SMS sends.</li>
+      <li><kbd>Reactivate</kbd> — restores an archived or deceased person to <code>status = active</code>. Appears when viewing an archived profile (use the <kbd>Archived</kbd> toggle on the people list to find them).</li>
+    </ul>
+
+    <div class="warning"><strong>Warning:</strong> There is no undo for archive/deceased actions in the UI. If you mark the wrong person, open their profile via the <kbd>Archived</kbd> toggle and click <kbd>Reactivate</kbd>.</div>
+
+    <h3>Mark Seen Today</h3>
+    <p>Click <kbd>Mark Seen Today</kbd> on any profile to set <code>last_seen_date</code> to today's date. This feeds the engagement queue and the Contact Completeness report.</p>
+
+    <h3>Follow-ups</h3>
+    <p>Click <kbd>+ Follow Up</kbd> on a profile to add a follow-up item with a due date and notes. Open follow-ups appear on the Dashboard card. Mark them complete from the profile or the dashboard.</p>
+
+    <h3>Breeze integration per-person</h3>
+    <p>Two sync actions are available on each profile:</p>
+    <table>
+      <tr><th>Button</th><th>When to use</th><th>What it does</th></tr>
+      <tr>
+        <td><kbd>Push to Breeze</kbd></td>
+        <td>Person has <strong>no</strong> <code>breeze_id</code> (new person entered here)</td>
+        <td>Creates the person in Breeze via API; saves the returned Breeze ID locally.</td>
+      </tr>
+      <tr>
+        <td><kbd>Sync Breeze</kbd></td>
+        <td>Person already exists in Breeze (has a <code>breeze_id</code>)</td>
+        <td>Pulls current data from Breeze and overwrites local fields. Use after editing a record in Breeze directly.</td>
+      </tr>
+    </table>
+    <div class="note"><strong>Note:</strong> Sync is currently one-way pull from Breeze → ChMS for existing records, and one-way push ChMS → Breeze for new records. Full bidirectional sync is not yet implemented.</div>
+
+    <h3>SMS opt-in</h3>
+    <p>The <code>sms_opt_in</code> checkbox on a profile controls whether this person receives automated birthday/anniversary SMS messages. Only check this if the person has explicitly consented to text messages from the church. Phone number must be a valid US number.</p>
+
+    <h3>Directory privacy settings</h3>
+    <p>The <code>public_directory</code> flag and the three <code>dir_hide_*</code> checkboxes let individuals control what appears if a member-facing directory is published. These flags are currently stored but not yet surfaced in a public-facing directory view.</p>
+  </section>
+
+  <!-- SECTION 5 -->
+  <section class="section" id="s5">
+    <h2>5. Households &amp; Directory</h2>
+    <p>The <strong>Households</strong> tab provides a directory-style view of families and organizations. Each household groups its members together and can have a shared photo and address.</p>
+
+    <h3>Households list</h3>
+    <p>Households are shown as cards with the household name, photo (if uploaded), and member names. Click any card to open the household detail modal.</p>
+
+    <h3>Household detail modal</h3>
+    <p>Shows all members of the household with their <code>family_role</code>. From here you can:</p>
+    <ul>
+      <li>Edit the household name, address, and notes</li>
+      <li>Upload a household photo (separate from individual profile photos)</li>
+      <li>Add or remove people from the household</li>
+      <li>Click any member name to jump to their profile</li>
+    </ul>
+
+    <h3>Household naming</h3>
+    <p>Household names are auto-generated from the head's last name (e.g., "Smith Family"). When two households share the same last name, the system disambiguates automatically using the head's first name (e.g., "John Smith Family" vs "Mary Smith Family"). You can override the name by editing it directly in the household modal.</p>
+
+    <h3>Organizations</h3>
+    <p>Organizations are a special household type for non-family groups (e.g., businesses, ministries). They appear in the same list but are visually distinct. Organization records can hold contact info and be associated with people in the same way as households.</p>
+
+    <h3>Tags</h3>
+    <p>Tags can be applied to people and are managed in <strong>Settings → Tags</strong>. Common uses include ministry involvement (choir, usher, Sunday school), small groups, or giving envelope assignment. Tags sync with Breeze tag fields when Breeze sync is run.</p>
+
+    <h3>Household head requirement</h3>
+    <p>Every household should have exactly one person with <code>family_role = head</code>. The system uses the head's name for household display and for generating anniversary cards. If a household is headless, use <strong>Settings → Fix Household Heads</strong> to auto-promote the spouse or oldest member.</p>
+
+    <div class="note"><strong>Note:</strong> The Settings card shows a live count of headless households. Check it after bulk imports or when adding new families.</div>
+
+    <h3>Household photo</h3>
+    <p>Click the photo area in the household detail modal to upload an image. Household photos appear on the Households tab cards. If no photo is uploaded, a placeholder with the family initial displays instead.</p>
+  </section>
+
+  <!-- SECTION 6 -->
+  <section class="section" id="s6">
+    <h2>6. Giving</h2>
+    <p>The <strong>Giving</strong> tab is available to <strong>finance</strong> and <strong>admin</strong> roles only. It manages contribution records, batches, and synchronization with Breeze.</p>
+
+    <h3>Giving model</h3>
+    <p>Contributions are organized into <strong>batches</strong> — groups of gifts received together (typically a single Sunday's offering). Each gift record belongs to exactly one batch and one person.</p>
+    <p>Amounts are stored in the database as <strong>integer cents</strong> (e.g., $25.00 is stored as 2500). The UI always displays dollars. Never enter amounts in cents manually.</p>
+
+    <h3>Batches</h3>
+    <p>Batches have three states:</p>
+    <table>
+      <tr><th>State</th><th>Meaning</th></tr>
+      <tr><td>Open</td><td>Entries can be added, edited, or deleted. Normal state during data entry.</td></tr>
+      <tr><td>Closed</td><td>Locked. No edits allowed until reopened. Use once a batch is verified and balanced.</td></tr>
+      <tr><td>(Reopened)</td><td>A closed batch that was reopened for correction. Returns to Open state.</td></tr>
+    </table>
+    <p>To create a new batch: click <kbd>+ New Batch</kbd>, enter a name (typically the date, e.g., "April 27, 2026") and the batch date, then click <kbd>Create</kbd>.</p>
+    <p>To close a batch: open it and click <kbd>Close Batch</kbd>. To reopen: click <kbd>Reopen</kbd> on a closed batch.</p>
+
+    <h3>Adding gifts to a batch</h3>
+    <ol>
+      <li>Open the batch (click its row in the batch list).</li>
+      <li>Click <kbd>+ Add Gift</kbd>.</li>
+      <li>Fill in: <strong>Person</strong> (search by name), <strong>Fund</strong>, <strong>Amount</strong> (in dollars), <strong>Method</strong>, <strong>Date</strong>.</li>
+      <li>Optional: <strong>Check #</strong>, <strong>Notes</strong>.</li>
+      <li>Click <kbd>Save</kbd>.</li>
+    </ol>
+
+    <h4>Gift fields</h4>
+    <table>
+      <tr><th>Field</th><th>Values / Notes</th></tr>
+      <tr><td><code>person</code></td><td>Must match an existing person in the database (type to search)</td></tr>
+      <tr><td><code>fund</code></td><td>Select from configured funds (see Funds below)</td></tr>
+      <tr><td><code>amount</code></td><td>Dollar amount (e.g., 25.00). Stored as cents internally.</td></tr>
+      <tr><td><code>method</code></td><td>cash, check, card, transfer, online, other</td></tr>
+      <tr><td><code>check_number</code></td><td>Optional; for check gifts</td></tr>
+      <tr><td><code>date</code></td><td>Date of the gift (defaults to batch date)</td></tr>
+      <tr><td><code>notes</code></td><td>Free text; any special instructions or designations</td></tr>
+    </table>
+
+    <h3>Editing individual gifts</h3>
+    <p>From within an open batch, click any gift row to open an edit modal. You can change any field except the person. To reassign a gift to a different person, delete and re-enter it.</p>
+    <p>You can also access a person's giving history from their profile — click a batch number in their giving list to open that batch, then click a gift row to edit it.</p>
+
+    <h3>Quick entry</h3>
+    <p>Click <kbd>Quick Entry</kbd> in the Giving tab toolbar. This mode auto-creates a batch for the current month if one doesn't exist, and lets you enter multiple gifts rapidly without navigating the batch list. Useful for ACH/online donations that arrive mid-month without a specific service.</p>
+
+    <h3>Funds</h3>
+    <p>Funds represent giving designations (e.g., General Fund, Building Fund, PNG Mission). They are configured in <strong>Settings → Funds</strong>. Fund names from Breeze are synced during import and follow Breeze's numeric naming convention (e.g., "40085 General Fund"). Sub-fund variants (e.g., "40085 Christmas Offering") are stored separately but grouped by numeric prefix in the Giving by Fund report.</p>
+
+    <h3>Breeze giving sync (pull from Breeze)</h3>
+    <p>This imports contribution records directly from Breeze's API for a given date range.</p>
+    <ol>
+      <li>Go to <strong>Settings → Breeze Giving Sync</strong>.</li>
+      <li>Enter a start and end date.</li>
+      <li>Click <kbd>Sync Now</kbd>.</li>
+    </ol>
+    <p>The sync:</p>
+    <ul>
+      <li>Imports all Breeze gifts in the date range that aren't already in ChMS (matched by Breeze payment ID).</li>
+      <li>Runs an orphan-cleanup pass: gifts previously imported from Breeze that no longer appear in Breeze's giving list for the same person+date are removed if a current replacement exists. This handles Breeze's behavior of creating new payment IDs when a gift is edited.</li>
+      <li>Has a 45-day grace window: December contributions entered in Breeze during January are imported with their actual December date.</li>
+    </ul>
+
+    <div class="warning"><strong>Warning:</strong> Always export a D1 backup before running a large sync. See <em>Troubleshooting → Before risky operations</em> for the backup command.</div>
+
+    <h3>CSV import from Breeze export</h3>
+    <p>For bulk historical imports, you can import giving records from a Breeze-exported CSV file.</p>
+    <ol>
+      <li>Export giving from Breeze as CSV (Contributions → Export).</li>
+      <li>In ChMS, go to <strong>Settings → Import → Giving CSV</strong>.</li>
+      <li>Upload the CSV file and click <kbd>Import</kbd>.</li>
+    </ol>
+
+    <h4>Known CSV quirks (handled automatically)</h4>
+    <ul>
+      <li><strong>Split-fund donations:</strong> One payment spread across multiple funds appears as multiple rows with the same Payment ID. ChMS tracks these by position (pid, pid-2, pid-3) so each fund allocation is preserved.</li>
+      <li><strong>Float person IDs:</strong> Breeze sometimes exports person IDs as <code>43826663.0</code> — the <code>.0</code> is stripped automatically.</li>
+      <li><strong>"nan" fund name:</strong> Blank fund names from Excel export become the text <code>nan</code> — mapped to General Fund automatically.</li>
+      <li><strong>Negative amounts:</strong> Valid for refunds/adjustments; imported as-is.</li>
+    </ul>
+    <p>After import, a summary shows the count of imported gifts and an expandable list of any skipped Payment IDs (with reasons).</p>
+
+    <h3>Reconciliation tools</h3>
+    <p>Two tools help when ChMS totals don't match Breeze's totals for a period:</p>
+    <table>
+      <tr><th>Tool</th><th>What it does</th></tr>
+      <tr><td><kbd>Reconcile Orphans</kbd></td><td>Fetches Breeze's giving list for the date range and removes ChMS entries whose Breeze payment ID no longer exists in Breeze — <em>only if a current replacement exists for the same person+date</em>. Safe to run repeatedly.</td></tr>
+      <tr><td><kbd>Diagnose</kbd> (admin only)</td><td>Read-only analysis: classifies every ChMS entry as "valid" (Breeze ID still in Breeze), "orphan" (Breeze ID missing from Breeze), or "manual" (no Breeze ID). Shows per-fund extra totals and twin-row detection. Use to understand a discrepancy before deciding how to fix it.</td></tr>
+      <tr><td><kbd>Force Remove N</kbd> (admin only)</td><td>Deletes orphan entries without requiring a replacement. Requires entering a matching count and cents total as a safety guard. Use only after Diagnose confirms the entries are truly stale.</td></tr>
+    </table>
+
+    <h3>Exporting giving data</h3>
+    <p>In <strong>Settings → Export</strong>, you can download:</p>
+    <ul>
+      <li><strong>Giving by year</strong> — CSV of all gifts for a selected year (for statements, audit, etc.)</li>
+      <li><strong>People</strong> — CSV of all person records</li>
+      <li><strong>Register</strong> — CSV of church register entries</li>
+    </ul>
+  </section>
+
+  <!-- SECTION 7 -->
+  <section class="section" id="s7">
+    <h2>7. Attendance</h2>
+    <p>The <strong>Attendance</strong> tab tracks weekly worship service counts. It records service-level totals, not individual check-ins — there is no per-person attendance record in the current system.</p>
+
+    <h3>Adding an attendance record</h3>
+    <ol>
+      <li>Click <kbd>+ Add Service</kbd>.</li>
+      <li>Select the date and service time (e.g., 8:00 AM, 10:30 AM).</li>
+      <li>Enter the attendance count.</li>
+      <li>Optionally set the <strong>service type</strong>: <code>regular</code> (default), <code>special</code> (Christmas, Easter, etc.), or <code>midweek</code> (Advent, Lent, etc.).</li>
+      <li>Click <kbd>Save</kbd>.</li>
+    </ol>
+    <p>For Sundays with two services, add each service separately — the dashboard's "Last Worship" card will combine them automatically.</p>
+
+    <h3>Attendance table</h3>
+    <p>The table shows all recorded services sorted newest-first. Click the collapse/expand toggle to reduce the table to a compact view. Click any row to edit the entry (correct a count, change the type, etc.).</p>
+
+    <h3>Attendance chart</h3>
+    <p>Below the table, a line chart plots Sunday regular attendance over time (oldest on the left). Key features:</p>
+    <ul>
+      <li><strong>Easter and Christmas markers</strong> — dashed vertical lines mark Easter Sunday and Christmas Eve/Day each year.</li>
+      <li><strong>Special/Midweek chart</strong> — a separate bar chart below shows <code>special</code> (amber bars) and <code>midweek</code> (purple bars) services. These are excluded from the Sunday average and trend line.</li>
+      <li><strong>Drag to resize</strong> — drag the bottom edge of either chart to make it taller or shorter.</li>
+    </ul>
+
+    <h3>Year-over-year comparison</h3>
+    <p>In the <strong>Reports</strong> tab → <strong>Attendance by Service</strong> tile, you can switch to a multi-year view. Select up to five years via checkboxes; the chart shows grouped bars by service time with one bar per year. This is useful for presenting attendance trends to the council.</p>
+
+    <div class="note"><strong>Note:</strong> Midweek and special service counts do not affect the Sunday average shown on the Dashboard card. The Dashboard card always shows regular Sunday services only.</div>
+  </section>
+
+  <!-- SECTION 8 -->
+  <section class="section" id="s8">
+    <h2>8. Church Register</h2>
+    <p>The <strong>Church Register</strong> tab is a formal log of sacramental and membership events at Timothy Lutheran Church. It serves as the official ecclesiastical record.</p>
+
+    <h3>Types of register entries</h3>
+    <table>
+      <thead><tr><th>Event type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Baptism</td><td>Date, officiant, sponsors/godparents</td></tr>
+        <tr><td>Confirmation</td><td>Date, class year</td></tr>
+        <tr><td>First Communion</td><td>Date</td></tr>
+        <tr><td>Marriage</td><td>Date, both parties, witnesses</td></tr>
+        <tr><td>Funeral / Burial</td><td>Date, officiant</td></tr>
+        <tr><td>Transfer In</td><td>From congregation, date received</td></tr>
+        <tr><td>Transfer Out</td><td>To congregation, date released</td></tr>
+        <tr><td>Received (Profession)</td><td>Date received by profession of faith</td></tr>
+        <tr><td>Removed (Non-Transfer)</td><td>Reason, date</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Adding a register entry</h3>
+    <ol>
+      <li>Click <kbd>+ Add Entry</kbd>.</li>
+      <li>Select the event type.</li>
+      <li>Search for and select the person (must already exist in the People tab).</li>
+      <li>Enter the event date and any type-specific fields (officiant, witnesses, etc.).</li>
+      <li>Click <kbd>Save</kbd>.</li>
+    </ol>
+
+    <h3>Editing and deleting entries</h3>
+    <p>Click any register row to open it for editing. Corrections (wrong date, misspelled name) can be made at any time. Only <strong>admin</strong> users can delete a register entry — this is intentional, as the register is a legal record.</p>
+
+    <h3>Relationship to person profile</h3>
+    <p>Adding a baptism, confirmation, or marriage record in the register does <strong>not</strong> automatically update the corresponding date fields on the person's profile (<code>baptism_date</code>, <code>confirmation_date</code>, <code>anniversary_date</code>). Update those fields on the profile separately if you want them to appear in reports and anniversary cards.</p>
+
+    <h3>Exporting the register</h3>
+    <p>Go to <strong>Settings → Export → Register</strong> to download all register entries as a CSV. This is suitable for sharing with the LCMS district or for off-site backup.</p>
+  </section>
+
+  <!-- SECTION 9 -->
+  <section class="section" id="s9">
+    <h2>9. Reports</h2>
+    <p>The <strong>Reports</strong> tab provides analytical views of people, giving, and attendance data. Finance reports require <strong>finance</strong> or <strong>admin</strong> role; all other reports are available to <strong>staff</strong> and above.</p>
+
+    <h3>Membership Summary</h3>
+    <p>Shows a breakdown of the congregation by member type (member, visitor, friend, etc.) with counts and share percentages. Also includes an <strong>Age Group</strong> table (Under 18, 18–29, 30–44, 45–64, 65+, Unknown) with count and share for each group. Useful for council presentations and LCMS statistical reports.</p>
+
+    <h3>People Insights</h3>
+    <p>A deeper demographic view with six panels:</p>
+    <ul>
+      <li><strong>New contacts by month</strong> — bar chart of the last 24 months (based on <code>first_contact_date</code>)</li>
+      <li><strong>New people by year × type</strong> — cross-tabulation of new arrivals by member type</li>
+      <li><strong>Age distribution</strong> — bars for 6 age buckets</li>
+      <li><strong>Gender</strong> — pie chart</li>
+      <li><strong>Household composition</strong> — bars: single / couple / small family / large family / unassigned</li>
+      <li><strong>Sacramental pipeline</strong> — members only: neither sacrament / baptized only / confirmed only / both</li>
+    </ul>
+
+    <h3>Contact Completeness</h3>
+    <p>Shows what percentage of active people (or members-only, via a scope toggle) have each key field filled in: email, phone, address, date of birth, and photo. Each row is a progress bar — green means complete.</p>
+    <p>Click any row to drill down to the list of people missing that field. Each name is clickable, taking you directly to their profile to fill in the gap.</p>
+
+    <h3>Giving by Fund</h3>
+    <p>The primary year-end and council finance report. Enter a date range and click <kbd>Run</kbd>. Shows:</p>
+    <ul>
+      <li>Total amount per fund, grouped by numeric prefix (e.g., all "40085 *" variants collapse into one group with a subtotal)</li>
+      <li>Overview tiles: Total Givers, Total Gifts, Grand Total, Avg / Gift, Avg / Giver</li>
+      <li>Age group breakdown: givers, gifts, total, and share per age bucket</li>
+      <li><kbd>Reconcile Orphans</kbd> button — see Giving section for details</li>
+      <li><kbd>Diagnose</kbd> button (admin) — detailed entry classification</li>
+    </ul>
+
+    <h3>Giving by Method</h3>
+    <p>Shows giving totals broken down by payment method (cash, check, card, transfer, online, other) for a date range. Includes a pie chart of share by method and a data table. Useful for treasurer reconciliation.</p>
+
+    <h3>Giving Insights</h3>
+    <p>Select a year to see four analytical panels:</p>
+    <ul>
+      <li><strong>Top 25 givers</strong> — ranked by total giving, with clickable names linking to their profiles (finance/admin only)</li>
+      <li><strong>Lapsed givers</strong> — people who gave in the prior year but have not given in the selected year; sortable by prior-year total</li>
+      <li><strong>Giving frequency distribution</strong> — histogram of givers by number of gifts (1 / 2–5 / 6–12 / 13–26 / 27+ per year)</li>
+      <li><strong>5-year trend</strong> — table of givers, gifts, total, avg/gift, avg/giver for the last five years</li>
+    </ul>
+
+    <h3>Giving Trend (Year-over-Year)</h3>
+    <p>Overlapping line chart comparing weekly giving for the current year vs. prior year on the same axes. Dashed vertical lines mark Easter (computed per year using the Meeus/Jones/Butcher algorithm) and Christmas. Drag the bottom edge to resize the chart.</p>
+
+    <h3>Giving × Attendance</h3>
+    <p>Overlay chart with green bars for weekly attendance (left axis) and a teal line for weekly giving (right axis), aligned by Sunday date. Overview stats include correlation coefficient with a qualitative label (Strong+, Moderate+, Weak+, None, etc.). Useful for identifying whether giving and attendance move together over time.</p>
+
+    <h3>Attendance by Service</h3>
+    <p>Two views accessible via toggle:</p>
+    <ul>
+      <li><strong>Date range</strong> — bar chart of attendance by service time for a custom period</li>
+      <li><strong>Multi-year</strong> — grouped bar chart; select up to 5 years via checkboxes (2 most recent pre-checked). Each cluster shows all service times; one bar per year per time. Good for council slide decks.</li>
+    </ul>
+
+    <h3>Engagement Queue</h3>
+    <p>Lists people who may need pastoral attention based on inactivity signals (no <code>last_seen_date</code> in many months, open follow-ups, etc.). The queue is read-only; action is taken by visiting the person's profile and using <kbd>Mark Seen Today</kbd> or <kbd>+ Follow Up</kbd>.</p>
+
+    <div class="note"><strong>Note:</strong> All reports use live data from D1. There is no cache — large date ranges (multi-year) may take a moment to load on slower connections.</div>
+  </section>
+
+  <!-- SECTION 10 -->
+  <section class="section" id="s10">
+    <h2>10. Settings</h2>
+    <p>The <strong>Settings</strong> tab consolidates administrative functions. Most sub-sections require <strong>admin</strong> role; exceptions are noted.</p>
+
+    <h3>User management (admin only)</h3>
+    <p>Add, edit, and remove ChMS user accounts.</p>
+    <ul>
+      <li><kbd>+ Add User</kbd> — creates a new account. Required: username, password, role.</li>
+      <li><kbd>Edit</kbd> on an existing user — change their role or reset their password. You cannot change a username; delete and re-create if needed.</li>
+      <li><kbd>Delete</kbd> — permanently removes the account. The user's audit trail remains; only the login is removed.</li>
+    </ul>
+    <div class="warning"><strong>Warning:</strong> There is no confirmation email for new accounts. Give the new user their username and initial password directly and ask them to note it immediately.</div>
+
+    <h3>Tags</h3>
+    <p>Add and remove tag definitions used across People profiles. Tags are free-text labels (e.g., "Choir", "Usher", "Sunday School Teacher"). Removing a tag definition here does not remove it from people who already have it — clean up assignments on individual profiles first.</p>
+
+    <h3>Member types</h3>
+    <p>The five member types (member, visitor, friend, associate, inactive) are fixed system values and cannot be renamed or added to via Settings. Contact a developer to add a new type.</p>
+
+    <h3>Breeze people sync (admin/finance)</h3>
+    <p>Pulls all people records from Breeze and upserts them into ChMS. Use this for an initial bulk load or after making many changes in Breeze.</p>
+    <ol>
+      <li>Click <kbd>Sync People from Breeze</kbd>.</li>
+      <li>The sync runs in batches. A progress counter updates as pages complete.</li>
+      <li>New people are created; existing people (matched by Breeze ID) have their fields updated.</li>
+    </ol>
+    <div class="note"><strong>Note:</strong> People-sync does not delete anyone from ChMS if they were removed from Breeze. Manage removals manually (archive or delete on the profile).</div>
+
+    <h3>Breeze tag sync (admin/finance)</h3>
+    <p>Fetches all tag definitions from Breeze and creates matching tag records in ChMS. Run this before a people sync to ensure tags are available for assignment.</p>
+
+    <h3>Breeze giving sync</h3>
+    <p>See <strong>Section 6 — Giving → Breeze giving sync</strong> for full details. The date-range entry fields are here in Settings.</p>
+
+    <h3>Brevo newsletter sync (admin only)</h3>
+    <p>Brevo is the church's email newsletter platform. ChMS can sync member email addresses to a Brevo contact list.</p>
+    <ul>
+      <li><strong>Reconciliation view</strong> — shows a comparison of active members in ChMS vs. contacts in the configured Brevo list. Highlights people in ChMS but not in Brevo ("missing from Brevo").</li>
+      <li><kbd>Add All Missing</kbd> — pushes all missing members to Brevo in one operation.</li>
+      <li>Individual profiles also have an <kbd>Add to Newsletter</kbd> button to add a single person.</li>
+      <li>Auto-sync: when a member's email address is changed and saved on their profile, ChMS automatically updates their Brevo contact record.</li>
+    </ul>
+    <div class="note"><strong>Note:</strong> Only people with <code>member_type = member</code> and a valid email address are eligible for Brevo sync. Visitors and friends are not synced to the newsletter list automatically.</div>
+
+    <h3>Birthday &amp; anniversary email test (admin only)</h3>
+    <p>Two buttons let you verify that the automated email/SMS system is working without waiting for an actual birthday:</p>
+    <ul>
+      <li><kbd>Send Test Birthday Email</kbd> — sends a sample birthday email to the admin's own email address.</li>
+      <li><kbd>Send Test Anniversary Email</kbd> — sends a sample anniversary email.</li>
+    </ul>
+    <p>If the test email doesn't arrive within a few minutes, check with a developer to verify the <code>RESEND_API_KEY</code> and <code>EMAIL_FROM</code> secrets are correctly set.</p>
+
+    <h3>Fix household heads (admin only)</h3>
+    <p>Displays the count of households that have no member with <code>family_role = head</code>. Click <kbd>Fix Household Heads</kbd> to automatically promote the first available spouse, or the first member if no spouse exists, to head role. Safe to run at any time.</p>
+
+    <h3>Import (admin/finance)</h3>
+    <p>Sub-section for bulk data imports:</p>
+    <ul>
+      <li><strong>Giving CSV</strong> — import a Breeze-exported CSV of contribution records (see Section 6)</li>
+      <li><strong>Register CSV</strong> — bulk-import register entries from a formatted CSV</li>
+    </ul>
+
+    <h3>Export</h3>
+    <p>Download data as CSV files. Available exports: <strong>People</strong>, <strong>Giving</strong> (by year), <strong>Register</strong>. See Section 6 for details.</p>
+  </section>
+
+  <!-- SECTION 11 -->
+  <section class="section" id="s11">
+    <h2>11. Things That Update Automatically</h2>
+    <p>Several processes run automatically without any operator action needed. This section explains what they do and when, so you know what to expect.</p>
+
+    <h3>Daily cron — 9:00 AM Central</h3>
+    <p>A scheduled job runs every morning at 9:00 AM Central time. It performs four tasks in sequence:</p>
+
+    <table>
+      <thead><tr><th>Task</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Birthday emails &amp; SMS</td>
+          <td>Finds all active, non-deceased people whose <code>dob</code> matches today's month and day. Sends a birthday email via Resend. Sends an SMS via Brevo to anyone with <code>sms_opt_in = true</code> and a valid phone number. Deduplication prevents double-sends if the cron runs more than once in a day.</td>
+        </tr>
+        <tr>
+          <td>Anniversary emails &amp; SMS</td>
+          <td>Finds active couples whose <code>anniversary_date</code> matches today. Where both spouses share a household and the same email, one combined email is sent. SMS goes to opted-in phone numbers. Deceased spouses are excluded.</td>
+        </tr>
+        <tr>
+          <td>Brevo auto-sync</td>
+          <td><em>This runs on save, not at 9am</em> — see below.</td>
+        </tr>
+        <tr>
+          <td>Audit log pruning</td>
+          <td>Deletes old audit log rows to keep the table manageable: birthday/anniversary send records older than 60 days are removed; all other audit entries older than 365 days are removed.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note"><strong>Note:</strong> If a birthday or anniversary falls on a day the cron fails (rare Cloudflare outage), the email/SMS will not be re-sent retroactively. You can trigger a manual test send from Settings, but it goes to your own address, not the member's.</div>
+
+    <h3>Brevo auto-sync on email save</h3>
+    <p>Whenever a member's email address is changed and saved on their profile, ChMS immediately pushes the updated email to Brevo. This ensures the newsletter list stays current without a manual bulk sync. Only members (not visitors/friends) trigger this auto-sync.</p>
+
+    <h3>Website intake forms</h3>
+    <p>Two forms on the church website feed data into ChMS automatically:</p>
+    <ul>
+      <li><strong>Connect Card</strong> (website contact form) — creates a new Visitor person record and a follow-up item in ChMS. Staff see the new person on the Dashboard "New Contacts" card and in the Follow-Ups list.</li>
+      <li><strong>Prayer Request form</strong> — creates a prayer request row in ChMS. It appears on the Dashboard Prayer Requests card immediately.</li>
+    </ul>
+    <p>No operator action is needed to receive these — just check the Dashboard cards regularly.</p>
+
+    <h3>What does NOT update automatically</h3>
+    <ul>
+      <li>Breeze people sync (must be triggered manually in Settings)</li>
+      <li>Breeze giving sync (must be triggered manually)</li>
+      <li>Brevo bulk newsletter reconciliation (must be triggered manually)</li>
+      <li>D1 database backups (Cloudflare PITR runs automatically for 30 days, but manual exports must be done by a developer before risky operations)</li>
+    </ul>
+  </section>
+
+  <!-- SECTION 12 -->
+  <section class="section" id="s12">
+    <h2>12. Asking Claude to Make Changes</h2>
+    <p>ChMS is built on Claude (Anthropic's AI), and changes to the app are made by describing what you want in plain English. This section explains how to write prompts that get results quickly and correctly.</p>
+
+    <h3>The golden rule</h3>
+    <p>Be specific about <strong>where</strong> (which tab, which button, which report) and <strong>what</strong> (exactly what should change, and what the result should look like). Vague prompts produce vague results.</p>
+
+    <h3>Good prompt examples</h3>
+
+    <div class="prompt-good">In the Giving tab, when closing a batch add a confirmation dialog that shows the batch's total amount and entry count before the close happens.</div>
+
+    <div class="prompt-good">On the People list, add a "Last Seen" column showing the <code>last_seen_date</code> value for each person. It's already stored in the database — just needs to be displayed in the list table.</div>
+
+    <div class="prompt-good">In the Reports tab, the "Giving by Fund" date range defaults to January 1 of the current year. Change the default end date to today instead of December 31.</div>
+
+    <div class="prompt-good">The birthday email subject line currently says "Happy Birthday from Timothy Lutheran." Change it to "Happy Birthday from your TLC family!"</div>
+
+    <div class="prompt-good">Add a "Notes" field to the Attendance entry form so we can record the preacher's name or a special event note alongside the count.</div>
+
+    <h3>Bad prompt examples — and why</h3>
+
+    <div class="prompt-bad">Fix the giving thing.</div>
+    <p><em>No location, no description of what's wrong, no expected behavior.</em></p>
+
+    <div class="prompt-bad">Make it better.</div>
+    <p><em>Completely unactionable — "better" means different things to everyone.</em></p>
+
+    <div class="prompt-bad">The reports are slow.</div>
+    <p><em>Which report? How slow? What were you doing when it was slow? Is it always slow or only for large date ranges? Give Claude a specific scenario to reproduce.</em></p>
+
+    <div class="prompt-bad">Add SMS to everything.</div>
+    <p><em>Too broad. Which specific actions should trigger an SMS? To whom? With what message? Start with one concrete workflow.</em></p>
+
+    <h3>Providing context</h3>
+    <p>If Claude hasn't worked on this codebase recently in the current session, paste the relevant portion of <code>CLAUDE.md</code> or describe the tab and feature. The more specific your starting point, the faster the implementation.</p>
+
+    <h3>Reviewing changes</h3>
+    <p>After Claude makes a change:</p>
+    <ol>
+      <li>Ask Claude to describe <em>exactly</em> what files were changed and what lines were added/modified.</li>
+      <li>Test the feature in the browser at <a href="https://chms.timothystl.org">chms.timothystl.org</a> (after deploy) or on staging.</li>
+      <li>If something looks wrong, describe the exact behavior you're seeing and what you expected.</li>
+    </ol>
+
+    <h3>Version tracking</h3>
+    <p>Every frontend change bumps <code>DEPLOY_VERSION</code> at the top of <code>src/html-chms.js</code>. The current version is displayed in the browser's console and in the app footer. If you're not sure whether a deploy went through, compare the version number before and after.</p>
+  </section>
+
+  <!-- SECTION 13 -->
+  <section class="section" id="s13">
+    <h2>13. Requires a Developer</h2>
+    <p>Some changes to ChMS are outside what operators can do through the UI and require a developer (someone with access to the codebase, Cloudflare dashboard, and <code>wrangler</code> CLI). The following tasks fall into this category.</p>
+
+    <h3>Email template text</h3>
+    <p>The body and subject of birthday and anniversary emails (and SMS messages) are defined in <code>src/api-emails.js</code>. Changing wording, adding a signature, or adding a new template requires editing that source file and deploying.</p>
+
+    <h3>Breeze field mappings</h3>
+    <p>The mapping between Breeze's custom field IDs and ChMS's person record columns is hardcoded in <code>src/api-import.js</code> (and the Breeze API client in <code>src/breeze.js</code>). If Breeze changes a field ID or you want to map an additional Breeze custom field to a ChMS column, a developer must update those files.</p>
+
+    <h3>Database schema changes</h3>
+    <p>Adding a new column, table, or index requires:</p>
+    <ol>
+      <li>Creating a migration file in <code>migrations/NNNN_description.sql</code></li>
+      <li>Adding the same statement to the migrations array in <code>src/db.js</code> (for cold-start safety)</li>
+      <li>Running <code>wrangler d1 migrations apply tlc-volunteer-db --remote</code></li>
+    </ol>
+    <p>The migrations system tracks which have been applied; re-running is safe.</p>
+
+    <h3>API key rotation</h3>
+    <p>All API keys and credentials are stored as Cloudflare Worker secrets (not in the codebase). To rotate a key:</p>
+    <ol>
+      <li>Log into the Cloudflare dashboard → Workers &amp; Pages → <code>tlc-chms</code> → Settings → Variables &amp; Secrets.</li>
+      <li>Update the secret value.</li>
+      <li>The new value is live immediately — no redeploy needed.</li>
+    </ol>
+    <table>
+      <thead><tr><th>Secret name</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>ADMIN_PASSWORD</code></td><td>Break-glass admin fallback (not a regular account)</td></tr>
+        <tr><td><code>RESEND_API_KEY</code></td><td>Resend.com — birthday/anniversary email delivery</td></tr>
+        <tr><td><code>EMAIL_FROM</code></td><td>Sender address for Resend emails</td></tr>
+        <tr><td><code>BREVO_API_KEY</code></td><td>Brevo — newsletter sync + transactional SMS</td></tr>
+        <tr><td><code>BREVO_LIST_ID</code></td><td>Brevo contact list ID for newsletter sync</td></tr>
+        <tr><td><code>BREEZE_API_KEY</code></td><td>Breeze ChMS REST API key</td></tr>
+        <tr><td><code>BREEZE_SUBDOMAIN</code></td><td>Breeze account subdomain (e.g., <code>tlc</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>wrangler.toml changes</h3>
+    <p><code>wrangler.toml</code> controls the Worker name, D1/KV/R2 bindings, cron schedule, and routes. Any changes here (e.g., adding a new KV namespace, changing the cron schedule, adding a custom domain) require a developer and a redeploy.</p>
+
+    <h3>Deploying the app</h3>
+    <p>Deploy the production Worker with:</p>
+    <pre><code>wrangler deploy</code></pre>
+    <p>Deploy to staging with:</p>
+    <pre><code>wrangler deploy --config wrangler.staging.toml</code></pre>
+    <p>Staging is at <code>breeze-proxy-worker-staging.timothystl.workers.dev/chms</code>. Test risky changes there first.</p>
+
+    <h3>Cron schedule</h3>
+    <p>The daily cron is set to <code>0 14 * * *</code> (UTC) = 9:00 AM Central Standard Time / 10:00 AM CDT. Changing the time requires editing <code>wrangler.toml</code> and redeploying.</p>
+
+    <h3>Adding a new tab or major feature</h3>
+    <p>The entire frontend is in <code>src/html-chms.js</code>. New tabs must be added to the <code>showTab()</code> labels map and have a corresponding load function. New API routes go in the appropriate domain module under <code>src/</code> and must be dispatched from <code>src/api-chms.js</code> or <code>src/api-admin.js</code>.</p>
+
+    <div class="note"><strong>Note:</strong> See <code>SECRETS.md</code> in the repository root for a full inventory of all secrets, their rotation steps, and who has access.</div>
+  </section>
+
+  <!-- SECTION 14 -->
+  <section class="section" id="s14">
+    <h2>14. Troubleshooting</h2>
+    <h3>Birthday/anniversary email didn't send</h3>
+    <p><strong>Check first:</strong> Is the person marked <code>status = active</code> and <em>not</em> deceased? Is their <code>dob</code> or <code>anniversary_date</code> filled in? Is the date exactly today (month and day)? The cron fires at 9 AM Central — if it's still morning, it may not have run yet.</p>
+    <p><strong>Test send:</strong> Go to Settings and use the <kbd>Send Test Birthday Email</kbd> button to confirm Resend is working. If the test doesn't arrive within 5 minutes, a developer needs to check the <code>RESEND_API_KEY</code> secret.</p>
+
+    <h3>Brevo sync not working</h3>
+    <p>Confirm the person has <code>member_type = member</code> and a valid email. Check Settings → Brevo → Reconciliation view to see if they appear in the "missing" list. If the bulk <kbd>Add All Missing</kbd> button completes but the count doesn't change, a developer should check the <code>BREVO_API_KEY</code> and <code>BREVO_LIST_ID</code> secrets.</p>
+
+    <h3>Giving totals don't match Breeze</h3>
+    <p>This is the most common issue. Work through these steps in order:</p>
+    <ol>
+      <li>Run <strong>Giving by Fund → Reconcile Orphans</strong> for the affected date range.</li>
+      <li>If still mismatched, run <strong>Giving by Fund → Diagnose</strong> (admin) to classify all entries.</li>
+      <li>Review the "orphan" list — these are ChMS entries whose Breeze payment IDs no longer exist in Breeze.</li>
+      <li>If all orphans are confirmed stale (deleted from Breeze intentionally), use <strong>Force Remove</strong> (admin) with the matching count and cents guard.</li>
+    </ol>
+    <div class="warning"><strong>Warning:</strong> Export a D1 backup before running Force Remove. Once deleted, entries can only be recovered from the backup.</div>
+
+    <h3>Person appears twice in the list</h3>
+    <p>This can happen if a person was added manually in ChMS and then imported from Breeze as a new record. To merge:</p>
+    <ol>
+      <li>Identify which record is the "correct" one (the one with the right Breeze ID, if applicable).</li>
+      <li>Move any giving entries, register records, and follow-ups from the duplicate to the correct record (currently manual — a developer can do this via D1 queries if there are many).</li>
+      <li>Archive or delete the duplicate.</li>
+    </ol>
+
+    <h3>Photo not displaying</h3>
+    <p>R2 photos are served via <code>/admin/r2photo/</code>. If a photo uploaded successfully but isn't displaying, try a hard reload (<kbd>Ctrl+Shift+R</kbd> or <kbd>Cmd+Shift+R</kbd>). If still missing, the photo key may not have been saved to the person record — re-upload it on the profile.</p>
+
+    <h3>App is slow or unresponsive</h3>
+    <p>Cloudflare Workers have a 30-second execution limit. If a request times out (you see a Cloudflare error page instead of the app's error message), it's likely a large sync or report query. Try:</p>
+    <ul>
+      <li>Narrow the date range on reports or giving sync</li>
+      <li>If doing a bulk Breeze people sync, the frontend re-triggers automatically in pages — let it complete rather than refreshing</li>
+    </ul>
+    <p>If the <em>app itself</em> won't load (not just a slow query), check <a href="https://www.cloudflarestatus.com">cloudflarestatus.com</a> for an outage.</p>
+
+    <h3>Before risky operations — take a backup</h3>
+    <p>If a developer is about to run a bulk sync, force-remove, or migration, export a D1 snapshot first:</p>
+    <pre><code>wrangler d1 export tlc-volunteer-db --remote --output pre-op-backup-$(date +%Y%m%d-%H%M).sql</code></pre>
+    <p>To restore from that backup:</p>
+    <pre><code>wrangler d1 execute tlc-volunteer-db --remote --file pre-op-backup-20260425-0900.sql</code></pre>
+    <p>Cloudflare also keeps point-in-time backups for 30 days — go to Cloudflare Dashboard → D1 → <code>tlc-volunteer-db</code> → Backups to restore a specific timestamp.</p>
+
+    <h3>Headless household count keeps increasing</h3>
+    <p>Newly imported people from Breeze may not have a <code>family_role</code> set. After any Breeze people sync, check Settings → the headless count indicator and run <kbd>Fix Household Heads</kbd> if the count is high.</p>
+
+    <h3>Getting help</h3>
+    <p>For issues that can't be resolved through the UI, contact the developer managing the app. Provide:</p>
+    <ul>
+      <li>The exact tab and action you were doing</li>
+      <li>What you expected to happen vs. what actually happened</li>
+      <li>Approximate time (the Cloudflare Worker logs capture errors with timestamps)</li>
+      <li>Any error message shown in the UI (screenshot helpful)</li>
+    </ul>
+  </section>
+
+</main>
+
+<script>
+(function() {
+  var links = document.querySelectorAll('#sidebar nav a');
+  var sections = document.querySelectorAll('.section');
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        var id = entry.target.id;
+        links.forEach(function(a) {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(function(s) { observer.observe(s); });
+})();
+</script>
+</body>
+</html>
