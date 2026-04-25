@@ -16,6 +16,7 @@ Church Management System (ChMS) for Timothy Lutheran Church. Built on **Cloudfla
 
 | File | Purpose |
 |------|---------|
+| `manual.html` | Standalone operator reference manual (all 14 sections, no external CSS) |
 | `tlc-volunteer-worker.js` | Worker entry point — routes all requests |
 | `src/api-admin.js` | Auth, user management, scheduler API |
 | `src/api-chms.js` | ACL checks, dashboard, delegation to domain modules |
