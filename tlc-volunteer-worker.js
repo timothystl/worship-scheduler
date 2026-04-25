@@ -90,7 +90,7 @@ async function _fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: SCHED_CORS });
 
     if (path === '/favicon.svg' && method === 'GET') {
-      const fRes = await fetch('https://raw.githubusercontent.com/timothystl/volunteer/main/favicon.svg', { cf: { cacheEverything: true, cacheTtl: 86400 } });
+      const fRes = await fetch('https://raw.githubusercontent.com/timothystl/chms/main/favicon.svg', { cf: { cacheEverything: true, cacheTtl: 86400 } });
       return new Response(fRes.ok ? fRes.body : '', { status: fRes.ok ? 200 : 404, headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
     }
     if ((path === '/' || path === '/index.html') && method === 'GET') {

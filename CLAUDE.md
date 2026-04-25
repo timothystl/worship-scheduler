@@ -1,4 +1,4 @@
-# CLAUDE.md — TLC Volunteer / ChMS App
+# CLAUDE.md — TLC ChMS App
 
 Read this at the start of every session. Update NOTES.md (and this file if needed) as items are discovered, fixed, or queued.
 
@@ -412,6 +412,10 @@ Run through this at the end of any session before pushing, or at the start of a 
 - DEPLOY_VERSION is at the top of the `<script>` block in `html-chms.js`. Bump it on every commit.
 
 ---
+
+## GitHub Repo
+
+**Repo**: `timothystl/chms` (renamed from `timothystl/volunteer` 2026-04-25 — Worker is `tlc-chms`, D1 is `tlc-volunteer-db`)
 
 ## Dev Branch
 
