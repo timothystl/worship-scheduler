@@ -170,6 +170,23 @@ function _transformJs(js) {
   //    schedInitScheduler calls d1Pull() directly (avoids checkAuth() indirection
   //    which is unnecessary — the user is already authenticated in ChMS). It also
   //    sets the month label in case the page-load INIT try/catch swallowed an error.
+  // 9. Replace CSS-class-based .sunday-detail visibility with explicit inline style.
+  //    The scheduler's <style> tag lives inside a .tab-panel that starts display:none;
+  //    some browsers may apply those rules lazily or with unexpected specificity when
+  //    the panel becomes visible. Using style.display directly is unambiguous.
+  js = js.replace(
+    /tr\.classList\.remove\('visible'\);/g,
+    "tr.style.display='none';"
+  );
+  js = js.replace(
+    /tr\.classList\.add\('visible'\);/g,
+    "tr.style.display='table-row';"
+  );
+  js = js.replace(
+    /tr\.classList\.toggle\('visible', isExpanded\);/g,
+    "tr.style.display=isExpanded?'table-row':'none';"
+  );
+
   const _schedInitCode = 'window.schedInitScheduler = function() {\n'
      + '  if (window._schedInited) return;\n'
      + '  window._schedInited = true;\n'
@@ -177,7 +194,11 @@ function _transformJs(js) {
      + '    var _ml = document.getElementById(\'sched-current-month-label\');\n'
      + '    if (_ml) _ml.textContent = monthKeyLabel(currentMonthKey);\n'
      + '  } catch(e) {}\n'
-     + '  if (typeof d1Pull === \'function\') d1Pull();\n'
+     + '  if (typeof d1Pull === \'function\') {\n'
+     + '    d1Pull().then(function() {\n'
+     + '      document.querySelectorAll(\'.sunday-detail\').forEach(function(tr) { tr.style.display=\'none\'; });\n'
+     + '    }).catch(function(){});\n'
+     + '  }\n'
      + '  if (typeof fetchPendingSignups === \'function\') fetchPendingSignups();\n'
      + '  if (typeof fetchGeneralVolunteers === \'function\') fetchGeneralVolunteers();\n'
      + '  if (typeof fetchEventVolunteers === \'function\') fetchEventVolunteers();\n'
