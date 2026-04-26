@@ -151,11 +151,26 @@ function _transformJs(js) {
     'var _embedded = true;'
   );
 
-  // 2. Drop esc() — ChMS already exposes an identical global esc()
-  js = js.replace(/function esc\(s\) \{[^}]*\}/, '');
+  // 2. Keep scheduler's own esc(). The scheduler <script> runs at page load
+  //    BEFORE ChMS's <script> defines its own esc(). Several scheduler init
+  //    callbacks (renderPeopleList, loadSchedule → renderTable) call esc()
+  //    immediately. Dropping the scheduler's definition would make those
+  //    throw ReferenceError at load (harmless via _safeInit catch, but it
+  //    pollutes the console and skips the initial paint). ChMS's later
+  //    function declaration will overwrite this one — both versions are
+  //    functionally equivalent (HTML entity escape).
 
   // 3. Fix relative URL — without <base href="/scheduler/">, this would 404
   js = js.replace("fetch('lcms_calendar.json')", "fetch('/scheduler/lcms_calendar.json')");
+
+  // 3b. Strip workerUrl prefix from fetch() calls. The scheduler historically
+  //     lived at volunteer.timothystl.org and stored that as workerUrl. Now
+  //     that everything runs in the same Worker, fetch calls must be
+  //     same-origin or CSP (connect-src 'self') will block them. The
+  //     workerUrl setting is still preserved for email body links (which
+  //     need full URLs so volunteers can click from their inbox).
+  js = js.replace(/fetch\(\s*s\.workerUrl\s*\+\s*/g,         "fetch(");
+  js = js.replace(/fetch\(\s*settings\.workerUrl\s*\+\s*/g,  "fetch(");
 
   // 4. Rename functions that collide with ChMS globals.
   //    Use \bNAME\b (not \bNAME\() so we also catch callback references like
