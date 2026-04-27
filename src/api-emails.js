@@ -131,7 +131,7 @@ function anniversaryText(name1, name2) {
   return `${greeting}\n\n${salutation}\n\nWishing you a blessed anniversary. May God continue to strengthen and bless your marriage with joy, love, and grace.\n\nWith warm regards,\nTimothy Lutheran Church\n6704 Fyler Ave, St. Louis, MO 63139`;
 }
 
-// ── Brevo SMS helpers (SMS1) ─────────────────────────────────────────────────
+// ── SMS helpers (SMS1) ──────────────────────────────────────────────────────
 
 function normalizePhone(phone) {
   const digits = (phone || '').replace(/\D/g, '');
@@ -140,14 +140,19 @@ function normalizePhone(phone) {
   return null;
 }
 
-async function sendBrevoSms(env, to, content) {
-  const apiKey = env.BREVO_API_KEY || '';
-  if (!apiKey) return { ok: false, error: 'Brevo not configured (missing BREVO_API_KEY)' };
+async function sendTwilioSms(env, to, content) {
+  const sid = env.TWILIO_ACCOUNT_SID || '';
+  if (!sid) return { ok: false, error: 'Twilio not configured (missing TWILIO_ACCOUNT_SID)' };
   try {
-    const res = await fetch('https://api.brevo.com/v3/transactionalSMS/sms', {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+    const body = new URLSearchParams({ To: to, From: env.TWILIO_PHONE_NUMBER || '', Body: content });
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender: 'TimothyLC', recipient: to, content, type: 'transactional' }),
+      headers: {
+        'Authorization': 'Basic ' + btoa(sid + ':' + (env.TWILIO_AUTH_TOKEN || '')),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
     });
     const data = await res.json().catch(() => ({}));
     return res.ok ? { ok: true } : { ok: false, error: data.message || String(res.status) };
@@ -174,7 +179,7 @@ export async function sendBirthdayTexts(env) {
     if (alreadySent.has(String(p.id))) { skipped++; continue; }
     const e164 = normalizePhone(p.phone);
     if (!e164) { errors.push(`${p.first_name} ${p.last_name}: invalid phone ${p.phone}`); continue; }
-    const result = await sendBrevoSms(env, e164,
+    const result = await sendTwilioSms(env, e164,
       `Happy Birthday, ${p.first_name}! Wishing you a blessed day. - Timothy Lutheran Church`);
     if (result.ok) {
       sent++;
@@ -223,7 +228,7 @@ export async function sendAnniversaryTexts(env) {
     for (const p of members) {
       const e164 = normalizePhone(p.phone);
       if (!e164) continue;
-      const result = await sendBrevoSms(env, e164, content);
+      const result = await sendTwilioSms(env, e164, content);
       if (result.ok) { sent++; householdSent = true; }
       else errors.push(`${p.first_name}: ${result.error}`);
     }
