@@ -259,6 +259,9 @@ function renderAttendanceChart(services) {
   var pts=dataPts.map(function(d,i){return [px(i),py(byDate[d])];});
   var line=pts.map(function(p,i){return(i?'L ':'M ')+p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ');
   var area=line+' L '+px(n-1).toFixed(1)+','+(pT+cH)+' L '+pL+','+(pT+cH)+' Z';
+  var yearsInRange={};
+  dataPts.forEach(function(d){yearsInRange[d.slice(0,4)]=1;});
+  var multiYear=Object.keys(yearsInRange).length>1;
   var step=Math.max(1,Math.ceil(n/10));
   var xlbls='',ylbls='',grid='';
   [0,Math.round(maxV*0.5/1.1),Math.round(maxV/1.1)].forEach(function(v){
@@ -268,7 +271,8 @@ function renderAttendanceChart(services) {
   });
   for(var i=0;i<n;i+=step){
     var p=dataPts[i].split('-');
-    xlbls+='<text x="'+px(i).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+MONTH_NAMES[parseInt(p[1])-1]+' '+parseInt(p[2])+'</text>';
+    var xlbl=MONTH_NAMES[parseInt(p[1])-1]+' '+parseInt(p[2])+(multiYear?' \''+p[0].slice(2):'');
+    xlbls+='<text x="'+px(i).toFixed(1)+'" y="'+(H-5)+'" text-anchor="middle" fill="#9A8A78" font-size="9">'+xlbl+'</text>';
   }
   var avgPts=[];
   for(var ai=3;ai<n;ai++){
@@ -286,9 +290,8 @@ function renderAttendanceChart(services) {
     return px(lo)+t*(px(hi)-px(lo));
   };
   var markers='';
-  var yearsInRange={};
-  dataPts.forEach(function(d){yearsInRange[d.slice(0,4)]=1;});
   Object.keys(yearsInRange).forEach(function(yr){
+    var yr2=multiYear?' \''+yr.slice(2):'';
     var ey=parseInt(yr),ea=ey%19,eb=Math.floor(ey/100),ec=ey%100;
     var edd=Math.floor(eb/4),ee=eb%4,ef=Math.floor((eb+8)/25);
     var eg=Math.floor((eb-ef+1)/3),eh=(19*ea+eb-edd-eg+15)%30;
@@ -299,13 +302,13 @@ function renderAttendanceChart(services) {
     var ex=xAtAnyDate(eDate);
     if(ex>=0){
       markers+='<line x1="'+ex.toFixed(1)+'" y1="'+pT+'" x2="'+ex.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#5A9E6F" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
-      markers+='<text x="'+ex.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#5A9E6F" font-size="8">Easter</text>';
+      markers+='<text x="'+ex.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#5A9E6F" font-size="8">Easter'+yr2+'</text>';
     }
     [yr+'-12-24',yr+'-12-25'].forEach(function(xd,xi){
       var xx=xAtAnyDate(xd);
       if(xx>=0){
         markers+='<line x1="'+xx.toFixed(1)+'" y1="'+pT+'" x2="'+xx.toFixed(1)+'" y2="'+(pT+cH)+'" stroke="#9B59B6" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>';
-        markers+='<text x="'+xx.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#9B59B6" font-size="8">'+(xi===0?'Xmas Eve':'Christmas')+'</text>';
+        markers+='<text x="'+xx.toFixed(1)+'" y="'+(pT+9)+'" text-anchor="middle" fill="#9B59B6" font-size="8">'+(xi===0?'Xmas Eve':'Christmas')+yr2+'</text>';
       }
     });
   });
@@ -320,10 +323,35 @@ function renderAttendanceChart(services) {
     +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:2px;height:12px;background:#5A9E6F;border-left:2px dashed #5A9E6F;"></span>Easter</span>'
     +'<span style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--warm-gray);"><span style="display:inline-block;width:2px;height:12px;background:#9B59B6;border-left:2px dashed #9B59B6;"></span>Christmas</span>'
     +'</div>';
-  if(cw) cw.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="min-width:'+W+'px;width:100%;height:'+H+'px;">'+grid
+  if(cw) cw.innerHTML='<svg id="att-chart-svg" viewBox="0 0 '+W+' '+H+'" style="min-width:'+W+'px;width:100%;height:'+H+'px;">'+grid
     +'<path d="'+area+'" fill="rgba(46,126,166,0.12)"/>'
     +'<path d="'+line+'" fill="none" stroke="#2E7EA6" stroke-width="2" stroke-linejoin="round"/>'
     +avgLine+markers+dots+xlbls+ylbls+'</svg>'+avgLegend;
+}
+
+function downloadAttChart() {
+  var svg = document.getElementById('att-chart-svg');
+  if (!svg) { alert('No chart to download. Switch to Line view first.'); return; }
+  var svgData = new XMLSerializer().serializeToString(svg);
+  var canvas = document.createElement('canvas');
+  var vb = svg.viewBox.baseVal;
+  canvas.width = vb.width * 2;
+  canvas.height = vb.height * 2;
+  var ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#faf7f2';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  var img = new Image();
+  var blob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    var link = document.createElement('a');
+    link.download = 'attendance-' + new Date().toISOString().slice(0,10) + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  img.src = url;
 }
 
 function renderSpecialServicesChart(services) {

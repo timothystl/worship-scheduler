@@ -35,16 +35,14 @@ var _selectMode = false, _selectedPeople = new Set();
 var _editingHouseholdId = null;
 var _churchConfig = {};
 var DEFAULT_LETTER_TEMPLATE = 'Dear {{name}},\\n\\nThank you for your generous contributions to Timothy Lutheran Church during {{year}}. Your gifts make a difference in our ministry and community.\\n\\nBelow is a summary of your giving for {{year}}:\\n\\n{{gift_table}}\\n\\nTotal Contributions: {{total}}\\n\\n{{#if_ein}}Our EIN/Tax ID is {{ein}}. No goods or services were provided in exchange for these contributions. Please retain this letter for your tax records.{{/if_ein}}\\n\\nWith gratitude,\\n\\nTimothy Lutheran Church\\n\\nDate: {{date}}';
-var _userRole = 'admin';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
 function api(path, opts) {
   return fetch(path, opts || {}).then(function(r) {
     if (r.status === 401) { location.href = '/chms'; return Promise.reject(new Error('Unauthorized')); }
     return r.json().then(function(data) {
-      if (data && data.error && !opts) {
-        // Surface API errors as rejected promises so callers can .catch() them
-        // Exception: mutation calls (POST/PUT/DELETE) that return {error} are handled by their own code
+      if (!r.ok && data && data.error && !opts) {
+        return Promise.reject(new Error(data.error));
       }
       return data;
     });
@@ -230,7 +228,7 @@ window.addEventListener('load', function() {
   if (bsy) bsy.value = y;
   // Fetch role first so UI restrictions apply before content loads
   api('/admin/api/me').then(function(d) {
-    applyRoleUI(d && d.role ? d.role : 'admin');
+    applyRoleUI(d && d.role ? d.role : 'admin', d && d.display_name);
   }).catch(function() {
     applyRoleUI('admin');
   }).finally(function() {
@@ -241,34 +239,21 @@ window.addEventListener('load', function() {
     showTab(_userRole === 'member' ? 'people' : 'home');
   });
 });
-function applyRoleUI(role) {
-  _userRole = role || 'admin';
-  var body = document.body;
-  body.className = body.className.replace(/\brole-\w+/g, '').trim() + ' role-' + _userRole;
-  var ri = document.getElementById('topbar-role');
-  if (ri) {
-    var labels = { finance: 'Finance', staff: 'Staff', member: 'Member (read-only)' };
-    if (labels[_userRole]) { ri.textContent = labels[_userRole]; ri.style.display = ''; }
-    else ri.style.display = 'none';
-  }
-}
-
 // ── ROLE UI ──────────────────────────────────────────────────────────────
-function applyRoleUI() {
-  fetch('/admin/api/me').then(function(r){ return r.json(); }).then(function(d) {
-    _userRole = d.role || 'admin';
-    if (_userRole === 'unknown') { location.href = '/chms'; return; }
-    document.body.classList.remove('role-admin','role-finance','role-staff','role-member');
-    document.body.classList.add('role-' + _userRole);
-    var badge = document.getElementById('topbar-role');
-    if (badge && _userRole !== 'admin') {
-      badge.textContent = d.display_name || _userRole;
+function applyRoleUI(role, displayName) {
+  _userRole = role || 'admin';
+  if (_userRole === 'unknown') { location.href = '/chms'; return; }
+  document.body.classList.remove('role-admin','role-finance','role-staff','role-member');
+  document.body.classList.add('role-' + _userRole);
+  var badge = document.getElementById('topbar-role');
+  if (badge) {
+    if (_userRole !== 'admin') {
+      badge.textContent = displayName || _userRole;
       badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
     }
-    // Member users land on People tab; everyone else gets the home dashboard
-    if (_userRole === 'member') { showTab('people'); }
-    else { showTab('home'); }
-  }).catch(function() { showTab('home'); });
+  }
 }
 
 // ── TAGS ──────────────────────────────────────────────────────────────
