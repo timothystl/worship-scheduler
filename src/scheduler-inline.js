@@ -172,6 +172,20 @@ function _transformJs(js) {
   js = js.replace(/fetch\(\s*s\.workerUrl\s*\+\s*/g,         "fetch(");
   js = js.replace(/fetch\(\s*settings\.workerUrl\s*\+\s*/g,  "fetch(");
 
+  // 3c. Force window.location.origin as base in breezeGet/breezePost so a
+  //     misconfigured workerUrl never routes Breeze proxy calls to the wrong host.
+  js = js.replace(
+    /\(s\.workerUrl \|\| window\.location\.origin\)\.replace/g,
+    'window.location.origin.replace'
+  );
+
+  // 3d. Relax the apiKey required guard — in inline context the server holds
+  //     the Breeze API key via env var; the settings field will always be blank.
+  js = js.replace(
+    "if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }",
+    "if (!subdomain) { showAlert('settings-alert','Please enter your Breeze subdomain.','warning'); return; }"
+  );
+
   // 4. Rename functions that collide with ChMS globals.
   //    Use \bNAME\b (not \bNAME\() so we also catch callback references like
   //    addEventListener('click', savePerson) — those are bare identifier
@@ -221,21 +235,28 @@ function _transformJs(js) {
   const _schedInitCode = 'window.schedInitScheduler = function() {\n'
      + '  if (window._schedInited) return;\n'
      + '  window._schedInited = true;\n'
-     + '  // Click-blocking belt-and-suspenders: scope-prefixed rules now also live\n'
-     + '  // in the appended <style> ensuring closed side-panels and the closed overlay\n'
-     + '  // pass clicks through (their position:fixed; height:100vh hit-test region can\n'
-     + '  // still absorb clicks in some scenarios). When a panel opens, the .open rule\n'
-     + '  // restores pointer-events:auto so background clicks close it normally.\n'
      + '  try {\n'
      + '    var _ml = document.getElementById(\'sched-current-month-label\');\n'
      + '    if (_ml) _ml.textContent = monthKeyLabel(currentMonthKey);\n'
      + '  } catch(e) {}\n'
-     + '  if (typeof d1Pull === \'function\') {\n'
-     + '    d1Pull().then(function() {\n'
-     + '      document.querySelectorAll(\'.sunday-detail\').forEach(function(tr) { tr.style.display=\'none\'; });\n'
-     + '      if (typeof syncConfirmations === \'function\') syncConfirmations(true);\n'
-     + '    }).catch(function(){});\n'
-     + '  }\n'
+     + '  var _cfgFetch = fetch(\'/admin/api/scheduler/config\', {credentials:\'include\'})\n'
+     + '    .then(function(r) { return r.ok ? r.json() : {}; }).catch(function() { return {}; });\n'
+     + '  var _d1Fetch = (typeof d1Pull === \'function\') ? d1Pull() : Promise.resolve();\n'
+     + '  Promise.all([_cfgFetch, _d1Fetch]).then(function(res) {\n'
+     + '    var cfg = res[0];\n'
+     + '    try {\n'
+     + '      var _s = getBreezeSettings();\n'
+     + '      if (cfg.subdomain) _s.subdomain = cfg.subdomain;\n'
+     + '      if (cfg.emailFrom) _s.emailFrom = cfg.emailFrom;\n'
+     + '      if (cfg.workerUrl) _s.workerUrl = cfg.workerUrl;\n'
+     + '      if (Array.isArray(cfg.tagIds) && cfg.tagIds.length && !(_s.tagIds && _s.tagIds.length)) _s.tagIds = cfg.tagIds;\n'
+     + '      if (cfg.replyTo && !_s.replyTo) _s.replyTo = cfg.replyTo;\n'
+     + '      saveBreezeSettings(_s);\n'
+     + '      if (typeof loadSettingsForm === \'function\') loadSettingsForm();\n'
+     + '    } catch(e) {}\n'
+     + '    document.querySelectorAll(\'.sunday-detail\').forEach(function(tr) { tr.style.display=\'none\'; });\n'
+     + '    if (typeof syncConfirmations === \'function\') syncConfirmations(true);\n'
+     + '  }).catch(function(){});\n'
      + '  if (typeof fetchPendingSignups === \'function\') fetchPendingSignups();\n'
      + '  if (typeof fetchGeneralVolunteers === \'function\') fetchGeneralVolunteers();\n'
      + '  if (typeof fetchEventVolunteers === \'function\') fetchEventVolunteers();\n'

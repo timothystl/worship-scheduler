@@ -3579,8 +3579,7 @@ document.getElementById('btn-save-settings').addEventListener('click', function(
   var resendKey = document.getElementById('email-resend-key').value.trim();
   var emailFrom = document.getElementById('email-from').value.trim();
   var replyTo   = document.getElementById('email-reply-to').value.trim();
-  if (!subdomain||!apiKey) { showAlert('settings-alert','Please enter both subdomain and API key.','warning'); return; }
-  if (!workerUrl) { showAlert('settings-alert','Please enter your Cloudflare Worker URL.','warning'); return; }
+  if (!subdomain) { showAlert('settings-alert','Please enter your Breeze subdomain.','warning'); return; }
   saveBreezeSettings({ subdomain:subdomain, apiKey:apiKey, workerUrl:workerUrl, workerSecret:workerSecret, tagIds:tagIds, resendKey:resendKey, emailFrom:emailFrom, replyTo:replyTo });
   queueD1Push();
   showAlert('settings-alert','Settings saved!','success');
