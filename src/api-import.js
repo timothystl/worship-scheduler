@@ -1638,11 +1638,23 @@ if (seg === 'import/breeze-giving' && method === 'POST') { try {
   diag.correctedCount = corrected;
 
   // ── Orphan cleanup pass ───────────────────────────────────────────────────
-  // When Breeze edits a contribution it creates a NEW payment ID. The supplement
-  // pass already imported the corrected version from giving/list; this pass removes
-  // the old stale entry whose breeze_id no longer appears in giving/list.
-  // Safety condition: only delete if a current replacement exists for the same
-  // person+date — this prevents removing entries that Breeze fully deleted.
+  // Any DB row whose breeze_id is NOT in the giving/list response for this window
+  // is an orphan: it came from Breeze originally but Breeze has since deleted or
+  // re-keyed it. Delete unconditionally — Breeze is the source of truth.
+  //
+  // Why no "same-person+same-date replacement" gate any more: the conservative
+  // version only caught same-day edits. Breeze edits that change the date, full
+  // deletes (Breeze's bulk_contributions_deleted event references the batch, not
+  // the payment IDs, so the sync's dedup never sees them), and merges all left
+  // permanent extras the sync couldn't clean up — see NOTES on the 40085 fund
+  // discrepancy. Manual app entries are excluded by `breeze_id != ''`.
+  //
+  // Safeguards: (1) skip if giving/list looks truncated (== 10000 limit), since
+  // a truncated response would falsely flag many entries as orphans; (2) cap at
+  // a sanity max — refuse to bulk-delete if more than half the window's rows
+  // would go (suggests an API failure not a real cleanup).
+  const GIVING_LIST_LIMIT = 10000;
+  const ORPHAN_MAX_RATIO = 0.5;
   let orphansRemoved = 0;
   {
     const winRows = (await db.prepare(
@@ -1651,17 +1663,24 @@ if (seg === 'import/breeze-giving' && method === 'POST') { try {
        WHERE ge.contribution_date >= ? AND ge.contribution_date <= ? AND ge.breeze_id != ''`
     ).bind(lateStart, end).all()).results || [];
 
-    const orphaned = winRows.filter(r => !glByPaymentId.has(r.breeze_id));
-    const currentKeys = new Set(
-      winRows.filter(r => glByPaymentId.has(r.breeze_id))
-        .map(r => `${r.person_id}::${r.contribution_date}`)
-    );
-    const toDelete = orphaned.filter(r => currentKeys.has(`${r.person_id}::${r.contribution_date}`));
+    // Split-suffix `pid-N` rows from the legacy CSV importer match if base pid is in giving/list.
+    const isOrphan = bid => {
+      if (!bid) return false;
+      if (glByPaymentId.has(bid)) return false;
+      const m = bid.match(/^(\d+)-(\d+)$/);
+      if (m && glByPaymentId.has(m[1])) return false;
+      return true;
+    };
+    const orphaned = winRows.filter(r => isOrphan(r.breeze_id));
 
-    if (toDelete.length > 0) {
+    const truncationLikely = glByPaymentId.size >= GIVING_LIST_LIMIT;
+    const ratioExceeded = winRows.length > 0 && (orphaned.length / winRows.length) > ORPHAN_MAX_RATIO;
+    const safetyAbort = truncationLikely || ratioExceeded;
+
+    if (orphaned.length > 0 && !safetyAbort) {
       const deleteOps = [];
-      for (let i = 0; i < toDelete.length; i += 90) {
-        const chunk = toDelete.slice(i, i + 90);
+      for (let i = 0; i < orphaned.length; i += 90) {
+        const chunk = orphaned.slice(i, i + 90);
         const placeholders = chunk.map(() => '?').join(',');
         deleteOps.push(
           db.prepare(`DELETE FROM giving_entries WHERE id IN (${placeholders})`).bind(...chunk.map(r => r.id))
@@ -1671,9 +1690,18 @@ if (seg === 'import/breeze-giving' && method === 'POST') { try {
         const results = await db.batch(deleteOps.slice(i, i + 10));
         for (const r of results) orphansRemoved += r.meta?.changes || 0;
       }
+      // Drop now-empty batches the deletes left behind.
+      await db.prepare(
+        'DELETE FROM giving_batches WHERE id NOT IN (SELECT DISTINCT batch_id FROM giving_entries)'
+      ).run();
     }
     diag.orphansRemoved = orphansRemoved;
     diag.orphanCandidates = orphaned.length;
+    diag.orphanSafetyAbort = safetyAbort;
+    if (safetyAbort) diag.orphanSafetyReason = truncationLikely
+      ? `giving/list returned ${glByPaymentId.size} payments (>= limit ${GIVING_LIST_LIMIT}), likely truncated`
+      : `would delete ${orphaned.length} of ${winRows.length} rows (> ${ORPHAN_MAX_RATIO * 100}%)`;
+    diag.breezePaymentsForCleanup = glByPaymentId.size;
   }
 
   // ── Report contributions tied to still-unresolved "Breeze Fund XXXXX" funds ──
