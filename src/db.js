@@ -446,8 +446,9 @@ export function initDb(db) {
 }
 
 async function _doInitDb(db) {
-  // Batch all CREATE TABLE IF NOT EXISTS in one round-trip
-  await db.batch(DB_INIT.map(s => db.prepare(s)));
+  for (const stmt of DB_INIT) {
+    await db.prepare(stmt).run();
+  }
   // Migrations for existing deployments
   const migrations = [
     'ALTER TABLE serve_roles ADD COLUMN role_date TEXT NOT NULL DEFAULT ""',
