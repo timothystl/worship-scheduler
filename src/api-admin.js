@@ -71,6 +71,37 @@ export async function handleSchedulerDataApi(req, env, url, method) {
     return json({ ok: true });
   }
 
+  // GET /admin/api/scheduler/config
+  if (seg === 'config' && method === 'GET') {
+    const db = env.DB;
+    const [tagRow, replyRow] = await Promise.all([
+      db.prepare("SELECT value FROM chms_config WHERE key='scheduler_tag_ids'").first(),
+      db.prepare("SELECT value FROM chms_config WHERE key='scheduler_reply_to'").first(),
+    ]);
+    let tagIds = [];
+    try { tagIds = JSON.parse(tagRow?.value || '[]'); } catch {}
+    return json({
+      subdomain: env.BREEZE_SUBDOMAIN || '',
+      emailFrom: env.EMAIL_FROM || '',
+      workerUrl: new URL(req.url).origin,
+      tagIds,
+      replyTo: replyRow?.value || '',
+    });
+  }
+
+  // PUT /admin/api/scheduler/config
+  if (seg === 'config' && method === 'PUT') {
+    const db = env.DB;
+    let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+    const ops = [];
+    if (Array.isArray(b.tagIds))
+      ops.push(db.prepare("INSERT INTO chms_config(key,value) VALUES('scheduler_tag_ids',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(b.tagIds)));
+    if (typeof b.replyTo === 'string')
+      ops.push(db.prepare("INSERT INTO chms_config(key,value) VALUES('scheduler_reply_to',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(b.replyTo));
+    if (ops.length) await db.batch(ops);
+    return json({ ok: true });
+  }
+
   return json({ error: 'Not found' }, 404);
 }
 
