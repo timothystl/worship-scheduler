@@ -221,6 +221,7 @@ export const HTML_TABS_1 = String.raw`<!-- ═══ HOME / DASHBOARD TAB ══
           <button class="btn-sm" id="att-mode-line" onclick="setAttChartMode(&#39;line&#39;)" style="padding:3px 8px;font-size:.75rem;" title="Weekly timeline">Line</button>
           <button class="btn-sm" id="att-mode-yoy" onclick="setAttChartMode(&#39;yoy&#39;)" style="padding:3px 8px;font-size:.75rem;opacity:.55;" title="Year-over-year comparison">YoY</button>
           <button class="btn-sm" id="att-mode-bars" onclick="setAttChartMode(&#39;bars&#39;)" style="padding:3px 8px;font-size:.75rem;opacity:.55;" title="Monthly bars">Bars</button>
+          <button class="btn-sm" onclick="downloadAttChart()" style="padding:3px 8px;font-size:.75rem;opacity:.7;" title="Download chart as PNG">&#8595; PNG</button>
         </div>
       </div>
       <div id="att-chart-wrap" style="overflow-x:auto;overflow-y:hidden;"></div>
