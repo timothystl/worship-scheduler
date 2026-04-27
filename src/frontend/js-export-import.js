@@ -427,7 +427,8 @@ function runBreezeGivingSync() {
     var msg = 'Done. ' + (d.imported||0) + ' imported';
     if (d.lateImported) msg += ', ' + d.lateImported + ' cross-year late entries imported';
     if (d.corrected) msg += ', ' + d.corrected + ' in-place corrections';
-    if (d.orphansRemoved) msg += ', ' + d.orphansRemoved + ' stale entries replaced by edits removed';
+    if (d.orphansRemoved) msg += ', ' + d.orphansRemoved + ' stale entries removed (deleted/edited in Breeze)';
+    if (d.diagnostics && d.diagnostics.orphanSafetyAbort) msg += ', ' + (d.diagnostics.orphanCandidates || 0) + ' orphan candidates SKIPPED (safety: ' + (d.diagnostics.orphanSafetyReason || 'unknown') + ')';
     if (d.skipped) msg += ', ' + d.skipped + ' already existed';
     if (d.skippedDateFilter) msg += ', ' + d.skippedDateFilter + ' outside date range (see diagnostics)';
     if (d.dupesRemoved) msg += ', ' + d.dupesRemoved + ' dupes removed';
