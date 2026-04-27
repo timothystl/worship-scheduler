@@ -437,10 +437,17 @@ export async function seedChmsDefaults(db) {
 }
 
 
-export async function initDb(db) {
-  for (const stmt of DB_INIT) {
-    await db.prepare(stmt).run();
-  }
+// Cache the init so it only runs once per Worker isolate (not on every request).
+// Resets to null on error so the next request retries.
+let _initPromise = null;
+export function initDb(db) {
+  if (!_initPromise) _initPromise = _doInitDb(db).catch(e => { _initPromise = null; throw e; });
+  return _initPromise;
+}
+
+async function _doInitDb(db) {
+  // Batch all CREATE TABLE IF NOT EXISTS in one round-trip
+  await db.batch(DB_INIT.map(s => db.prepare(s)));
   // Migrations for existing deployments
   const migrations = [
     'ALTER TABLE serve_roles ADD COLUMN role_date TEXT NOT NULL DEFAULT ""',
@@ -524,3 +531,4 @@ export async function initDb(db) {
   await migrateChristmasMarketRoles(db);
   await seedChmsDefaults(db);
 }
+
