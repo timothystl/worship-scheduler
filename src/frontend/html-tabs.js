@@ -819,7 +819,7 @@ export const HTML_TABS_2 = String.raw`
       <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="pm-state" name="pm-state" style="width:60px;" maxlength="2" placeholder="MO"><input type="text" id="pm-zip" name="pm-zip" placeholder="63000"></div></div>
     </div>
     <div style="margin-top:4px;display:flex;align-items:center;gap:10px;">
-      <button type="button" id="pm-addr-validate-btn" class="btn-secondary" style="font-size:.78rem;padding:3px 10px;" onclick="validatePersonAddress()">Validate Address (USPS)</button>
+      <button type="button" id="pm-addr-validate-btn" class="btn-secondary" style="font-size:.78rem;padding:3px 10px;" onclick="validatePersonAddress()">Validate Address</button>
       <span id="pm-addr-validate-status" style="font-size:.78rem;"></span>
     </div>
     <div class="modal-section">Church Info</div>
