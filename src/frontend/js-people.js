@@ -359,6 +359,7 @@ function showProfile(p) {
           + '<span id="pv-newsletter-status" style="font-size:.75rem;line-height:2;color:var(--teal);"></span>'
           + '</div>' : '')
       + (p.household_id ? '<div style="margin-top:8px;"><button class="btn-secondary" style="font-size:.78rem;padding:4px 10px;" onclick="applyAddressToHousehold('+p.id+','+p.household_id+')">Push address to household members without one</button></div>' : '')
+      + (addrParts.length >= 2 ? '<div style="margin-top:8px;"><button id="pv-map-btn-'+p.id+'" class="btn-secondary" style="font-size:.75rem;padding:3px 9px;" onclick="togglePersonMap('+p.id+')">&#9654; Show Map</button><div id="pv-map-'+p.id+'" data-addr="'+encodeURIComponent(addrParts.join(', '))+'" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;line-height:0;"></div></div>' : '')
       + '</div>'
       + '<div class="pv-section">'
       + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><div class="pv-section-title" style="margin:0;">Family</div>'
@@ -1808,6 +1809,22 @@ function createHouseholdForPerson(personId, lastName) {
       });
     });
   });
+}
+
+// ── GOOGLE MAPS EMBED ─────────────────────────────────────────────────────
+function togglePersonMap(personId) {
+  var el  = document.getElementById('pv-map-' + personId);
+  var btn = document.getElementById('pv-map-btn-' + personId);
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.innerHTML = '<iframe src="https://maps.google.com/maps?q=' + el.dataset.addr + '&output=embed&hl=en" width="100%" height="240" style="border:0;display:block;" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>';
+    el.style.display = '';
+    if (btn) btn.textContent = '▼ Hide Map';
+  } else {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    if (btn) btn.textContent = '► Show Map';
+  }
 }
 
 `;
