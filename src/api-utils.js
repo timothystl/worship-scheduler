@@ -83,76 +83,71 @@ export function normalizePhone(raw) {
   return raw;
 }
 
-// ── USPS ADDRESS VALIDATION ───────────────────────────────────────────────
-// OAuth token cached per Worker isolate (refreshed when within 30 s of expiry).
-let _uspsToken = null;
-let _uspsTokenExpiry = 0;
-
-async function getUspsToken(env) {
-  if (_uspsToken && Date.now() < _uspsTokenExpiry - 30_000) return _uspsToken;
-  const res = await fetch('https://apis.usps.com/oauth2/v3/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: env.USPS_CLIENT_ID,
-      client_secret: env.USPS_CLIENT_SECRET,
-    }).toString(),
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => res.status);
-    throw new Error('USPS auth failed ' + res.status + ': ' + txt);
-  }
-  const data = await res.json();
-  _uspsToken = data.access_token;
-  _uspsTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
-  return _uspsToken;
-}
+// ── LOB ADDRESS VALIDATION ────────────────────────────────────────────────
+// Uses Lob's US Verification API (Basic auth, API key as username).
+// Lob deliverability values → dpvConfirmation equivalents returned to frontend:
+//   deliverable                → Y (confirmed)
+//   deliverable_unnecessary_unit → Y (confirmed, unit not needed)
+//   deliverable_missing_unit   → S (primary ok, secondary needed)
+//   deliverable_incorrect_unit → D (primary ok, secondary wrong)
+//   undeliverable              → N (no match)
 
 // ── UTILS API HANDLER ─────────────────────────────────────────────────────
 export async function handleUtilsApi(req, env, url, method, seg, db, isAdmin) {
 
   // POST /admin/api/utils/validate-address
   if (seg === 'utils/validate-address' && method === 'POST') {
-    if (!env.USPS_CLIENT_ID || !env.USPS_CLIENT_SECRET) {
-      return json({ error: 'USPS credentials not configured — add USPS_CLIENT_ID and USPS_CLIENT_SECRET secrets in Cloudflare.' }, 503);
+    if (!env.LOB_API_KEY) {
+      return json({ error: 'LOB_API_KEY secret not configured in Cloudflare.' }, 503);
     }
     let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
-    const streetAddress = (b.address1 || '').trim();
-    if (!streetAddress) return json({ error: 'address1 is required' }, 400);
+    const primary_line = (b.address1 || '').trim();
+    if (!primary_line) return json({ error: 'address1 is required' }, 400);
 
     try {
-      const token = await getUspsToken(env);
-      const params = new URLSearchParams({ streetAddress });
-      if (b.address2?.trim()) params.set('secondaryAddress', b.address2.trim());
-      if (b.city?.trim())     params.set('city', b.city.trim());
-      if (b.state?.trim())    params.set('state', b.state.trim());
-      if (b.zip?.trim())      params.set('ZIPCode', b.zip.replace(/[^0-9]/g, '').slice(0, 5));
+      const body = { primary_line };
+      if (b.address2?.trim()) body.secondary_line = b.address2.trim();
+      if (b.city?.trim())     body.city = b.city.trim();
+      if (b.state?.trim())    body.state = b.state.trim();
+      if (b.zip?.trim())      body.zip_code = b.zip.replace(/[^0-9]/g, '').slice(0, 5);
 
-      const res = await fetch(`https://apis.usps.com/addresses/v3/address?${params}`, {
-        headers: { Authorization: 'Bearer ' + token },
+      const res = await fetch('https://api.lob.com/v1/us_verifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Basic ' + btoa(env.LOB_API_KEY + ':'),
+        },
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg = body.error?.message || body.message || ('USPS error ' + res.status);
+        const err = await res.json().catch(() => ({}));
+        const msg = err.error?.message || ('Lob error ' + res.status);
         return json({ error: msg }, 422);
       }
 
       const data = await res.json();
-      const addr = data.address || {};
-      const dpv = addr.deliverabilityAnalysis?.dpvConfirmation || '';
+      const c = data.components || {};
+      // Map Lob deliverability to dpvConfirmation for consistent frontend handling
+      const lobDpv = {
+        deliverable: 'Y',
+        deliverable_unnecessary_unit: 'Y',
+        deliverable_missing_unit: 'S',
+        deliverable_incorrect_unit: 'D',
+        undeliverable: 'N',
+      };
+      const dpv = lobDpv[data.deliverability] || 'N';
       return json({
         ok: true,
-        address1: addr.streetAddress || '',
-        address2: addr.secondaryAddress || '',
-        city: addr.city || '',
-        state: addr.state || '',
-        zip: addr.ZIPCode || '',
-        zip4: addr.ZIPPlus4 || '',
-        dpvConfirmation: dpv,          // Y=deliverable, S=secondary needed, D=primary only, N=no match
+        address1: data.primary_line || '',
+        address2: data.secondary_line || '',
+        city: c.city || '',
+        state: c.state || '',
+        zip: c.zip_code || '',
+        zip4: c.zip_code_plus_4 || '',
+        dpvConfirmation: dpv,
         deliverable: dpv === 'Y' || dpv === 'S' || dpv === 'D',
-        footnotes: addr.deliverabilityAnalysis?.dpvFootnotes || [],
+        deliverability: data.deliverability || '',
       });
     } catch (e) {
       return json({ error: String(e.message || e) }, 502);
