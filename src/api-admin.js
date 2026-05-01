@@ -447,6 +447,7 @@ export async function handleAdminApi(req, env, url, method) {
       seg.startsWith('followup') || seg.startsWith('audit')    ||
       seg.startsWith('organizations') || seg.startsWith('export/') ||
       seg.startsWith('prayer-requests') || seg.startsWith('engagement') ||
+      seg.startsWith('utils/')         ||
       seg === 'dashboard'      || seg === 'board'              ||
       seg === 'directory') {
     try {
