@@ -457,7 +457,7 @@ function pvField(label, val) {
 // ── PERSON PROFILE SECTION EDITING ─────────────────────────────────────
 function pvBuildPersonPatch(p, overrides) {
   var full = {};
-  ['first_name','last_name','email','phone','address1','city','state','zip',
+  ['first_name','last_name','email','phone','address1','address2','city','state','zip',
    'member_type','family_role','gender','marital_status','household_id',
    'dob','baptism_date','confirmation_date','anniversary_date','death_date',
    'deceased','public_directory','envelope_number','last_seen_date','notes','breeze_id',
@@ -509,7 +509,7 @@ function pvSaveContact() {
   });
   api('/admin/api/people/'+p.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)})
     .then(function() {
-      ['address1','city','state','zip','phone','email'].forEach(function(k){ _currentPvPerson[k] = patch[k]; });
+      ['address1','address2','city','state','zip','phone','email'].forEach(function(k){ _currentPvPerson[k] = patch[k]; });
       pvRenderContact();
     }).catch(function() {
       if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
@@ -1567,6 +1567,7 @@ function openPersonEdit(p) {
   document.getElementById('pm-phone').value = isNew ? '' : (p.phone||'');
   document.getElementById('pm-sms-opt-in').checked = !isNew && !!p.sms_opt_in;
   document.getElementById('pm-addr1').value = isNew ? '' : (p.address1||'');
+  var a2El = document.getElementById('pm-addr2'); if (a2El) a2El.value = isNew ? '' : (p.address2||'');
   document.getElementById('pm-city').value = isNew ? '' : (p.city||'');
   document.getElementById('pm-state').value = isNew ? 'MO' : (p.state||'MO');
   document.getElementById('pm-zip').value = isNew ? '' : (p.zip||'');
@@ -1666,6 +1667,7 @@ function savePerson() {
     email: document.getElementById('pm-email').value.trim(),
     phone: document.getElementById('pm-phone').value.trim(),
     address1: document.getElementById('pm-addr1').value.trim(),
+    address2: (document.getElementById('pm-addr2') || {value:''}).value.trim(),
     city: document.getElementById('pm-city').value.trim(),
     state: document.getElementById('pm-state').value.trim(),
     zip: document.getElementById('pm-zip').value.trim(),
@@ -1765,6 +1767,7 @@ function validatePersonAddress() {
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
       address1: street,
+      address2: (document.getElementById('pm-addr2') || {value:''}).value.trim(),
       city: (document.getElementById('pm-city').value || '').trim(),
       state: (document.getElementById('pm-state').value || '').trim(),
       zip: (document.getElementById('pm-zip').value || '').trim()
@@ -1776,6 +1779,7 @@ function validatePersonAddress() {
       return;
     }
     document.getElementById('pm-addr1').value = r.address1;
+    var a2v = document.getElementById('pm-addr2'); if (a2v) a2v.value = r.address2 || '';
     document.getElementById('pm-city').value  = r.city;
     document.getElementById('pm-state').value = r.state;
     document.getElementById('pm-zip').value   = r.zip + (r.zip4 ? '-' + r.zip4 : '');
