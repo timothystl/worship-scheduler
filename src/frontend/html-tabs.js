@@ -828,6 +828,7 @@ export const HTML_TABS_2 = String.raw`
     <div style="margin:-4px 0 8px;"><label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;"><input type="checkbox" id="pm-sms-opt-in"> Opt in to birthday &amp; anniversary texts (SMS)</label></div>
     <div class="modal-section" id="pm-addr-section">Address <span id="pm-addr-hint" style="font-weight:400;text-transform:none;">(leave blank to use household address)</span></div>
     <div class="field" style="margin-bottom:8px;"><label>Street</label><input type="text" id="pm-addr1" name="pm-addr1" placeholder="123 Main St"></div>
+    <div class="field" style="margin-bottom:8px;"><label>Apt / Unit</label><input type="text" id="pm-addr2" name="pm-addr2" placeholder="Apt 1S, Unit B, Suite 200…"></div>
     <div class="modal-2col">
       <div class="field"><label>City</label><input type="text" id="pm-city" name="pm-city"></div>
       <div class="field"><label>State / ZIP</label><div style="display:flex;gap:6px;"><input type="text" id="pm-state" name="pm-state" style="width:60px;" maxlength="2" placeholder="MO"><input type="text" id="pm-zip" name="pm-zip" placeholder="63000"></div></div>
