@@ -1,6 +1,6 @@
 export const JS_CORE = String.raw`<script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
-var DEPLOY_VERSION = '2026-05-01-v167';
+var DEPLOY_VERSION = '2026-05-01-v168';
 window.onerror = function(msg, src, line, col, err) {
   // Benign browser quirk when a ResizeObserver callback triggers layout — no real failure.
   if (msg && String(msg).indexOf('ResizeObserver loop') !== -1) return true;
@@ -144,6 +144,11 @@ function showTab(name) {
       window.schedInitScheduler();
     }
   }
+}
+// Navigate to a person's profile from any tab (fetches person, switches to People tab)
+function goToProfile(id) {
+  showTab('people');
+  api('/admin/api/people/' + id).then(function(p) { if (p && p.id) showProfile(p); });
 }
 function openSidebar() {
   var s = document.getElementById('sidebar'); if (s) s.classList.add('open');

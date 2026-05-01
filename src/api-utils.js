@@ -304,6 +304,14 @@ export async function handleUtilsApi(req, env, url, method, seg, db, isAdmin) {
       catch (e) { return json({ error: 'USPS auth failed: ' + e.message }, 502); }
     }
 
+    // Missouri cities that commonly appear with a missing state field
+    const MO_CITIES = new Set(['st. louis','saint louis','st louis','wentzville','fenton','crestwood',
+      'kirkwood','ballwin','arnold','florissant','hazelwood','manchester','chesterfield','wildwood',
+      'webster groves','richmond heights','brentwood','maplewood','affton','mehlville','oakville',
+      'lemay','sunset hills','des peres','ellisville','eureka','pacific','valley park','high ridge',
+      'imperial','festus','crystal city','house springs','barnhart','jefferson city','columbia',
+      'springfield','kansas city','independence','st. charles','saint charles','o\'fallon','st peters']);
+
     let validated = 0, updated = 0, failed = 0;
     const failures = [];
 
@@ -312,37 +320,73 @@ export async function handleUtilsApi(req, env, url, method, seg, db, isAdmin) {
       const batch = rows.slice(i, i + 5);
       await Promise.all(batch.map(async row => {
         try {
-          // Strip HTML from stored address regardless of USPS outcome
-          const cleanA1 = cleanAddrField(row.address1);
-          const cleanA2 = cleanAddrField(row.address2);
-          const hadHtml = cleanA1 !== (row.address1 || '') || cleanA2 !== (row.address2 || '');
+          // ── Step 1: skip placeholder "unknown" streets ──────────────
+          if (/^unknown$/i.test((row.address1 || '').trim())) return;
 
-          const r = await validateAddressCore(row, env, uspsToken);
+          // ── Step 2: strip HTML tags (e.g. <BR> from Breeze) ─────────
+          let a1 = cleanAddrField(row.address1);
+          let a2 = cleanAddrField(row.address2 || '');
+
+          // ── Step 3: split pipe-separated facility names ──────────────
+          // "Facility Name|123 Main St" → address2=facility, address1=street
+          if (a1.includes('|')) {
+            const [facility, street] = a1.split('|');
+            a2 = facility.trim();
+            a1 = street.trim();
+          }
+
+          // ── Step 4: split care facility prefix from street ───────────
+          // "Facility Name 123 Main St" — everything before first digit is facility
+          // Only applies when address2 is currently empty and address1 starts with non-digit text
+          if (!a2 && /^[^0-9]/.test(a1)) {
+            const m = a1.match(/^(.*?)\s+(\d+.*)$/);
+            if (m && m[1].trim().length > 0) {
+              a2 = m[1].trim();
+              a1 = m[2].trim();
+            }
+          }
+
+          // ── Step 5: split apt/unit suffix out of street field ────────
+          // "3615 Jamieson Ave Apt. 1S" or "2405 Hampton Ave 3A" → address2
+          const aptMatch = a1.match(/^(.+?)\s+((?:Apt\.?|Unit|Suite|#)\s*\S+)$/i);
+          if (aptMatch && !a2) {
+            a1 = aptMatch[1].trim();
+            a2 = aptMatch[2].trim();
+          }
+
+          // ── Step 6: infer missing state from known MO city names ─────
+          let city  = (row.city  || '').trim();
+          let state = (row.state || '').trim();
+          if (!state && MO_CITIES.has(city.toLowerCase())) state = 'MO';
+
+          const workRow = { ...row, address1: a1, address2: a2, city, state };
+
+          // Save any structural changes to DB immediately (facility split, apt split, state)
+          const structChanged = a1 !== (row.address1 || '') || a2 !== (row.address2 || '')
+                             || city !== (row.city || '') || state !== (row.state || '');
+          if (structChanged) {
+            await db.prepare('UPDATE people SET address1=?,address2=?,city=?,state=? WHERE id=?')
+              .bind(a1, a2, city, state, row.id).run();
+          }
+
+          // ── Step 7: USPS validation ──────────────────────────────────
+          const r = await validateAddressCore(workRow, env, uspsToken);
           validated++;
           if (!r.ok) {
-            // Still clean HTML tags from storage even if USPS fails
-            if (hadHtml) {
-              await db.prepare('UPDATE people SET address1=?,address2=? WHERE id=?')
-                .bind(cleanA1, cleanA2, row.id).run();
-              updated++;
-            }
+            if (structChanged) updated++; // count structural cleanup as an update even if USPS fails
             failed++;
-            failures.push({ id: row.id, name: (row.first_name + ' ' + row.last_name).trim(), address: [cleanA1, row.city, row.state].filter(Boolean).join(', '), error: r.error });
+            failures.push({ id: row.id, name: (row.first_name + ' ' + row.last_name).trim(), address: [a1, city, state].filter(Boolean).join(', '), error: r.error });
             return;
           }
           if (!r.deliverable) {
-            if (hadHtml) {
-              await db.prepare('UPDATE people SET address1=?,address2=? WHERE id=?')
-                .bind(cleanA1, cleanA2, row.id).run();
-              updated++;
-            }
+            if (structChanged) updated++;
             return;
           }
           const newZip = r.zip + (r.zip4 ? '-' + r.zip4 : '');
-          const changed = r.address1 !== (row.address1 || '') || r.address2 !== (row.address2 || '')
-                       || r.city !== (row.city || '') || r.state !== (row.state || '')
-                       || newZip !== (row.zip || '');
-          if (changed) {
+          const uspsChanged = r.address1 !== a1 || r.address2 !== a2
+                           || r.city !== city || r.state !== state
+                           || newZip !== (row.zip || '');
+          if (structChanged || uspsChanged) {
             await db.prepare('UPDATE people SET address1=?,address2=?,city=?,state=?,zip=? WHERE id=?')
               .bind(r.address1, r.address2 || '', r.city, r.state, newZip, row.id).run();
             updated++;
