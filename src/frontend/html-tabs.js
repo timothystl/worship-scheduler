@@ -503,6 +503,12 @@ export const HTML_TABS_1 = String.raw`<!-- ═══ HOME / DASHBOARD TAB ══
       <button class="btn-secondary" onclick="normalizeAllPhones()" style="font-size:.88rem;">Normalize All Phones</button>
       <div class="import-status" id="normalize-phones-status"></div>
     </div>
+    <div class="import-card role-admin">
+      <h3>&#127968; Validate All Addresses</h3>
+      <p>Runs every active person with a street address through USPS address validation and standardizes the format. Undeliverable addresses are left unchanged. Uses USPS Web Tools if configured, otherwise falls back to Census Bureau geocoding (free, no key needed).</p>
+      <button class="btn-secondary" onclick="bulkValidateAddresses()" id="bulk-validate-addr-btn" style="font-size:.88rem;">Validate All Addresses</button>
+      <div class="import-status" id="bulk-validate-addr-status"></div>
+    </div>
     <div class="import-card" style="border-color:#e74c3c;">
       <h3 style="color:#e74c3c;">&#9888; Clear Giving Data for One Year</h3>
       <p>Deletes all giving entries and batches for a single year. Use this to re-import one year without touching other years. <strong>This cannot be undone.</strong></p>
@@ -879,6 +885,8 @@ export const HTML_TABS_2 = String.raw`
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.8rem;color:var(--warm-gray);"><input type="checkbox" id="pm-hide-addr"> Hide address</label>
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.8rem;color:var(--warm-gray);"><input type="checkbox" id="pm-hide-phone"> Hide phone</label>
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.8rem;color:var(--warm-gray);"><input type="checkbox" id="pm-hide-email"> Hide email</label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.8rem;color:var(--warm-gray);"><input type="checkbox" id="pm-hide-dob"> Hide birthday</label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.8rem;color:var(--warm-gray);"><input type="checkbox" id="pm-hide-anniversary"> Hide anniversary</label>
           </div>
         </div>
       </div>
