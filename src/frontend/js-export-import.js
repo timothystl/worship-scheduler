@@ -371,7 +371,7 @@ function bulkValidateAddresses() {
               + '</summary><div style="margin-top:6px;font-size:.8rem;">'
               + allFailures.map(function(f) {
                   return '<div style="padding:4px 0;border-bottom:1px solid var(--border);">'
-                    + '<a href="#" onclick="showProfile(' + f.id + ');return false;" style="font-weight:600;color:var(--teal);">' + esc(f.name || 'Person #' + f.id) + '</a>'
+                    + '<a href="#" onclick="goToProfile(' + f.id + ');return false;" style="font-weight:600;color:var(--teal);">' + esc(f.name || 'Person #' + f.id) + '</a>'
                     + ' <span style="color:var(--warm-gray);">' + esc(f.address || '') + '</span>'
                     + (f.error ? ' <span style="color:#c0392b;font-size:.75rem;">— ' + esc(f.error) + '</span>' : '')
                     + '</div>';
