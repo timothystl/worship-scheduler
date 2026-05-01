@@ -83,75 +83,163 @@ export function normalizePhone(raw) {
   return raw;
 }
 
-// ── LOB ADDRESS VALIDATION ────────────────────────────────────────────────
-// Uses Lob's US Verification API (Basic auth, API key as username).
-// Lob deliverability values → dpvConfirmation equivalents returned to frontend:
-//   deliverable                → Y (confirmed)
-//   deliverable_unnecessary_unit → Y (confirmed, unit not needed)
-//   deliverable_missing_unit   → S (primary ok, secondary needed)
-//   deliverable_incorrect_unit → D (primary ok, secondary wrong)
-//   undeliverable              → N (no match)
+// ── ADDRESS VALIDATION HELPERS ───────────────────────────────────────────
+// Service priority: USPS Web Tools (USPS_USER_ID) → Lob (LOB_API_KEY) → Census Bureau (free fallback)
+// All helpers return a plain object: { ok, address1, address2, city, state, zip, zip4, dpvConfirmation, deliverable }
+// or { ok: false, error } on failure.
+
+function escXml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function validateUsps(addr, userId) {
+  const street = (addr.address1 || '').trim();
+  const unit   = (addr.address2 || '').trim();
+  const city   = (addr.city    || '').trim();
+  const state  = (addr.state   || '').trim();
+  const zip    = (addr.zip     || '').replace(/[^0-9]/g, '').slice(0, 5);
+  // USPS quirk: Address1 = apt/unit, Address2 = street number + name
+  const xml = `<AddressValidateRequest USERID="${escXml(userId)}"><Revision>1</Revision><Address>`
+    + `<Address1>${escXml(unit)}</Address1><Address2>${escXml(street)}</Address2>`
+    + `<City>${escXml(city)}</City><State>${escXml(state)}</State>`
+    + `<Zip5>${zip}</Zip5><Zip4></Zip4></Address></AddressValidateRequest>`;
+  const res = await fetch('https://secure.shippingapis.com/ShippingAPI.dll?API=Verify&XML=' + encodeURIComponent(xml));
+  if (!res.ok) return { ok: false, error: 'USPS service error ' + res.status };
+  const text = await res.text();
+  const get = tag => { const m = text.match(new RegExp('<' + tag + '>([^<]*)</' + tag + '>')); return m ? m[1] : ''; };
+  if (text.includes('<Error>')) return { ok: false, error: get('Description') || 'USPS error' };
+  const dpv = get('DPVConfirmation') || 'N';
+  const zip5 = get('Zip5');
+  const zip4 = get('Zip4');
+  return {
+    ok: true,
+    address1: get('Address2'),  // USPS response: street is Address2
+    address2: get('Address1'),  // USPS response: unit is Address1
+    city: get('City'), state: get('State'),
+    zip: zip5, zip4,
+    dpvConfirmation: dpv,
+    deliverable: dpv === 'Y' || dpv === 'S' || dpv === 'D',
+    deliverability: dpv === 'Y' ? 'deliverable' : dpv === 'S' ? 'deliverable_missing_unit'
+                  : dpv === 'D' ? 'deliverable_incorrect_unit' : 'undeliverable',
+  };
+}
+
+async function validateLob(addr, lobKey) {
+  const body = { primary_line: (addr.address1 || '').trim() };
+  if (addr.address2?.trim()) body.secondary_line = addr.address2.trim();
+  if (addr.city?.trim())     body.city = addr.city.trim();
+  if (addr.state?.trim())    body.state = addr.state.trim();
+  if (addr.zip?.trim())      body.zip_code = addr.zip.replace(/[^0-9]/g, '').slice(0, 5);
+  const res = await fetch('https://api.lob.com/v1/us_verifications', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Basic ' + btoa(lobKey + ':') },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return { ok: false, error: err.error?.message || ('Lob error ' + res.status) };
+  }
+  const data = await res.json();
+  const c = data.components || {};
+  const lobDpv = { deliverable: 'Y', deliverable_unnecessary_unit: 'Y',
+                   deliverable_missing_unit: 'S', deliverable_incorrect_unit: 'D', undeliverable: 'N' };
+  const dpv = lobDpv[data.deliverability] || 'N';
+  return {
+    ok: true,
+    address1: data.primary_line || '', address2: data.secondary_line || '',
+    city: c.city || '', state: c.state || '', zip: c.zip_code || '', zip4: c.zip_code_plus_4 || '',
+    dpvConfirmation: dpv, deliverable: dpv === 'Y' || dpv === 'S' || dpv === 'D',
+    deliverability: data.deliverability || '',
+  };
+}
+
+async function validateCensus(addr) {
+  const parts = [addr.address1, addr.address2, addr.city, addr.state, addr.zip]
+    .map(s => (s || '').trim()).filter(Boolean);
+  const res = await fetch(
+    'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address='
+    + encodeURIComponent(parts.join(', ')) + '&benchmark=2020&format=json'
+  );
+  if (!res.ok) return { ok: false, error: 'Census geocoding service error ' + res.status };
+  const data = await res.json();
+  const matches = data?.result?.addressMatches || [];
+  if (matches.length === 0) {
+    return { ok: true, address1: addr.address1 || '', address2: addr.address2 || '',
+             city: addr.city || '', state: addr.state || '', zip: addr.zip || '', zip4: '',
+             dpvConfirmation: 'N', deliverable: false, deliverability: 'undeliverable' };
+  }
+  const match = matches[0];
+  const c = match.addressComponents || {};
+  const streetMatch = (match.matchedAddress || '').match(/^([^,]+)/);
+  return {
+    ok: true,
+    address1: streetMatch ? streetMatch[1].trim() : (addr.address1 || ''),
+    address2: addr.address2 || '',
+    city: c.city || addr.city || '', state: c.state || addr.state || '',
+    zip: c.zip || addr.zip || '', zip4: '',
+    dpvConfirmation: 'Y', deliverable: true, deliverability: 'deliverable',
+  };
+}
+
+async function validateAddressCore(addr, env) {
+  if (env.USPS_USER_ID) return validateUsps(addr, env.USPS_USER_ID);
+  if (env.LOB_API_KEY)  return validateLob(addr, env.LOB_API_KEY);
+  return validateCensus(addr);
+}
 
 // ── UTILS API HANDLER ─────────────────────────────────────────────────────
 export async function handleUtilsApi(req, env, url, method, seg, db, isAdmin) {
 
   // POST /admin/api/utils/validate-address
   if (seg === 'utils/validate-address' && method === 'POST') {
-    if (!env.LOB_API_KEY) {
-      return json({ error: 'LOB_API_KEY secret not configured in Cloudflare.' }, 503);
-    }
     let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
-    const primary_line = (b.address1 || '').trim();
-    if (!primary_line) return json({ error: 'address1 is required' }, 400);
-
+    if (!(b.address1 || '').trim()) return json({ error: 'address1 is required' }, 400);
     try {
-      const body = { primary_line };
-      if (b.address2?.trim()) body.secondary_line = b.address2.trim();
-      if (b.city?.trim())     body.city = b.city.trim();
-      if (b.state?.trim())    body.state = b.state.trim();
-      if (b.zip?.trim())      body.zip_code = b.zip.replace(/[^0-9]/g, '').slice(0, 5);
-
-      const res = await fetch('https://api.lob.com/v1/us_verifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Basic ' + btoa(env.LOB_API_KEY + ':'),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.error?.message || ('Lob error ' + res.status);
-        return json({ error: msg }, 422);
-      }
-
-      const data = await res.json();
-      const c = data.components || {};
-      // Map Lob deliverability to dpvConfirmation for consistent frontend handling
-      const lobDpv = {
-        deliverable: 'Y',
-        deliverable_unnecessary_unit: 'Y',
-        deliverable_missing_unit: 'S',
-        deliverable_incorrect_unit: 'D',
-        undeliverable: 'N',
-      };
-      const dpv = lobDpv[data.deliverability] || 'N';
-      return json({
-        ok: true,
-        address1: data.primary_line || '',
-        address2: data.secondary_line || '',
-        city: c.city || '',
-        state: c.state || '',
-        zip: c.zip_code || '',
-        zip4: c.zip_code_plus_4 || '',
-        dpvConfirmation: dpv,
-        deliverable: dpv === 'Y' || dpv === 'S' || dpv === 'D',
-        deliverability: data.deliverability || '',
-      });
+      const result = await validateAddressCore(b, env);
+      return result.ok ? json(result) : json({ error: result.error }, 422);
     } catch (e) {
       return json({ error: String(e.message || e) }, 502);
     }
+  }
+
+  // POST /admin/api/utils/bulk-validate-addresses — validate + standardize all active people with an address
+  if (seg === 'utils/bulk-validate-addresses' && method === 'POST') {
+    if (!isAdmin) return json({ error: 'Access denied' }, 403);
+    const rows = (await db.prepare(
+      `SELECT id, first_name, last_name, address1, address2, city, state, zip
+       FROM people WHERE address1 != '' AND status = 'active'`
+    ).all()).results || [];
+
+    let validated = 0, updated = 0, failed = 0;
+    const failures = [];
+
+    // Process in batches of 5 concurrent requests to stay well within Worker limits
+    for (let i = 0; i < rows.length; i += 5) {
+      const batch = rows.slice(i, i + 5);
+      await Promise.all(batch.map(async row => {
+        try {
+          const r = await validateAddressCore(row, env);
+          validated++;
+          if (!r.ok) { failed++; failures.push({ id: row.id, error: r.error }); return; }
+          if (!r.deliverable) return;
+          const newZip = r.zip + (r.zip4 ? '-' + r.zip4 : '');
+          const changed = r.address1 !== (row.address1 || '') || r.address2 !== (row.address2 || '')
+                       || r.city !== (row.city || '') || r.state !== (row.state || '')
+                       || newZip !== (row.zip || '');
+          if (changed) {
+            await db.prepare('UPDATE people SET address1=?,address2=?,city=?,state=?,zip=? WHERE id=?')
+              .bind(r.address1, r.address2 || '', r.city, r.state, newZip, row.id).run();
+            updated++;
+          }
+        } catch (e) {
+          failed++;
+          failures.push({ id: row.id, error: e.message });
+        }
+      }));
+    }
+
+    return json({ ok: true, total: rows.length, validated, updated, failed,
+                  failures: failures.slice(0, 20) });
   }
 
   // POST /admin/api/utils/normalize-phones — one-time bulk phone cleanup (admin only)

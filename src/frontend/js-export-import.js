@@ -331,6 +331,27 @@ function fixHouseholdHeads() {
     }
   }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; });
 }
+function bulkValidateAddresses() {
+  var btn = document.getElementById('bulk-validate-addr-btn');
+  var status = document.getElementById('bulk-validate-addr-status');
+  if (btn) btn.disabled = true;
+  if (status) { status.textContent = 'Validating addresses — this may take a minute…'; status.className = 'import-status'; }
+  api('/admin/api/utils/bulk-validate-addresses', { method: 'POST' }).then(function(d) {
+    if (btn) btn.disabled = false;
+    if (d.ok) {
+      var msg = 'Validated ' + d.validated + ' of ' + d.total + ' addresses. '
+              + d.updated + ' standardized';
+      if (d.failed) msg += ', ' + d.failed + ' failed';
+      msg += '.';
+      if (status) { status.textContent = msg; status.className = 'import-status ok'; }
+    } else {
+      if (status) { status.textContent = 'Error: ' + (d.error || 'unknown'); status.className = 'import-status err'; }
+    }
+  }).catch(function(e) {
+    if (btn) btn.disabled = false;
+    if (status) { status.textContent = 'Error: ' + e.message; status.className = 'import-status err'; }
+  });
+}
 function normalizeAllPhones() {
   var status = document.getElementById('normalize-phones-status');
   if (status) { status.textContent = 'Working…'; status.className = 'import-status'; }
