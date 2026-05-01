@@ -337,8 +337,9 @@ export async function handleUtilsApi(req, env, url, method, seg, db, isAdmin) {
 
           // ── Step 4: split care facility prefix from street ───────────
           // "Facility Name 123 Main St" — everything before first digit is facility
-          // Only applies when address2 is currently empty and address1 starts with non-digit text
-          if (!a2 && /^[^0-9]/.test(a1)) {
+          // Only applies when address2 is empty, address1 starts with non-digit text,
+          // and it's NOT a PO Box (which legitimately starts with non-digit text)
+          if (!a2 && /^[^0-9]/.test(a1) && !/^p\.?o\.?\s*box/i.test(a1)) {
             const m = a1.match(/^(.*?)\s+(\d+.*)$/);
             if (m && m[1].trim().length > 0) {
               a2 = m[1].trim();
