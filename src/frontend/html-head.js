@@ -34,16 +34,18 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 .btn-sm:hover{background:var(--blue-mist);}
 /* ── OFFLINE BANNER ── */
 #offline-banner{display:none;background:var(--pale-gold);border-bottom:1px solid var(--amber);padding:8px 24px;font-size:.82rem;color:var(--charcoal);text-align:center;}
-/* ── TABS ── */
-.tab-bar{background:var(--white);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.tab-btn{padding:6px 18px;border-radius:20px;border:1.5px solid var(--steel-anchor);font-size:.82rem;font-weight:600;cursor:pointer;background:transparent;color:var(--steel-anchor);transition:all .15s;}
-.tab-btn.active{background:var(--steel-anchor);color:var(--white);}
-.tab-btn:hover:not(.active){background:var(--blue-mist);}
 /* ── PANELS ── */
 .tab-panel{display:none;padding:20px 24px;}
 .tab-panel.active{display:flex;flex-direction:column;flex:1;overflow-y:auto;}
 #tab-scheduler.active{padding:0;}
 #tab-scheduler .sched-root{flex:1;min-height:0;overflow-y:auto;}
+/* ── SCHEDULER MOBILE ── */
+@media(max-width:600px){
+  .sched-root td{min-width:60px;padding:3px 4px;font-size:.72rem;}
+  .sched-root td.date-cell{min-width:88px;font-size:.78rem;}
+  .sched-root .month-nav-label{min-width:110px;font-size:.88rem;}
+  .sched-root .schedule-controls .field input{width:120px;}
+}
 /* ── APP SHELL ── */
 #offline-banner{position:relative;z-index:200;}
 .app-shell{display:flex;height:100vh;}
@@ -281,7 +283,6 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
 /* ── MOBILE CONTACT CARDS ── */
 .contact-list{display:none;}
 @media(max-width:767px){
-  .tab-btn:not([data-tab="people"]):not([data-tab="attendance"]){display:none;}
   .card-grid{display:none;}
   .contact-list{display:flex;flex-direction:column;}
   .toolbar .filter-pills{display:none;}
@@ -293,7 +294,6 @@ header{background:var(--white);border-bottom:3px solid var(--amber);padding:14px
   .c-type{font-size:.7rem;color:var(--warm-gray);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;}
   .c-link{display:flex;align-items:center;gap:5px;font-size:.88rem;color:var(--steel-anchor);text-decoration:none;min-height:34px;}
   .c-link svg{width:14px;height:14px;flex-shrink:0;}
-  header .hdr-sub{display:none;}
 }
 /* ── MULTI-SELECT ── */
 .p-card.selectable{cursor:pointer;position:relative;}
@@ -409,7 +409,7 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .ptab-panel.active{display:block;}
 /* Two-column info layout */
 .pv-info-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
-@media(max-width:700px){.pv-info-cols{grid-template-columns:1fr;}}
+@media(max-width:700px){.pv-info-cols{grid-template-columns:1fr;}.pv-layout{flex-direction:column;}.pv-aside{width:100%;border-left:none;border-top:1px solid var(--border);}}
 .pv-section{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px;}
 .pv-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--warm-gray);margin-bottom:12px;}
 .pv-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);}
