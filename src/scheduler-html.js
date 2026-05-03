@@ -344,14 +344,19 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
 .sched-mc-svctime { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--warm-gray); margin-bottom: 6px; }
 .sched-mc-row { display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--linen); gap: 10px; }
 .sched-mc-row:last-child { border-bottom: none; }
-.sched-mc-lbl { width: 110px; flex-shrink: 0; font-size: .72rem; font-weight: 600; color: var(--warm-gray); text-transform: uppercase; letter-spacing: .03em; }
-.sched-mc-val { flex: 1; font-size: .9rem; color: var(--charcoal); font-weight: 500; }
-.sched-mc-empty .sched-mc-val { color: var(--danger-btn,#b85c3a); font-style: italic; font-weight: 400; }
+.sched-mc-lbl { width: 96px; flex-shrink: 0; font-size: .72rem; font-weight: 600; color: var(--warm-gray); text-transform: uppercase; letter-spacing: .03em; }
+.sched-mc-val { flex: 1; min-width: 0; font-size: .9rem; color: var(--charcoal); font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sched-mc-empty .sched-mc-val { color: var(--danger-btn,#b85c3a); }
+
+/* Mobile single-Sunday picker bar — hidden on desktop */
+.smv-nav { display: none; }
 
 @media(max-width:600px){
-  /* Hide horizontal table detail rows; show vertical cards instead */
+  /* Hide all desktop table chrome; only the active mobile card shows */
+  .sunday-summary { display: none !important; }
   .sunday-detail:not(.sunday-mobile) { display: none !important; }
-  .sunday-mobile.visible { display: table-row !important; }
+  #schedule-thead { display: none !important; }
+  .sunday-mobile.smv-active { display: table-row !important; }
   /* Hide redundant nav links when embedded in ChMS */
   .header-gear { display: none; }
   /* Tab buttons — tighter padding */
@@ -369,14 +374,45 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
   .schedule-controls .field input { flex: 1; width: auto; }
   /* Legend */
   .legend { gap: 8px; font-size: .75rem; }
-  /* Table scroll hint */
-  .table-wrapper { -webkit-overflow-scrolling: touch; box-shadow: inset -16px 0 12px -8px rgba(0,0,0,.1); }
-  /* Summary row — 2-line layout: date+label on line 1, stats+pills on line 2 */
-  .ss-inner { gap: 3px 6px; padding: 7px 12px; align-items: center; }
-  .ss-date { width: auto; font-size: .8rem; flex-shrink: 1; }
-  .ss-label-area { flex: 1 0 0; width: auto; padding-right: 0; min-width: 0; }
-  .ss-stats-area { width: auto; flex-shrink: 0; padding-left: 20px; }
-  .ss-conf-area { flex: 1 1 auto; padding-left: 0; }
+  /* Sunday picker bar — sticky at top of scheduler */
+  .smv-nav {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; background: var(--linen);
+    border-bottom: 2px solid var(--border); border-radius: 12px 12px 0 0;
+    margin-top: 14px;
+  }
+  .smv-arrow {
+    width: 38px; height: 38px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--white);
+    font-size: 1.05rem; font-weight: 700; cursor: pointer; flex-shrink: 0;
+    color: var(--steel-anchor); font-family: var(--font-body);
+  }
+  .smv-arrow:disabled { opacity: .35; cursor: default; }
+  .smv-picker {
+    flex: 1; min-width: 0; padding: 8px 10px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--white); font-size: .88rem; font-weight: 600;
+    color: var(--steel-anchor); font-family: var(--font-body);
+  }
+  /* Picker bar sits above table-wrapper; remove its top margin to abut nicely */
+  .table-wrapper { margin-top: 0; border-radius: 0 0 12px 12px; -webkit-overflow-scrolling: touch; }
+  /* Inside the mobile card, the assignment <select> takes full width of the value column */
+  .sched-mc-row .cell-select {
+    flex: 1; min-width: 0; max-width: 100%;
+    padding: 6px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--white);
+    font-size: .88rem; font-family: var(--font-body); color: var(--charcoal);
+  }
+  .sched-mc-empty .cell-select { border-color: var(--danger-btn, #b85c3a); }
+  /* Confirmation pill: compact on mobile, sits next to the select */
+  .sched-mc-row .conf-pill {
+    margin-top: 0; padding: 3px 8px; font-size: .65rem;
+    width: auto; display: inline-block; flex-shrink: 0;
+  }
+  /* Override/primary star badge in mobile cards — keep small inline */
+  .sched-mc-row .cell-badge { font-size: .85rem; flex-shrink: 0; }
+  /* "✉ emailed" text — keep it on its own line if it appears */
+  .sched-mc-row .sched-mc-val span[title="Assignment email sent"] { flex-basis: 100%; margin-top: 0 !important; }
   /* Hide Readings/Slide buttons on mobile */
   .btn-edit-readings, .btn-bulletin-slide { display: none !important; }
 }
@@ -537,6 +573,11 @@ body.embedded #app-content { display:block!important; }
       <div class="legend-item"><div class="legend-dot" style="background:var(--sage);"></div> Shared (both services)</div>
       <div class="legend-item"><div class="legend-dot" style="background:var(--error-bg);border:1px solid var(--error-border);"></div> Unfilled</div>
       <div class="legend-item"><div class="legend-dot" style="background:var(--pale-sage);border:1px solid var(--soft-sage);"></div> Filled</div>
+    </div>
+    <div id="smv-nav" class="smv-nav">
+      <button class="smv-arrow" id="smv-prev" aria-label="Previous Sunday" type="button">&#8592;</button>
+      <select id="smv-picker" class="smv-picker" aria-label="Pick a Sunday"></select>
+      <button class="smv-arrow" id="smv-next" aria-label="Next Sunday" type="button">&#8594;</button>
     </div>
     <div class="table-wrapper">
       <table id="schedule-table">
@@ -1819,6 +1860,19 @@ document.getElementById('btn-next-month').addEventListener('click', function() {
   switchMonth(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'));
 });
 
+// Mobile single-Sunday picker handlers
+document.getElementById('smv-picker').addEventListener('change', function() {
+  setActiveSmv(parseInt(this.value, 10));
+});
+document.getElementById('smv-prev').addEventListener('click', function() {
+  var p = document.getElementById('smv-picker');
+  setActiveSmv(parseInt(p.value, 10) - 1);
+});
+document.getElementById('smv-next').addEventListener('click', function() {
+  var p = document.getElementById('smv-picker');
+  setActiveSmv(parseInt(p.value, 10) + 1);
+});
+
 document.getElementById('btn-save-schedule').addEventListener('click', function() {
   saveCurrentMonth();
   showAlert('schedule-alert', 'Schedule saved.', 'success');
@@ -2045,6 +2099,33 @@ function renderTable(people, counts) {
         svcRow += '</tr>';
         bodyHtml += svcRow;
       });
+
+      // Mobile card for special service: stacks all service times vertically
+      var spMC = '<tr class="sunday-detail sunday-mobile" data-idx="'+rowIdx+'">'
+        +'<td colspan="'+totalCols+'" style="padding:0;border-top:none;">'
+        +'<div class="sched-mc">'
+        +'<div class="sched-mc-svc" style="background:var(--blue-mist);"><div class="sched-mc-svctime" style="margin-bottom:0;color:var(--steel-anchor);font-size:.78rem;">'
+        +esc(fmtDate(row.date))+' &mdash; '+esc(row.name||'Special Service')
+        +'</div></div>';
+      (row.services||[]).forEach(function(svc, svcIdx){
+        spMC += '<div class="sched-mc-svc"><div class="sched-mc-svctime">'+esc(svc.time||'Service')+'</div>';
+        (svc.roles||[]).forEach(function(role){
+          var pid = (svc.assignments||{})[role] || '';
+          var opts = '<option value="">-- unassigned --</option>';
+          allPeople.filter(function(p){
+            return p.roles.indexOf(role)>-1 && (p.blackoutDates||[]).indexOf(dateISO)===-1 && !isOnAbsence(p,dateISO);
+          }).forEach(function(p){
+            opts += '<option value="'+esc(p.id)+'"'+(pid===p.id?' selected':'')+'>'+esc(p.name)+'</option>';
+          });
+          var sel = '<select class="cell-select" data-row="'+rowIdx+'" data-svc-idx="'+svcIdx+'" data-role="'+esc(role)+'" data-special="1">'+opts+'</select>';
+          spMC += '<div class="sched-mc-row'+(pid?'':' sched-mc-empty')+'">'
+            +'<span class="sched-mc-lbl">'+esc(role)+'</span>'
+            +'<span class="sched-mc-val">'+sel+'</span></div>';
+        });
+        spMC += '</div>';
+      });
+      spMC += '</div></td></tr>';
+      bodyHtml += spMC;
       return;
     }
 
@@ -2079,44 +2160,92 @@ function renderTable(people, counts) {
 
     bodyHtml += r1 + r2;
 
-    // Mobile card row — vertical layout for narrow screens, toggled alongside desktop rows
+    // Mobile card row — vertical layout. Reuses buildCell() so the same <select>,
+    // confirmation pill, override badge, and "✉ emailed" indicator all work.
     var mCard = '<tr class="sunday-detail sunday-mobile" data-idx="'+rowIdx+'">'
       +'<td colspan="'+totalCols+'" style="padding:0;border-top:none;">'
-      +'<div class="sched-mc">';
+      +'<div class="sched-mc">'
+      +'<div class="sched-mc-svc" style="background:var(--blue-mist);"><div class="sched-mc-svctime" style="margin-bottom:0;color:var(--steel-anchor);font-size:.78rem;">'+esc(fmtDate(row.date))
+      + (existingLabel ? ' &mdash; '+esc(existingLabel) : (lectEntryDetail ? ' &mdash; '+esc(lectEntryDetail.sundayName) : ''))
+      +'</div></div>';
     mCard += '<div class="sched-mc-svc"><div class="sched-mc-svctime">8:00am</div>';
     PER_ROLES.forEach(function(role){
       var pid8 = row.assignments[role]['8am'];
-      var p8 = pid8 && pMap[pid8];
-      mCard += '<div class="sched-mc-row'+(p8?' sched-mc-filled':' sched-mc-empty')+'">'
+      var cellHtml = buildCell(pid8, pMap, rowIdx, role, '8am')
+        .replace(/^<td[^>]*>/, '').replace(/<\/td>$/, '');
+      mCard += '<div class="sched-mc-row'+(pid8?'':' sched-mc-empty')+'">'
         +'<span class="sched-mc-lbl">'+esc(role)+'</span>'
-        +'<span class="sched-mc-val">'+(p8?esc(p8.name):'Unfilled')+'</span></div>';
+        +'<span class="sched-mc-val">'+cellHtml+'</span></div>';
     });
     mCard += '</div>';
     if (SHARED_ROLES.length) {
       mCard += '<div class="sched-mc-svc sched-mc-shared"><div class="sched-mc-svctime">Both Services</div>';
       SHARED_ROLES.forEach(function(role){
         var pidS = row.assignments[role].shared;
-        var pS = pidS && pMap[pidS];
-        mCard += '<div class="sched-mc-row'+(pS?' sched-mc-filled':' sched-mc-empty')+'">'
+        var cellHtml = buildCell(pidS, pMap, rowIdx, role, 'shared')
+          .replace(/^<td[^>]*>/, '').replace(/<\/td>$/, '');
+        mCard += '<div class="sched-mc-row'+(pidS?'':' sched-mc-empty')+'">'
           +'<span class="sched-mc-lbl">'+esc(role)+'</span>'
-          +'<span class="sched-mc-val">'+(pS?esc(pS.name):'Unfilled')+'</span></div>';
+          +'<span class="sched-mc-val">'+cellHtml+'</span></div>';
       });
       mCard += '</div>';
     }
     mCard += '<div class="sched-mc-svc"><div class="sched-mc-svctime">10:45am</div>';
     PER_ROLES.forEach(function(role){
       var pid45 = row.assignments[role]['10:45am'];
-      var p45 = pid45 && pMap[pid45];
-      mCard += '<div class="sched-mc-row'+(p45?' sched-mc-filled':' sched-mc-empty')+'">'
+      var cellHtml = buildCell(pid45, pMap, rowIdx, role, '10:45am')
+        .replace(/^<td[^>]*>/, '').replace(/<\/td>$/, '');
+      mCard += '<div class="sched-mc-row'+(pid45?'':' sched-mc-empty')+'">'
         +'<span class="sched-mc-lbl">'+esc(role)+'</span>'
-        +'<span class="sched-mc-val">'+(p45?esc(p45.name):'Unfilled')+'</span></div>';
+        +'<span class="sched-mc-val">'+cellHtml+'</span></div>';
     });
     mCard += '</div></div></td></tr>';
     bodyHtml += mCard;
   });
   document.getElementById('schedule-tbody').innerHTML = bodyHtml;
 
+  initMobilePicker();
+}
 
+// ── Mobile single-Sunday picker ────────────────────────────────────────────
+// On mobile, only one Sunday card is shown at a time; this picker drives
+// which one. The desktop view ignores this entirely (.smv-nav is display:none
+// at >600px so the dropdown/arrows aren't visible).
+function initMobilePicker() {
+  var picker = document.getElementById('smv-picker');
+  if (!picker) return;
+  if (!currentSchedule || !currentSchedule.length) {
+    picker.innerHTML = '<option value="">No Sundays in range</option>';
+    return;
+  }
+  picker.innerHTML = currentSchedule.map(function(row, i){
+    var label = fmtDate(row.date);
+    if (row.label)      label += ' — ' + row.label;
+    else if (row.name)  label += ' — ' + row.name;
+    return '<option value="'+i+'">'+esc(label)+'</option>';
+  }).join('');
+  // Default: today or next upcoming Sunday in the loaded range
+  var todayISO = new Date().toISOString().slice(0,10);
+  var defaultIdx = -1;
+  for (var i = 0; i < currentSchedule.length; i++) {
+    if (currentSchedule[i].date.toISOString().slice(0,10) >= todayISO) { defaultIdx = i; break; }
+  }
+  if (defaultIdx < 0) defaultIdx = 0;
+  setActiveSmv(defaultIdx);
+}
+function setActiveSmv(idx) {
+  if (!currentSchedule || !currentSchedule.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= currentSchedule.length) idx = currentSchedule.length - 1;
+  document.querySelectorAll('.sunday-mobile').forEach(function(tr){
+    tr.classList.toggle('smv-active', String(tr.getAttribute('data-idx')) === String(idx));
+  });
+  var picker = document.getElementById('smv-picker');
+  if (picker) picker.value = idx;
+  var prev = document.getElementById('smv-prev');
+  var next = document.getElementById('smv-next');
+  if (prev) prev.disabled = (idx <= 0);
+  if (next) next.disabled = (idx >= currentSchedule.length - 1);
 }
 
 function updateSundaySummary(rowIdx) {
