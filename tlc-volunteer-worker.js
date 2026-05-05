@@ -19,6 +19,8 @@ import { handleAdminLogin, handleAdminApi } from './src/api-admin.js';
 import { handleIntakeApi } from './src/api-intake.js';
 import { LOGIN_HTML, PUBLIC_HTML, ADMIN_HTML } from './src/html-templates.js';
 import { CHMS_HTML, CHMS_MANIFEST_JSON, SW_JS, BACKLOG_HTML } from './src/html-chms.js';
+import { PORTAL_HTML, PORTAL_MANIFEST_JSON } from './src/portal-html.js';
+import { handleMemberApi } from './src/api-member.js';
 import { sendBirthdayEmails, sendAnniversaryEmails, sendBirthdayTexts, sendAnniversaryTexts } from './src/api-emails.js';
 
 // ── MAIN FETCH HANDLER ────────────────────────────────────────────────
@@ -124,6 +126,25 @@ async function _fetch(req, env) {
     // Permanent redirect: old volunteer.timothystl.org/chms → chms.timothystl.org
     if (!isChmsHost && path === '/chms' && method === 'GET') {
       return new Response(null, { status: 301, headers: { 'Location': 'https://chms.timothystl.org' } });
+    }
+    // ── Member portal ──────────────────────────────────────────────────
+    // SPA at /portal (no auth check — the SPA handles login client-side)
+    if (path === '/portal' || path === '/portal/' || path.startsWith('/portal/verify/')) {
+      return html(PORTAL_HTML, 200, { 'Cache-Control': 'no-store, no-cache, must-revalidate' });
+    }
+    if (path === '/portal.webmanifest') {
+      return new Response(PORTAL_MANIFEST_JSON, {
+        headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' }
+      });
+    }
+    // Member API (uses tlc-member cookie; no admin auth required)
+    if (path.startsWith('/member/')) {
+      try {
+        return await handleMemberApi(req, env, path, method);
+      } catch (e) {
+        console.error('Member API error [' + method + ' ' + path + ']:', e?.message, e?.stack);
+        return json({ error: 'Internal server error' }, 500);
+      }
     }
     // Public intake endpoints (gated by X-Intake-Key header, NOT user session).
     // Called server-to-server from the timothystl.org admin worker.
