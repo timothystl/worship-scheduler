@@ -343,4 +343,41 @@ function printDirectory() {
   window.open('/admin/api/directory?types=member', '_blank');
 }
 
+// ── PUSH BROADCAST ──────────────────────────────────────────────────
+function openPushBroadcastModal() {
+  document.getElementById('push-broadcast-title').value = '';
+  document.getElementById('push-broadcast-body').value = '';
+  document.getElementById('push-broadcast-result').textContent = '';
+  openModal('push-broadcast-modal');
+}
+function sendPushBroadcast() {
+  var title = document.getElementById('push-broadcast-title').value.trim();
+  var body  = document.getElementById('push-broadcast-body').value.trim();
+  if (!title) { alert('Title is required.'); return; }
+  var btn = document.getElementById('push-broadcast-send-btn');
+  var res = document.getElementById('push-broadcast-result');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  res.textContent = '';
+  api('/admin/api/push-broadcast', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title: title, body: body })
+  }).then(function(d) {
+    btn.disabled = false; btn.textContent = 'Send Notification';
+    if (d && d.error) {
+      res.textContent = 'Error: ' + d.error;
+      res.style.color = 'var(--danger)';
+    } else {
+      var msg = 'Sent: ' + (d.sent||0) + ' delivered, ' + (d.failed||0) + ' failed, ' + (d.skipped||0) + ' skipped.';
+      res.textContent = msg;
+      res.style.color = 'var(--teal)';
+      if ((d.sent||0) > 0) setTimeout(function(){ closeModal('push-broadcast-modal'); }, 2000);
+    }
+  }).catch(function() {
+    btn.disabled = false; btn.textContent = 'Send Notification';
+    res.textContent = 'Connection error. Try again.';
+    res.style.color = 'var(--danger)';
+  });
+}
+
 `;

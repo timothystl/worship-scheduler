@@ -94,6 +94,9 @@ export async function handleMemberApi(req, env, path, method) {
   if (path === '/member/logout'   && method === 'POST') return memberLogout();
   if (path === '/member/register' && method === 'POST') return memberRegister(req, env);
   if (path === '/member/api/session' && method === 'GET') return memberSessionCheck(req, env);
+  if (path === '/member/api/vapid-public-key' && method === 'GET') {
+    return json({ publicKey: env.VAPID_PUBLIC_KEY || '' });
+  }
 
   // Verify token — GET shows form, POST submits password
   const verifyMatch = path.match(/^[/]portal[/]verify[/]([0-9a-f]{64})$/);
@@ -113,6 +116,7 @@ export async function handleMemberApi(req, env, path, method) {
   else if (path === '/member/api/schedule'   && method === 'GET')  resp = await memberSchedule(env, auth);
   else if (path === '/member/api/prayer-requests' && method === 'GET')  resp = await memberPrayerGet(env);
   else if (path === '/member/api/prayer-requests' && method === 'POST') resp = await memberPrayerPost(req, env, auth);
+  else if (path === '/member/api/push-subscribe'  && method === 'POST') resp = await memberPushSubscribe(req, env, auth);
   else resp = json({ error: 'Not found' }, 404);
 
   return refreshMemberCookie(resp, auth, env);
@@ -467,5 +471,27 @@ async function memberPrayerPost(req, env, auth) {
     'INSERT INTO prayer_requests (person_id,requester_name,requester_email,request_text,source,status) VALUES (?,?,?,?,\'member_portal\',\'open\')'
   ).bind(auth.peopleId, name, p?.email || '', text).run();
 
+  return json({ ok: true });
+}
+
+// ── Authenticated API: Push Subscription ─────────────────────────────────────
+
+async function memberPushSubscribe(req, env, auth) {
+  let body;
+  try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
+
+  // Accept null to unsubscribe, or a PushSubscription-shaped object
+  if (body === null || body === undefined) {
+    await env.DB.prepare("UPDATE app_users SET push_subscription='' WHERE people_id=?").bind(auth.peopleId).run();
+    return json({ ok: true });
+  }
+
+  const { endpoint, keys } = body || {};
+  if (!endpoint || typeof endpoint !== 'string') return json({ error: 'Invalid subscription' }, 400);
+  if (!keys?.p256dh || !keys?.auth) return json({ error: 'Invalid subscription keys' }, 400);
+
+  const subJson = JSON.stringify({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
+  await env.DB.prepare("UPDATE app_users SET push_subscription=? WHERE people_id=?")
+    .bind(subJson, auth.peopleId).run();
   return json({ ok: true });
 }

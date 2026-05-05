@@ -20,8 +20,10 @@ import { handleIntakeApi } from './src/api-intake.js';
 import { LOGIN_HTML, PUBLIC_HTML, ADMIN_HTML } from './src/html-templates.js';
 import { CHMS_HTML, CHMS_MANIFEST_JSON, SW_JS, BACKLOG_HTML } from './src/html-chms.js';
 import { PORTAL_HTML, PORTAL_MANIFEST_JSON } from './src/portal-html.js';
+import { PORTAL_SW_JS } from './src/portal-sw-js.js';
 import { handleMemberApi } from './src/api-member.js';
 import { sendBirthdayEmails, sendAnniversaryEmails, sendBirthdayTexts, sendAnniversaryTexts } from './src/api-emails.js';
+import { sendWebPush } from './src/push-sender.js';
 
 // ── MAIN FETCH HANDLER ────────────────────────────────────────────────
 export default {
@@ -47,14 +49,15 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       try { await initDb(env.DB); } catch (e) { console.error('Cron DB init error:', e.message); return; }
-      const [bday, ann, bdaySms, annSms, prune] = await Promise.all([
+      const [bday, ann, bdaySms, annSms, prune, schedPush] = await Promise.all([
         sendBirthdayEmails(env).catch(e => ({ error: e.message })),
         sendAnniversaryEmails(env).catch(e => ({ error: e.message })),
         sendBirthdayTexts(env).catch(e => ({ error: e.message })),
         sendAnniversaryTexts(env).catch(e => ({ error: e.message })),
         pruneAuditLog(env.DB).catch(e => ({ error: e.message })),
+        sendScheduleReminders(env).catch(e => ({ error: e.message })),
       ]);
-      console.log('Daily cron:', JSON.stringify({ birthdays: bday, anniversaries: ann, birthday_sms: bdaySms, anniversary_sms: annSms, audit_prune: prune }));
+      console.log('Daily cron:', JSON.stringify({ birthdays: bday, anniversaries: ann, birthday_sms: bdaySms, anniversary_sms: annSms, audit_prune: prune, schedule_push: schedPush }));
     })());
   },
 };
@@ -73,6 +76,69 @@ async function pruneAuditLog(db) {
        AND ts < datetime('now','-365 days')`
   ).run();
   return { email_dedup_deleted: r1.meta?.changes ?? 0, general_deleted: r2.meta?.changes ?? 0 };
+}
+
+// Send push notifications to members assigned to serve tomorrow.
+// Only sends on Saturdays (day 6) — reminding about Sunday assignments.
+async function sendScheduleReminders(env) {
+  // Only run on Saturdays (Central time ≈ UTC-5/6)
+  const now = new Date();
+  if (now.getUTCDay() !== 6) return { skipped: 'not Saturday' };
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return { skipped: 'no VAPID keys' };
+  if (!env.RSVP_STORE) return { skipped: 'no KV store' };
+
+  // Determine next Sunday's ISO date
+  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const tomorrowISO = tomorrow.toISOString().slice(0, 10);
+
+  // Fetch schedule from KV
+  let schedule = [];
+  try {
+    const raw = await env.RSVP_STORE.get('ws_schedule_v2');
+    if (raw) schedule = JSON.parse(raw);
+  } catch { return { skipped: 'KV error' }; }
+
+  if (!Array.isArray(schedule)) return { skipped: 'no schedule data' };
+
+  // Collect breeze_ids assigned on that Sunday
+  const assignedIds = new Set();
+  for (const row of schedule) {
+    const dateISO = (typeof row.date === 'string' ? row.date : new Date(row.date).toISOString()).slice(0, 10);
+    if (dateISO !== tomorrowISO) continue;
+    if (row.type === 'sunday') {
+      for (const svcs of Object.values(row.assignments || {})) {
+        for (const pid of Object.values(svcs || {})) {
+          if (pid) assignedIds.add(String(pid));
+        }
+      }
+    }
+  }
+
+  if (!assignedIds.size) return { sent: 0, skipped: 'no assignments tomorrow' };
+
+  // Find member-portal users who have a push subscription AND a breeze_id in assignedIds
+  const candidates = await env.DB.prepare(
+    "SELECT u.push_subscription, p.first_name, p.breeze_id FROM app_users u JOIN people p ON p.id=u.people_id WHERE u.push_subscription!='' AND u.active=1 AND p.breeze_id!='' AND p.status='active'"
+  ).all();
+
+  let sent = 0, failed = 0;
+  for (const row of (candidates.results || [])) {
+    if (!assignedIds.has(row.breeze_id)) continue;
+    let sub;
+    try { sub = JSON.parse(row.push_subscription); } catch { continue; }
+    if (!sub?.endpoint) continue;
+
+    const result = await sendWebPush(sub, {
+      title: 'Reminder: You\'re serving tomorrow!',
+      body: 'Hi ' + (row.first_name || 'there') + ', you have a volunteer assignment this Sunday. See you at church!',
+      url: '/portal',
+      tag: 'schedule-reminder-' + tomorrowISO,
+    }, env).catch(() => ({ ok: false }));
+
+    if (result.ok) sent++; else failed++;
+  }
+
+  return { sent, failed };
 }
 
 async function _fetch(req, env) {
@@ -135,6 +201,11 @@ async function _fetch(req, env) {
     if (path === '/portal.webmanifest') {
       return new Response(PORTAL_MANIFEST_JSON, {
         headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=86400' }
+      });
+    }
+    if (path === '/portal-sw.js') {
+      return new Response(PORTAL_SW_JS, {
+        headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache, no-store' }
       });
     }
     // Member API (uses tlc-member cookie; no admin auth required)

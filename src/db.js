@@ -539,6 +539,8 @@ async function _doInitDb(db) {
     'ALTER TABLE people ADD COLUMN dir_hide_anniversary INTEGER NOT NULL DEFAULT 0',
     // member portal: link app_users to a person record
     'ALTER TABLE app_users ADD COLUMN people_id INTEGER REFERENCES people(id)',
+    // member portal: Web Push subscription JSON (stored per-user account)
+    'ALTER TABLE app_users ADD COLUMN push_subscription TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }

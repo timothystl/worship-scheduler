@@ -242,6 +242,7 @@ var _dirData = null;
 var _schedData = null;
 var _prayerData = null;
 var _deferredInstallPrompt = null;
+var _swRegistration = null;
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 function esc(s) {
@@ -259,6 +260,13 @@ function api(path, opts) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 (function init() {
+  // Register service worker for push notifications
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/portal-sw.js', { scope: '/portal' })
+      .then(function(reg) { _swRegistration = reg; })
+      .catch(function() {});
+  }
+
   // Check session
   fetch('/member/api/session', { credentials: 'include' })
     .then(function(r) { return r.json(); })
@@ -295,6 +303,49 @@ function showApp() {
   loadTab(_currentTab);
   // Show install banner after a short delay (less intrusive)
   setTimeout(checkInstallBanner, 2000);
+  // Request push notification permission after a short delay
+  setTimeout(setupPushNotifications, 4000);
+}
+
+// ── Push Notifications ───────────────────────────────────────────────────────
+function b64uToUint8Array(b64u) {
+  var b64 = b64u.replace(/-/g, '+').replace(/_/g, '/');
+  var pad = b64.length % 4 ? b64 + '===='.slice(b64.length % 4) : b64;
+  var bin = atob(pad);
+  var arr = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function setupPushNotifications() {
+  if (!('Notification' in window) || !('PushManager' in window)) return;
+  if (Notification.permission === 'denied') return;
+  if (!_swRegistration) return;
+
+  // Fetch the VAPID public key, then subscribe
+  fetch('/member/api/vapid-public-key', { credentials: 'include' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d || !d.publicKey) return;
+      return Notification.requestPermission().then(function(perm) {
+        if (perm !== 'granted') return;
+        var key = b64uToUint8Array(d.publicKey);
+        return _swRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: key,
+        });
+      });
+    })
+    .then(function(sub) {
+      if (!sub) return;
+      var subJson = sub.toJSON();
+      return fetch('/member/api/push-subscribe', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }),
+      });
+    })
+    .catch(function() {});
 }
 function showLogin() {
   document.getElementById('login-form').style.display = 'block';
