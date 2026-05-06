@@ -490,6 +490,11 @@ export const HTML_TABS_1 = String.raw`<!-- ═══ HOME / DASHBOARD TAB ══
       </div>
       <div class="import-status" id="sms-test-status" style="margin-top:8px;"></div>
     </div>
+    <div class="import-card require-admin">
+      <h3>&#128276; Push Notifications (Member Portal)</h3>
+      <p style="font-size:.88rem;color:var(--warm-gray);margin-bottom:10px;">Send an announcement to all member-portal users who have enabled push notifications on their device.</p>
+      <button class="btn-secondary" style="font-size:.88rem;" onclick="openPushBroadcastModal()">&#128276; Send Push Notification</button>
+    </div>
     <div class="import-card">
       <h3>&#127968; Household Head Assignment</h3>
       <p id="hq4-status-text">Loading…</p>
@@ -1168,6 +1173,23 @@ export const HTML_TABS_2 = String.raw`
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('user-modal')">Cancel</button>
       <button class="btn-primary" id="user-modal-save" onclick="saveUser()">Create User</button>
+    </div>
+  </div>
+</div>
+
+<!-- Push broadcast modal -->
+<div class="modal-overlay" id="push-broadcast-modal">
+  <div class="modal-card" style="max-width:460px;">
+    <div class="modal-header"><span>&#128276; Send Push Notification</span><button class="modal-close" onclick="closeModal('push-broadcast-modal')">&#10005;</button></div>
+    <div style="padding:0 0 8px;">
+      <p style="font-size:.84rem;color:var(--warm-gray);margin-bottom:14px;">Sends an instant push notification to all member-portal users who have notifications enabled on their device.</p>
+      <div class="field"><label>Title <span style="color:var(--danger);">*</span></label><input type="text" id="push-broadcast-title" placeholder="e.g. Sunday Service Update" maxlength="100"></div>
+      <div class="field"><label>Message (optional)</label><textarea id="push-broadcast-body" rows="3" placeholder="Additional details…" style="width:100%;resize:vertical;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;font-family:inherit;"></textarea></div>
+      <div id="push-broadcast-result" style="font-size:.84rem;margin-top:6px;min-height:20px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('push-broadcast-modal')">Cancel</button>
+      <button class="btn-primary" id="push-broadcast-send-btn" onclick="sendPushBroadcast()">Send Notification</button>
     </div>
   </div>
 </div>

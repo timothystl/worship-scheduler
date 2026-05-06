@@ -240,7 +240,17 @@ export const DB_INIT = [
     created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_prayer_requests_status ON prayer_requests(status, submitted_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_prayer_requests_person ON prayer_requests(person_id)`
+  `CREATE INDEX IF NOT EXISTS idx_prayer_requests_person ON prayer_requests(person_id)`,
+  // Member portal: one-time invite/verification tokens
+  `CREATE TABLE IF NOT EXISTS member_invite_tokens (
+    token       TEXT    PRIMARY KEY,
+    people_id   INTEGER NOT NULL REFERENCES people(id),
+    email       TEXT    NOT NULL DEFAULT '',
+    expires_at  INTEGER NOT NULL DEFAULT 0,
+    used        INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_member_tokens_people ON member_invite_tokens(people_id)`
 ];
 
 
@@ -527,6 +537,10 @@ async function _doInitDb(db) {
     // people: privacy — hide DOB and anniversary from member-role profile views
     'ALTER TABLE people ADD COLUMN dir_hide_dob INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE people ADD COLUMN dir_hide_anniversary INTEGER NOT NULL DEFAULT 0',
+    // member portal: link app_users to a person record
+    'ALTER TABLE app_users ADD COLUMN people_id INTEGER REFERENCES people(id)',
+    // member portal: Web Push subscription JSON (stored per-user account)
+    'ALTER TABLE app_users ADD COLUMN push_subscription TEXT NOT NULL DEFAULT ""',
   ];
   for (const m of migrations) {
     try { await db.prepare(m).run(); } catch(e) { /* column already exists */ }

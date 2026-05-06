@@ -324,8 +324,12 @@ function showProfile(p) {
   var saEl = document.getElementById('pv-status-actions');
   if (saEl && _userRole !== 'member') {
     var pStatus = p.status || 'active';
+    var inviteBtn = (mt === 'member' && pStatus === 'active' && p.email)
+      ? '<button class="btn-secondary role-admin role-staff" style="font-size:.76rem;padding:3px 9px;color:var(--sky-steel);" onclick="sendPortalInvite('+p.id+')">&#128231; Invite to Portal</button>'
+      : '';
     if (pStatus === 'active') {
-      saEl.innerHTML = '<button class="btn-secondary" style="font-size:.76rem;padding:3px 9px;color:var(--warm-gray);" onclick="archivePerson('+p.id+')">Archive</button>'
+      saEl.innerHTML = inviteBtn
+        + '<button class="btn-secondary" style="font-size:.76rem;padding:3px 9px;color:var(--warm-gray);" onclick="archivePerson('+p.id+')">Archive</button>'
         + '<button class="btn-secondary" style="font-size:.76rem;padding:3px 9px;color:var(--warm-gray);" onclick="markPersonDeceased('+p.id+')">Deceased</button>';
     } else if (pStatus === 'archived') {
       saEl.innerHTML = '<button class="btn-primary" style="font-size:.76rem;padding:3px 9px;background:var(--teal);" onclick="unarchivePerson('+p.id+')">Reactivate</button>';
@@ -1744,6 +1748,12 @@ function deletePerson() {
   api('/admin/api/people/' + id, {method:'DELETE'})
     .then(function() { closeModal('person-modal'); loadPeople(); })
     .catch(function(e) { alert('Delete failed: ' + (e && e.message ? e.message : 'Server error. Please try again.')); });
+}
+function sendPortalInvite(id) {
+  api('/admin/api/people/' + id + '/invite', {method:'POST'}).then(function(r) {
+    if (r && r.ok) alert('Invite sent to ' + (r.email || 'their email address') + '. The link expires in 7 days.');
+    else alert('Error: ' + ((r && r.error) || 'Could not send invite. Check that this person has an email address.'));
+  });
 }
 function archivePerson(id) {
   if (!confirm('Archive this person? They will be hidden from the active list but their records and giving history are preserved.')) return;

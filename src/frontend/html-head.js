@@ -6,6 +6,10 @@ export const HTML_HEAD = String.raw`<!DOCTYPE html>
 <title>People &amp; Giving — Timothy Lutheran</title>
 <link rel="manifest" href="/chms.webmanifest">
 <meta name="theme-color" content="#0A3C5C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TLC ChMS">
+<link rel="apple-touch-icon" href="/tlc-logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@600;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{

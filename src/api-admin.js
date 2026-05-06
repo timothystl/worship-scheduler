@@ -438,6 +438,19 @@ export async function handleAdminApi(req, env, url, method) {
     });
   }
 
+  // ── Push broadcast ────────────────────────────────────────────────
+  if (seg === 'push-broadcast' && method === 'POST') {
+    const { broadcastWebPush } = await import('./push-sender.js');
+    let body;
+    try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
+    const title    = (body?.title || '').trim();
+    const bodyText = (body?.body  || '').trim();
+    if (!title) return json({ error: 'title required' }, 400);
+    const result = await broadcastWebPush({ title, body: bodyText, url: '/portal' }, env)
+      .catch(e => ({ error: e.message }));
+    return json(result);
+  }
+
   // ── ChMS API dispatch ─────────────────────────────────────────────
   if (seg.startsWith('people') || seg.startsWith('households') ||
       seg.startsWith('tags')   || seg.startsWith('funds')      ||

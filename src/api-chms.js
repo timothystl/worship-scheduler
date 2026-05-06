@@ -5,6 +5,7 @@ import { handleHouseholdsApi } from './api-households.js';
 import { handleImportApi } from './api-import.js';
 import { handleReportsApi } from './api-reports.js';
 import { handlePeopleApi } from './api-people.js';
+import { handleSendInvite } from './api-member.js';
 import { handleGivingApi } from './api-giving.js';
 
 export async function handleChmsApi(req, env, url, method, seg, role = 'admin') {
@@ -333,6 +334,13 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   if (seg.startsWith('utils/')) {
     const result = await handleUtilsApi(req, env, url, method, seg, db, isAdmin);
     if (result) return result;
+  }
+
+  // ── Member portal invite (admin/staff only) ────────────────────────────────
+  const inviteMatch = seg.match(/^people[/](\d+)[/]invite$/);
+  if (inviteMatch && method === 'POST') {
+    if (!canEdit) return json({ error: 'Access denied' }, 403);
+    return handleSendInvite(req, env, parseInt(inviteMatch[1], 10));
   }
 
   // ── People / Archive / Brevo / Photos / Follow-ups → api-people.js ────────
