@@ -1,6 +1,6 @@
 # AI Session Start Here — Timothy Digital Overhaul
 
-Checkpoint verified: September 6, 2026, ~1:50 p.m. UTC (~8:50 a.m. CDT)
+Checkpoint verified: September 7, 2026, 12:29 a.m. UTC (September 6, 7:29 p.m. CDT)
 Purpose: resume the work without repeating the repository and architecture survey
 
 ## Read this file first. Full stop.
@@ -22,11 +22,13 @@ The `architecture/` folder (repo root of `chms` — **not** `outputs/architectur
 
 ## ⚠ Repository automation you must know before touching git in `chms`
 
-`.github/workflows/auto-merge-claude.yml` auto-merges **any push to a `claude/**` branch straight into `main`, with no PR review step**. `.github/workflows/deploy.yml` deploys the live Cloudflare Worker (`tlc-chms`) on every push to `main` (and on manual `workflow_dispatch`) — it does **not** trigger on pull-request events.
+Deployment safety changed in PR #831, merged as `5af49947` on September 6, 2026:
 
-**Consequence: in this repository, pushing to a `claude/**` branch is a production deployment action, full stop — not a "safe, reversible commit."** If a task's safety rules require separate approval before deploying (every Preparation task before Preparation 7's go/no-go does), do not push. Write files locally, say so explicitly, and let a human (Andrew) decide when to push.
+- `.github/workflows/auto-merge-claude.yml` was deleted. Pushing a `claude/**` branch no longer merges it into `main`.
+- `.github/workflows/validate-changes.yml` validates `claude/**`, `codex/**`, and `safety/**` pushes and pull requests to `main` with read-only repository permission.
+- `.github/workflows/deploy.yml` is manual-only. It requires the full approved `main` commit SHA and a release reason, reruns tests, and deploys through the `production` environment.
 
-**This project's own two evidence pushes since the prior checkpoint were docs-only changes, explicitly authorized by Andrew before pushing, and each was verified green (auto-merge succeeded, deploy succeeded, diff was docs-only) after the fact.** That is the pattern to repeat: draft locally → ask → push only on explicit "yes" → verify green → report back. See "Completed since the prior checkpoint" for the concrete example.
+**Consequence: branch work and pull requests no longer deploy production. A production deployment requires a separate manual workflow dispatch. Do not trigger that workflow without Andrew's explicit release approval.**
 
 **⚠ This repository is shared by other, unrelated concurrent sessions.** Commits will appear on `origin/main` that have nothing to do with this overhaul project (feature work on scheduler, giving, tuition aid, etc. — this repo's ordinary `CLAUDE.md`/`PLAN.md`/`NOTES.md` backlog, a completely separate body of work from this checkpoint file). Do not assume every new commit on `main` is yours to explain. Check whether a commit's message and files touch `architecture/` before treating it as part of this project's history.
 
@@ -47,7 +49,7 @@ The `architecture/` folder (repo root of `chms` — **not** `outputs/architectur
 
 ## ⚠ THE GATE, STATED PLAINLY (this is the fact that has caused the most confusion — read it twice)
 
-**Preparation 6 ("Draft the documentation reset") is the specific, named gate on beginning Finance extraction.** Not the 7-day baseline. Not Preparation 7. Preparation 6, and only Preparation 6, is what the plan itself names.
+**Preparation 6 ("Draft the documentation reset") is the specific, named prohibition on beginning Finance extraction.** The waived seven-day baseline does not replace it. Completing Preparation 6 is necessary but does not authorize skipping the remaining preparation evidence, Preparation 7's formal go/no-go, or Implementations 1–2.
 
 Quoted directly from the architecture plan's own "Immediate safety rules," as read and reproduced in `architecture/evidence/2026-09-06-finance-extraction-scoping.md`:
 
@@ -56,7 +58,7 @@ Quoted directly from the architecture plan's own "Immediate safety rules," as re
 Two things this means concretely, so nobody re-derives them incorrectly again:
 
 - **The 7-day baseline (Preparation 2) is waived and closed.** Andrew's own words, on record: *"The seven day window I decided is unnecessary it was just to collect usage data and not needed now."* Waiving Preparation 2 does **not** satisfy Preparation 6 — they are unrelated gates for unrelated purposes. A future session must not treat "the baseline was waived" as "therefore Finance extraction can begin."
-- **Preparation 7 (the final Phase 0 go/no-go) is a later, broader gate** that authorizes starting *Implementation 1* — several steps downstream of Finance extraction, not a substitute for Preparation 6.
+- **Preparation 7 is the final Phase 0 go/no-go.** Finance extraction is Implementation 3, after safe deployment boundaries and cross-product contracts in Implementations 1–2.
 
 **Preparation 6 has not been started.** Its scope (from the same evidence file, §8, itself sourced from reading Preparation 6's full text in the plan): review 46 Markdown files (43,207 lines) against actual source/deployed config/schema/staff workflow; give `chms/SECRETS.md` a real credential inventory and rotation plan (not just deletion); draft canonical replacement docs (README, AGENTS, Architecture, Data Ownership, Operations, Security, Testing, ADRs, verified user manuals) **outside** the active repository trees; assign a retain/rewrite/merge/convert/remove disposition to every one of the 46 files; test every documented command and link. This is realistically several bounded sessions on its own.
 
@@ -69,13 +71,15 @@ Preparations 3 (backup/restore), 4 (operational map), and 5 (ownership/permissio
 | Repository | Local state | Remote state | Meaning |
 |---|---|---|---|
 | `website` | branch `claude/prep-1a-setup-1eovrx` at `7029f3c`, clean, as of the prior checkpoint | not re-verified this session | No known change; re-verify with a fresh `git -C website fetch && git -C website status` if you touch this repo |
-| `chms` | branch `claude/prep-1a-setup-1eovrx`, fully in sync with `origin/claude/prep-1a-setup-1eovrx` (clean, no local-only work) | `origin/main` at `1221968570e8185505179b19a33746022bd1437b` | See commit history below |
-| `childcare-portal` | **does not exist in this environment** — no `work/childcare-portal` or any `*childcare*` path found anywhere | — | Unresolved discrepancy from an earlier session's three-repo layout. Not yet explained. If you need this repo, say so explicitly and ask whether it should be attached, rather than assuming it is the same thing as `myMDO` under a different name — that has never been verified. |
+| `chms` | disposable restored checkout at `5af49947`; original working copy was not touched | `origin/main` at `5af49947d21418dbeccf99691822906276824574` | Deployment safety is merged; source recovery was tested from a complete bundle |
+| `childcare-portal` | not cloned in this session | GitHub repository existence was previously confirmed | This is the myMDO repository; review waits until the `chms` preparation sequence is complete |
 
 ### `origin/main` commit history (most recent 12, as of this checkpoint)
 
 In order, newest first. **Commits marked (this project)** are the overhaul project's own evidence-file pushes. **Commits marked (unrelated)** are other concurrent sessions' ordinary feature work on this repo's own separate backlog (see `chms/CLAUDE.md`/`PLAN.md`) — not part of this checkpoint's history, listed only so you don't mistake them for gaps or confuse them with this project's own commits.
 
+- `5af4994` (this project) — merge commit for PR #831, replacing auto-merge/auto-deploy with PR validation and manual production deployment
+- `490c3f9` (this project) — documentation-only checkpoint merge; also the most recent Cloudflare Worker deployment source SHA
 - `1221968` (this project) — merge commit landing `82103dd`, the Finance-extraction-scoping evidence file (`architecture/evidence/2026-09-06-finance-extraction-scoping.md`)
 - `abb2018` / `7b76067` (unrelated) — "Scheduler volunteers can carry a second (e.g. parent) email address," branch `claude/scheduler-multiple-emails-df9e57` — ordinary chms feature work, nothing to do with this project
 - `941a060` (this project) — merge commit landing `4529f3a`, the Preparation 1B deployment-identity-snapshot evidence file
@@ -108,24 +112,24 @@ If `2b4e22f` is no longer reachable, stop and explain the discrepancy before doi
 - **Preparation 1B's evidence record and the prior checkpoint update were committed and pushed**, after explicit authorization from Andrew ("Ok you can push it"). Verified: the auto-merge workflow run completed with `conclusion: success`, the dispatched deploy workflow run completed with `conclusion: success`, and `git diff --stat` confirmed the change was docs-only. Landed as merge commit `941a060` (source commit `4529f3a`).
 - **A Finance-extraction scoping and readiness document was written, committed, and pushed**, again after explicit authorization. Same verification discipline applied and passed: auto-merge green, deploy green, `git diff --stat` confirmed only the one new evidence file changed. Landed as merge commit `1221968` (source commit `82103dd`). This is `architecture/evidence/2026-09-06-finance-extraction-scoping.md` — it is the document that resolves the Preparation 6 gate question stated above, and it contains the current best answer for what a Finance-extraction-adjacent session should actually do next (see below).
 - **This checkpoint file itself has been rewritten** to fix several things that had gone stale or were actively misleading: the repository-state table, the "next task" section (which previously stated an incorrect gate — see the boxed section above), the reference-documents list, and to add the "update before you stop" rule that was missing entirely before.
+- **Deployment safety is now landed.** PR #831 merged as `5af49947`. Automatic Claude-branch merging was removed, production Worker deployment became manual-only, both validation runs passed, and the workflow-only merge did not deploy Cloudflare.
+- **Preparation 3A source recovery was exercised.** A complete Git mirror was bundled, verified, restored into a fresh checkout, and checked out successfully at current `main` and the latest deployed Worker source SHA. Evidence: `architecture/evidence/2026-09-07-preparation-3a-chms-git-recovery.md`. This packet remains open only for a durable independent encrypted storage location and repeat verification from that retained copy.
 
 ---
 
 ## Next single bounded task
 
-**Begin Preparation 6, scoped to ONE product's documentation at a time.** This is the concrete recommendation from `architecture/evidence/2026-09-06-finance-extraction-scoping.md` §9, and it is the correct next step because Preparation 6 is the actual gate (see above) and it is large enough that it must not be attempted in one unbounded pass.
+**Complete Preparation 3A's retained Git backup, then restore `tlc-volunteer-db` into a disposable D1 database.**
 
-Concretely, for the next session:
-
-1. Pick **one** of: Website docs, Connect docs, Finance docs, myMDO docs, or cross-cutting docs (`SECRETS.md`, root `README`, `AGENTS` file). Finance docs is the most natural next pick, since it directly informs the extraction work everyone actually wants to get to — but any one of the five is a legitimately bounded starting point.
-2. For that one product's slice: identify which of the 46 Markdown files fall under it, check each one's factual claims against actual source/deployed config/schema/current staff workflow, and assign a disposition — retain, rewrite, merge, convert, or remove — to each.
-3. Draft the canonical replacement content for that slice **outside the active repository trees** (e.g., under `architecture/` as a new evidence/draft file, not overwriting the live docs yet — that overwrite is itself part of what Preparation 6 gates, and shouldn't happen piecemeal).
-4. Write up the result as a new evidence file under `architecture/evidence/`, following the same naming convention as the existing three.
-5. **Do not** touch `SECRETS.md`'s actual content, delete any of the 46 files, or begin Finance extraction itself in this same session. Those all wait for Preparation 6 to be fully signed off across all five slices.
+1. Choose a durable encrypted location outside GitHub and name the backup operator and retention period.
+2. Recreate the verified `chms` bundle, upload it, verify the checksum after downloading it, and restore from that retained copy.
+3. With authenticated Cloudflare access, export the full `tlc-volunteer-db` schema and data without changing production.
+4. Restore into a disposable D1 database and validate table counts, indexes, triggers, timestamps, sampled relationships, and Finance/Giving monetary control totals.
+5. Record exact commands, operator, duration, checksums, counts, and disposal steps. Do not run migration, optimization, or performance investigation work.
 
 Preparation 3 (backup/restore) and Preparation 4 (operational map) can run as separate, parallel bounded sessions alongside Preparation 6 slices — they don't block each other. Preparation 5 (ownership/permissions/report registry, including the Tuition Aid and `chms_config`-key ownership questions raised in the scoping document's §6) should wait until after at least one Preparation 6 slice, since it benefits from that groundwork.
 
-**Do not begin Implementation 1 (safe deployment boundaries) or Implementation 2 (cross-product contracts) until Preparation 6 (all slices), Preparation 7 (formal go/no-go), and ideally 3–5 are done.** This is unchanged from every prior checkpoint and remains the single most important safety rule in this project.
+The deployment-safety portion of Implementation 1 was deliberately brought forward and completed in PR #831 because the old automation made preparation work unsafe. No other implementation phase is authorized. Preparation 6 remains the gate on Finance extraction, and Preparation 7 remains the formal authorization to proceed with the larger implementation sequence.
 
 ---
 
@@ -150,7 +154,7 @@ This file has gone stale before. That staleness is a large part of why this proj
 ## Safety constraints still in force
 
 - No production deployment, migration, Cloudflare/Supabase configuration change, authentication change, repository rename, data move, or documentation deletion without separate approval.
-- **In this repository specifically**: pushing to a `claude/**` branch is itself a production-deployment action. Treat it accordingly — draft locally, ask, push only on explicit "yes," verify green afterward.
+- Branch pushes and pull requests now validate without deploying. Production deployment is manual-only and requires separate explicit release approval.
 - Do not reset, rebase, or overwrite any existing checkout.
 - Preserve user changes and use disposable worktrees for verification.
 - Baseline measurement (if ever resumed) begins only after the final approved stabilization deployment and a 24–48 hour stability check — but note this baseline was waived by Andrew (see the boxed gate section above) and is not currently an active blocker for anything.
@@ -165,5 +169,6 @@ This file has gone stale before. That staleness is a large part of why this proj
 - Preparation 1A evidence: `architecture/evidence/2026-09-05-preparation-1a-finance-verification.md`
 - Preparation 1B evidence: `architecture/evidence/2026-09-06-preparation-1b-deployment-identity-snapshot.md`
 - Finance-extraction scoping (⚠ read this one for the gate resolution and the recommended next-session ordering): `architecture/evidence/2026-09-06-finance-extraction-scoping.md`
+- CHMS Git recovery proof: `architecture/evidence/2026-09-07-preparation-3a-chms-git-recovery.md`
 
 This checkpoint is authoritative for session startup — for AI agents and human developers alike. The larger architecture package is background reference, not required reading. If this file and the larger architecture package ever disagree, this file wins for "what to do next"; the package wins for "why."
