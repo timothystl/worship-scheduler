@@ -1,5 +1,10 @@
 # Operations, Backup, and Recovery
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 ## Phase 0 freeze
 
 No application refactors, route changes, binding changes, authentication changes, repository renames, or production data moves are authorized during Phase 0. Emergency D1 remediation occurred on September 5, 2026 and invalidated the originally planned baseline window. The clean seven-day baseline begins only after the last Finance stabilization deployment and a 24–48 hour error/reconciliation check. Its end date must be recorded from that actual start; September 11 is no longer a valid automatic exit date.

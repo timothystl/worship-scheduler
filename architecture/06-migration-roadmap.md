@@ -1,5 +1,10 @@
 # Migration Roadmap
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 This document retains the high-level migration sequence. The current readiness assessment, Finance stabilization work, reset baseline, and smaller execution packets are maintained in [Overhaul Readiness and Execution Plan](11-overhaul-readiness-and-execution-plan.md). Where timing or readiness differs, that dated plan controls until Phase 0 signoff.
 
 ## Phase 0 — Inventory, audit, backups, and baseline

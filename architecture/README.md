@@ -1,5 +1,10 @@
 # Timothy Digital Architecture Documentation
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Status: Phase 0 documentation; no implementation authorized  
 Last updated: September 5, 2026  
 Architecture owner: Timothy Lutheran Church

@@ -1,5 +1,10 @@
 # Overhaul Readiness and Execution Plan
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Status snapshot: September 5, 2026, updated 10:09 p.m. CDT  
 Scope: `website`, `chms` (Connect/Finance/Serve/Scheduler), and `childcare-portal` / myMDO  
 Change policy: diagnosis and documentation only in this assessment

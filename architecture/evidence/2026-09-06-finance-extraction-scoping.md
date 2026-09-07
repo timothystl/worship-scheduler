@@ -1,5 +1,10 @@
 # Finance Extraction — Scoping Work
 
+> **Historical evidence — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Captured: September 6, 2026 (session continuation of Preparation 1B)
 Policy: analysis and documentation only. No application code, schema, configuration, or deployment was changed to produce this document. Nothing here was committed or pushed (see the repository automation finding in the Preparation 1B evidence record — pushing to this session's branch is itself a production deploy).
 

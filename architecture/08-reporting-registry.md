@@ -1,5 +1,10 @@
 # Reporting Registry
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 ## Reporting policy
 
 Reports remain owned by their product. A cross-product report receives read-only, versioned projections. It must not gain unrestricted access to every production database.

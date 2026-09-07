@@ -1,5 +1,10 @@
 # PLAN.md — CR10 Remediation Plan (Phases 21–28)
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **This file is the running order for all open work.** It was written 2026-08-19 out of the CR10
 whole-codebase review and lives here, rather than inside `CLAUDE.md`, for one reason: `CLAUDE.md`
 is ~600 KB and a session that skims or truncates it will not find the plan. This file is small

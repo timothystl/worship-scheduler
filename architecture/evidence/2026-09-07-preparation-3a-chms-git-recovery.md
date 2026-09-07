@@ -1,5 +1,10 @@
 # Preparation 3A — CHMS Git source recovery proof
 
+> **Historical evidence — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Date: September 7, 2026, 12:29 a.m. UTC (September 6, 7:29 p.m. CDT)  
 Scope: `timothystl/chms` Git history and exact source restore points only  
 Change policy: read-only against GitHub; disposable local backup and restore test; no deployment or production configuration change
