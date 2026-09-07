@@ -1,5 +1,10 @@
 # Dev Notes — Volunteer / ChMS App
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 This file is checked at the start of every debugging or improvement session.
 Update it as issues are found, fixed, or queued.
 

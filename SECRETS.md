@@ -1,5 +1,10 @@
 # Secrets & Environment Variables
 
+> **Security reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 All secrets are stored as Cloudflare Worker secrets (`wrangler secret put <NAME>`).
 **Never commit secret values to the repo.**
 

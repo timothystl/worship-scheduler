@@ -1,5 +1,10 @@
 # Timothy Digital Applications Architecture and Migration Plan
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Status: planning document; no production changes authorized  
 Rebuilt: September 4, 2026
 

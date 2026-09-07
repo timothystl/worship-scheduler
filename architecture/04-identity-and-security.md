@@ -1,5 +1,10 @@
 # Identity, Authorization, and Security Boundaries
 
+> **Architecture reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 ## Target identity model
 
 Website Admin, Connect, and Finance should use one standards-based church-staff identity provider. Authentication establishes identity; each application independently grants permissions.

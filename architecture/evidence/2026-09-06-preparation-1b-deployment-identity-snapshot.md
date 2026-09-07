@@ -1,5 +1,10 @@
 # Preparation 1B Evidence — Deployment Identity and Stabilization Snapshot
 
+> **Historical evidence — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 Captured: September 6, 2026, ~06:21 a.m. CDT (11:21:21 UTC, per `SELECT datetime('now')` against production D1)
 Policy: read-only production inspection; no application, schema, deployment, or configuration changes. Nothing in this session was committed or pushed to any branch (see "Repository automation finding," which is why).
 
