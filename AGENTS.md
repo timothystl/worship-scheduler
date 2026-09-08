@@ -74,11 +74,13 @@ The target architecture has four staff products: Church Website, Connect, Financ
 - Preparation 2's seven-day usage baseline is waived and closed.
 - Preparation 3 is in progress. The CHMS Git bundle was integrity-tested and restored from
   a retained copy; Andrew has copies on SharePoint and his hard drive. On September 8,
-  `tlc-volunteer-db` was exported and restored into a disposable D1 database: integrity,
-  117 schema objects, 60 table counts, and 36 numeric financial controls matched, with zero
-  foreign-key violations; plaintext and disposable copies were deleted. The recovery workflow
-  is being updated with the proven handling for D1 statement and compound-query limits. Issue
-  #846 tracks renewal of its GitHub Actions credential and the remaining retention/cadence record.
+  `tlc-volunteer-db` was exported and restored into disposable D1 databases locally and through
+  GitHub Actions: integrity, 117 schema objects, 60 table counts, and 36 numeric financial controls
+  matched, with zero foreign-key violations; plaintext and disposable copies were deleted. The
+  repeatable workflow uses a dedicated D1 token. Andrew approved weekly encrypted independent
+  exports, additional exports before significant schema or data migrations, eight weeks of weekly
+  retention, twelve months of month-end retention, and quarterly disposable restore tests. Issue
+  #846 tracks the storage location, encryption implementation, alternate operator, and retained-copy evidence.
 - The approved myMDO authorization migrations are live and synchronized to source through
   childcare-portal PR #328. Do not reapply them. Cron, advisor, function-drift and role-governance
   follow-up remains open in the existing preparation issues.
