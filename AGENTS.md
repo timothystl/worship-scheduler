@@ -80,9 +80,10 @@ The target architecture has four staff products: Church Website, Connect, Financ
   first encrypted source-and-D1 package passed a restricted-SharePoint upload/download checksum
   test. A later full package added current source at `c0a78bc`, a fresh D1 export, all 244 objects
   (112,920,749 bytes) from R2 `tlc-chms-photos`, and a Cloudflare configuration/secret-name
-  inventory. Its local encryption/decryption, Git, D1 and per-object checks passed; its independent
-  SharePoint round trip and a disposable R2 restore remain open. The same recovery key is held
-  separately. Issue #846 tracks the approved cadence, retention, primary SharePoint destination,
+  inventory. Its local encryption/decryption, Git, D1 and per-object checks passed. A downloaded
+  SharePoint copy then matched the original encrypted package by size and SHA-256. A disposable R2
+  restore remains open. The same recovery key is held separately. Issue #846 tracks the approved
+  cadence, retention, primary SharePoint destination,
   secondary encrypted copy and alternate operator.
 - The approved myMDO authorization migrations are live and synchronized to source through
   childcare-portal PR #328. Do not reapply them. Cron, advisor and function-drift follow-up remains
