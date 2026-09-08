@@ -80,7 +80,9 @@ The target architecture has four staff products: Church Website, Connect, Financ
   repeatable workflow uses a dedicated D1 token. Andrew approved weekly encrypted independent
   exports, additional exports before significant schema or data migrations, eight weeks of weekly
   retention, twelve months of month-end retention, and quarterly disposable restore tests. Issue
-  #846 tracks the storage location, encryption implementation, alternate operator, and retained-copy evidence.
+  #846 records a restricted SharePoint folder as the primary independent destination and an
+  encrypted local or external drive as the secondary copy. It still tracks the exact folder,
+  encryption implementation, alternate operator, and retained-copy evidence.
 - The approved myMDO authorization migrations are live and synchronized to source through
   childcare-portal PR #328. Do not reapply them. Cron, advisor, function-drift and role-governance
   follow-up remains open in the existing preparation issues.
