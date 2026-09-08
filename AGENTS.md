@@ -73,9 +73,13 @@ The target architecture has four staff products: Church Website, Connect, Financ
 - Preparation 1 is closed by Andrew's acceptance of remaining stabilization uncertainty.
 - Preparation 2's seven-day usage baseline is waived and closed.
 - Preparation 3 is in progress. The CHMS Git bundle was integrity-tested and restored from
-  scratch; Andrew has retained copies on SharePoint and his hard drive. Still required:
-  checksum verification and restore from a retained copy, then export and restore
-  `tlc-volunteer-db` into a disposable D1 database with structural and monetary reconciliation.
+  a retained copy; Andrew has copies on SharePoint and his hard drive. PR #845 added a guarded
+  `tlc-volunteer-db` export/restore workflow, but its first run failed Cloudflare authentication
+  before any export or query. Issue #846 tracks credential renewal, a successful disposable
+  restore, structural and monetary reconciliation, and the remaining retention/cadence record.
+- The approved myMDO authorization migrations are live and synchronized to source through
+  childcare-portal PR #328. Do not reapply them. Cron, advisor, function-drift and role-governance
+  follow-up remains open in the existing preparation issues.
 - The deployment-safety part of Implementation 1 was pulled forward and completed in PR #831.
   No other implementation phase is authorized.
 - Preparation 6 documentation reset is underway. Finance extraction, repository renames,
