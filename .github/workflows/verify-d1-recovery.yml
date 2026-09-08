@@ -30,7 +30,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       SOURCE_DB: tlc-volunteer-db
       SOURCE_DB_ID: 9399ee53-3386-4084-9b6b-def46b88f96a
-      RESULT_FILE: ${{ runner.temp }}/d1-recovery-result.json
+      RESULT_FILE: /tmp/d1-recovery-result.json
     steps:
       - name: Check out the approved commit
         uses: actions/checkout@v4
