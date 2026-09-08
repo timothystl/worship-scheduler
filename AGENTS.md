@@ -84,8 +84,11 @@ The target architecture has four staff products: Church Website, Connect, Financ
   encrypted local or external drive as the secondary copy. It still tracks the exact folder,
   encryption implementation, alternate operator, and retained-copy evidence.
 - The approved myMDO authorization migrations are live and synchronized to source through
-  childcare-portal PR #328. Do not reapply them. Cron, advisor, function-drift and role-governance
-  follow-up remains open in the existing preparation issues.
+  childcare-portal PR #328. Do not reapply them. Cron, advisor and function-drift follow-up remains
+  open. Andrew approved the Preparation 5 role defaults with granular per-user checkboxes: presets
+  seed least-privilege defaults, authorized administrators can narrow or deliberately extend grants,
+  and high-risk permissions remain explicit, server-enforced and audited. Named assignments, live
+  Connect overrides, myMDO enforcement evidence, and report/data ownership remain open in #844.
 - The deployment-safety part of Implementation 1 was pulled forward and completed in PR #831.
   No other implementation phase is authorized.
 - Preparation 6 documentation reset is underway. Finance extraction, repository renames,
