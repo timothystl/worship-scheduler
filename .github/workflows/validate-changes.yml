@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate recovery tooling
+        run: |
+          bash -n scripts/verify-d1-recovery.sh
+          python3 -m py_compile scripts/prepare-d1-import.py
+
       - name: Run tests
         run: npm test
 

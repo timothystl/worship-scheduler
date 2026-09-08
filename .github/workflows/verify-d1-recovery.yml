@@ -30,6 +30,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       SOURCE_DB: tlc-volunteer-db
       SOURCE_DB_ID: 9399ee53-3386-4084-9b6b-def46b88f96a
+      RESULT_FILE: ${{ runner.temp }}/d1-recovery-result.json
     steps:
       - name: Check out the approved commit
         uses: actions/checkout@v4
@@ -56,150 +57,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Export, restore, reconcile, and remove the disposable copy
-        id: recovery
+      - name: Export, restore, reconcile, and clean up
+        run: bash scripts/verify-d1-recovery.sh
+
+      - name: Record recovery summary
         shell: bash
         env:
           RECOVERY_REASON: ${{ inputs.reason }}
         run: |
           set -euo pipefail
-
-          restore_db="tlc-chms-recovery-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          export_file="${RUNNER_TEMP}/tlc-volunteer-db.sql"
-          temp_dir="${RUNNER_TEMP}/d1-recovery-controls"
-          restore_created=0
-
-          cleanup() {
-            rm -f "$export_file"
-            rm -rf "$temp_dir"
-            if [[ "$restore_created" == "1" ]]; then
-              npx wrangler d1 delete "$restore_db" --skip-confirmation >/dev/null 2>&1 || true
-            fi
-          }
-          trap cleanup EXIT
-
-          mkdir -p "$temp_dir"
-          chmod 700 "$temp_dir"
-
-          source_info="$temp_dir/source-info.json"
-          npx wrangler d1 info "$SOURCE_DB" --json > "$source_info"
-          jq -e --arg expected "$SOURCE_DB_ID" '
-            (if type == "array" then .[0] else . end)
-            | (.uuid // .id) == $expected
-          ' "$source_info" >/dev/null
-
-          npx wrangler d1 export "$SOURCE_DB" \
-            --remote \
-            --output="$export_file" \
-            --skip-confirmation
-          chmod 600 "$export_file"
-          export_sha="$(sha256sum "$export_file" | cut -d' ' -f1)"
-          export_bytes="$(stat -c '%s' "$export_file")"
-
-          npx wrangler d1 create "$restore_db" --location=wnam >/dev/null
-          restore_created=1
-          npx wrangler d1 execute "$restore_db" \
-            --remote \
-            --file="$export_file" \
-            --yes >/dev/null
-
-          run_query() {
-            local database="$1"
-            local sql="$2"
-            local output="$3"
-            npx wrangler d1 execute "$database" \
-              --remote \
-              --json \
-              --command "$sql" > "$output"
-            jq -e 'all(.[]; .success == true)' "$output" >/dev/null
-          }
-
-          canonical_results() {
-            jq -c '[.[].results[]] | sort_by(tostring)' "$1"
-          }
-
-          schema_sql="SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND sql IS NOT NULL ORDER BY type, name;"
-          run_query "$SOURCE_DB" "$schema_sql" "$temp_dir/source-schema.json"
-          run_query "$restore_db" "$schema_sql" "$temp_dir/restore-schema.json"
-          canonical_results "$temp_dir/source-schema.json" > "$temp_dir/source-schema.canonical"
-          canonical_results "$temp_dir/restore-schema.json" > "$temp_dir/restore-schema.canonical"
-          cmp -s "$temp_dir/source-schema.canonical" "$temp_dir/restore-schema.canonical"
-          schema_objects="$(jq 'length' "$temp_dir/source-schema.canonical")"
-          schema_sha="$(sha256sum "$temp_dir/source-schema.canonical" | cut -d' ' -f1)"
-
-          table_sql="SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;"
-          run_query "$SOURCE_DB" "$table_sql" "$temp_dir/tables.json"
-          jq -r '.[].results[].name' "$temp_dir/tables.json" > "$temp_dir/tables.txt"
-          table_count="$(wc -l < "$temp_dir/tables.txt" | tr -d ' ')"
-          test "$table_count" -gt 0
-
-          row_sql=""
-          while IFS= read -r table; do
-            [[ "$table" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
-            statement="SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM \"${table}\""
-            if [[ -n "$row_sql" ]]; then
-              row_sql+=" UNION ALL "
-            fi
-            row_sql+="$statement"
-          done < "$temp_dir/tables.txt"
-          row_sql+=" ORDER BY table_name;"
-
-          run_query "$SOURCE_DB" "$row_sql" "$temp_dir/source-rows.json"
-          run_query "$restore_db" "$row_sql" "$temp_dir/restore-rows.json"
-          canonical_results "$temp_dir/source-rows.json" > "$temp_dir/source-rows.canonical"
-          canonical_results "$temp_dir/restore-rows.json" > "$temp_dir/restore-rows.canonical"
-          cmp -s "$temp_dir/source-rows.canonical" "$temp_dir/restore-rows.canonical"
-          row_sha="$(sha256sum "$temp_dir/source-rows.canonical" | cut -d' ' -f1)"
-
-          monetary_sql=""
-          monetary_controls=0
-          while IFS= read -r table; do
-            columns_file="$temp_dir/columns-${table}.json"
-            run_query "$SOURCE_DB" "SELECT name, type FROM pragma_table_info('${table}') ORDER BY cid;" "$columns_file"
-            while IFS=$'\t' read -r column column_type; do
-              [[ "$column" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
-              lower_column="${column,,}"
-              lower_type="${column_type,,}"
-              if [[ "$lower_column" =~ (amount|total|balance|fee|cost|budget|pledge|gift|donation|income|expense|tuition|payment|salary|compensation|revenue|principal|interest|allocation|forecast|reserve) ]] &&
-                 [[ "$lower_type" =~ (int|real|num|dec|double|float) ]]; then
-                statement="SELECT '${table}' AS table_name, '${column}' AS column_name, COUNT(\"${column}\") AS populated_rows, printf('%.17g', COALESCE(SUM(CAST(\"${column}\" AS REAL)), 0)) AS control_total FROM \"${table}\""
-                if [[ -n "$monetary_sql" ]]; then
-                  monetary_sql+=" UNION ALL "
-                fi
-                monetary_sql+="$statement"
-                monetary_controls=$((monetary_controls + 1))
-              fi
-            done < <(jq -r '.[].results[] | [.name, (.type // "")] | @tsv' "$columns_file")
-          done < "$temp_dir/tables.txt"
-          test "$monetary_controls" -gt 0
-          monetary_sql+=" ORDER BY table_name, column_name;"
-
-          run_query "$SOURCE_DB" "$monetary_sql" "$temp_dir/source-money.json"
-          run_query "$restore_db" "$monetary_sql" "$temp_dir/restore-money.json"
-          canonical_results "$temp_dir/source-money.json" > "$temp_dir/source-money.canonical"
-          canonical_results "$temp_dir/restore-money.json" > "$temp_dir/restore-money.canonical"
-          cmp -s "$temp_dir/source-money.canonical" "$temp_dir/restore-money.canonical"
-          monetary_sha="$(sha256sum "$temp_dir/source-money.canonical" | cut -d' ' -f1)"
-
-          npx wrangler d1 delete "$restore_db" --skip-confirmation >/dev/null
-          restore_created=0
-          npx wrangler d1 list --json > "$temp_dir/databases.json"
-          jq -e --arg name "$restore_db" 'all(.[]; .name != $name)' "$temp_dir/databases.json" >/dev/null
-
-          rm -f "$export_file"
-          test ! -e "$export_file"
-
           {
-            echo "## D1 recovery verification"
+            echo '## D1 recovery verification'
             echo
             echo "- Approved commit: \`${GITHUB_SHA}\`"
-            echo "- Source database: \`${SOURCE_DB}\` (expected UUID verified)"
             echo "- Reason: ${RECOVERY_REASON}"
-            echo "- Export: ${export_bytes} bytes; SHA-256 \`${export_sha}\`"
-            echo "- Schema: ${schema_objects} objects matched; control SHA-256 \`${schema_sha}\`"
-            echo "- Rows: ${table_count} tables matched; control SHA-256 \`${row_sha}\`"
-            echo "- Monetary controls: ${monetary_controls} numeric financial columns matched; control SHA-256 \`${monetary_sha}\`"
-            echo "- Disposal: plaintext export removed and disposable D1 \`${restore_db}\` deleted"
-            echo "- Sensitive rows and monetary values were not printed or retained as artifacts"
+            jq -r '
+              "- Source database UUID verified: `" + .source_db_id_verified + "`",
+              "- Export: " + (.export_bytes | tostring) + " bytes; SHA-256 `" + .export_sha256 + "`",
+              "- Oversized export handling: " + (.oversized_export_statements_rewritten | tostring) + " statement rewritten; " + (.large_cells_length_verified | tostring) + " large value length-verified",
+              "- Schema: " + (.schema_objects_matched | tostring) + " objects matched; control SHA-256 `" + .schema_control_sha256 + "`",
+              "- Integrity: " + .integrity_check + "; foreign-key violations " + (.foreign_key_violations | tostring),
+              "- Rows: " + (.tables_matched | tostring) + " tables matched; control SHA-256 `" + .row_control_sha256 + "`",
+              "- Monetary controls: " + (.monetary_controls_matched | tostring) + " columns matched; control SHA-256 `" + .monetary_control_sha256 + "`",
+              "- Disposal: plaintext export removed and disposable D1 `" + .disposable_database + "` deleted",
+              "- Sensitive rows and monetary values were not printed or retained as artifacts"
+            ' "$RESULT_FILE"
           } >> "$GITHUB_STEP_SUMMARY"
-
