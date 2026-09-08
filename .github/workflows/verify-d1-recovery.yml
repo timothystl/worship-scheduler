@@ -27,7 +27,7 @@ jobs:
     environment: production
     timeout-minutes: 45
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       SOURCE_DB: tlc-volunteer-db
       SOURCE_DB_ID: 9399ee53-3386-4084-9b6b-def46b88f96a
       RESULT_FILE: /tmp/d1-recovery-result.json
