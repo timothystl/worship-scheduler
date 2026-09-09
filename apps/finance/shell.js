@@ -60,6 +60,19 @@ function renderShell(metadata) {
 </html>`;
 }
 
+async function readSyntheticSummary(db) {
+  const statements = [
+    "SELECT value FROM finance_settings WHERE key='fixture_label'",
+    'SELECT COALESCE(SUM(own_actual_cents),0) AS actual_cents, COALESCE(SUM(own_budget_cents),0) AS budget_cents FROM finance_church_entries',
+    'SELECT COALESCE(SUM(own_balance_cents),0) AS balance_cents FROM finance_church_balances',
+    'SELECT COUNT(*) AS room_count, COALESCE(SUM(billed_cents),0) AS billed_cents FROM finance_daycare_rooms',
+  ];
+  const results = await db.batch(statements.map((sql) => db.prepare(sql)));
+  const first = (index) => results[index]?.results?.[0] || {};
+  if (first(0).value !== 'SYNTHETIC-NO-PRODUCTION-DATA') throw new Error('Synthetic fixture marker missing');
+  return { church: first(1), balanceSheet: first(2), childcare: first(3) };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -75,6 +88,19 @@ export default {
     if (url.pathname === '/health') {
       const body = request.method === 'HEAD' ? null : JSON.stringify({ status: 'ok', ...metadata });
       return response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+
+    if (url.pathname === '/api/summary') {
+      try {
+        const summary = await readSyntheticSummary(env.FINANCE_DB);
+        const body = request.method === 'HEAD' ? null : JSON.stringify({ ...metadata, dataClassification: 'synthetic', summary });
+        return response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+      } catch {
+        return response(JSON.stringify({ error: 'Synthetic staging data unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      }
     }
 
     if (url.pathname === '/' || url.pathname === '/index.html') {

@@ -6,8 +6,8 @@ preserved separately.
 
 ## Current scope
 
-The alpha serves a branded staging shell and `/health`. It has an isolated, empty staging D1
-binding but intentionally contains no database calls. It has no KV, R2, service binding, queue,
+The alpha serves a branded staging shell, `/health`, and a read-only `/api/summary` over explicitly
+synthetic fixture data. It has no database mutation path, KV, R2, service binding, queue,
 cron, email, payment, application authentication, production route, or production data connection.
 A successful shell deployment proves packaging and release isolation only.
 

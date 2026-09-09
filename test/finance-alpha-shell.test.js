@@ -7,11 +7,25 @@ import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from '../apps/finance/versio
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'wrangler.finance.staging.jsonc'), 'utf8'));
-const env = { ENVIRONMENT: 'staging', RELEASE_SHA: 'test-sha' };
+const statements = [];
+const env = {
+  ENVIRONMENT: 'staging', RELEASE_SHA: 'test-sha',
+  FINANCE_DB: {
+    prepare(sql) { statements.push(sql); return { sql }; },
+    async batch() {
+      return [
+        { results: [{ value: 'SYNTHETIC-NO-PRODUCTION-DATA' }] },
+        { results: [{ actual_cents: 20000000, budget_cents: 21000000 }] },
+        { results: [{ balance_cents: 60000000 }] },
+        { results: [{ room_count: 1, billed_cents: 4000000 }] },
+      ];
+    },
+  },
+};
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.1');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.2');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -28,7 +42,9 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       database_name: 'timothy-finance-db-staging',
       migrations_dir: 'apps/finance/migrations',
     })]);
-    expect(fs.readFileSync(path.join(repoRoot, 'apps/finance/shell.js'), 'utf8')).not.toMatch(/FINANCE_DB|\.prepare\(|\.batch\(/);
+    const shell = fs.readFileSync(path.join(repoRoot, 'apps/finance/shell.js'), 'utf8');
+    expect(shell).not.toMatch(/\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP)\b/i);
+    expect(shell).not.toMatch(/\.run\(|\.exec\(/);
     for (const forbidden of ['kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers']) {
       expect(config[forbidden], `${forbidden} must not exist in the alpha shell`).toBeUndefined();
     }
@@ -41,7 +57,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.1',
+      version: '1.0.0-alpha.2',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -53,7 +69,18 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.1 · alpha');
+    expect(html).toContain('1.0.0-alpha.2 · alpha');
+  });
+
+  it('serves only synthetic read-only summary data', async () => {
+    statements.length = 0;
+    const res = await worker.fetch(new Request('https://finance.test/api/summary'), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.dataClassification).toBe('synthetic');
+    expect(body.summary.church.actual_cents).toBe(20000000);
+    expect(statements).toHaveLength(4);
+    expect(statements.every((sql) => /^SELECT\b/i.test(sql))).toBe(true);
   });
 
   it('ships restrictive response headers and rejects writes', async () => {
