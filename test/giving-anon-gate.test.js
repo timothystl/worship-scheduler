@@ -86,7 +86,14 @@ describe('council / anonymous giving gate', () => {
   it('still lets council read the Finance workspace and the Reports tab', async () => {
     await expectAllowed('finance/church/this-year');
     await expectAllowed('reports/membership');
-    await expectAllowed('register');
+  });
+
+  // Preparation 5 governance decision (issue #844): Council is a reporting/oversight tier,
+  // not an operational one, so its former register access (edit, then briefly view) was
+  // removed entirely.
+  it('no longer lets council reach the Register at all', async () => {
+    const r = await call('register');
+    expect(r.status).toBe(403);
   });
 
   it('does not let council write Finance — it is view-only there', async () => {

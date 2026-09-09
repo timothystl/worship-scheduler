@@ -26,10 +26,10 @@ describe('resolveRolePermissions', () => {
     expect(d.staff.register).toBe('edit');
     expect(d.staff.audit).toBe('none');
     expect(d.staff.giving).toBe('none');
-    // council = register at view-only (its edit access was removed per the same #844 decision:
-    // Council is a reporting/oversight tier, not an operational one), plus the board-facing
-    // financial picture: Finance + Reports to read, and giving only in aggregate.
-    expect(d.council.register).toBe('view');
+    // council = no register access at all (its edit access was removed per the same #844
+    // decision: Council is a reporting/oversight tier, not an operational one), plus the
+    // board-facing financial picture: Finance + Reports to read, and giving only in aggregate.
+    expect(d.council.register).toBe('none');
     expect(d.council.finance).toBe('view');
     expect(d.council.reports).toBe('view');
     expect(d.council.giving).toBe('anon');
@@ -41,7 +41,7 @@ describe('resolveRolePermissions', () => {
     const perms = resolveRolePermissions(JSON.stringify({ council: { reports: 'none' } }));
     expect(perms.council.reports).toBe('none');
     // untouched council items keep their default
-    expect(perms.council.register).toBe('view');
+    expect(perms.council.register).toBe('none');
     expect(perms.council.giving).toBe('anon');
     // other roles unaffected
     expect(perms.finance).toEqual(DEFAULT_ROLE_PERMISSIONS.finance);
