@@ -11,6 +11,14 @@
       "custom_domain": true
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "FINANCE_DB",
+      "database_name": "timothy-finance-db-staging",
+      "database_id": "59dfc662-9f43-469f-936e-d7a0d3247036",
+      "migrations_dir": "apps/finance/migrations"
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
     "RELEASE_SHA": "unreleased"

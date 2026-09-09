@@ -6,9 +6,10 @@ preserved separately.
 
 ## Current scope
 
-The alpha serves a branded staging shell and `/health`. It intentionally has no D1, KV, R2,
-service binding, queue, cron, email, payment, authentication, production route, or production data
-connection. A successful shell deployment proves packaging and release isolation only.
+The alpha serves a branded staging shell and `/health`. It has an isolated, empty staging D1
+binding but intentionally contains no database calls. It has no KV, R2, service binding, queue,
+cron, email, payment, application authentication, production route, or production data connection.
+A successful shell deployment proves packaging and release isolation only.
 
 The initial deployment was intentionally unrouted until Cloudflare Access was enabled and attached
 to the whole Worker. The only configured hostname is `finance-staging.timothystl.org`; both
@@ -19,10 +20,15 @@ Existing Finance remains operational in the current Connect Worker. Moving a rea
 route, identity flow, or database table requires a later reviewed slice with contract,
 reconciliation, and rollback evidence.
 
+The isolated database migration starts empty. It omits the retired QuickBooks OAuth/cache tables
+and replaces Finance settings formerly mixed into `chms_config` with `finance_settings`. Applying
+the migration does not copy production data or authorize a new writer.
+
 ## Files
 
 - `shell.js` — Cloudflare Worker entry point and safe health endpoint.
 - `version.js` — intentional semantic prerelease version.
+- `migrations/` — Finance-only D1 migration ledger; never targets the shared Connect database.
 - `../../wrangler.finance.staging.jsonc` — isolated staging Worker configuration.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
 
