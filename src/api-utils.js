@@ -122,8 +122,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   // be exactly the Compensation Planner, granted through the `compensation` item instead, not
   // the whole module. `compensation` defaults to 'edit' so a council member can save their own
   // raise-plan toggles/percentages there out of the box (see api-finance.js); `budget` defaults
-  // to 'none' — flip it on to give council read access to the Budget/Planning tab too (every
-  // write there is admin-only regardless, so 'view' and 'edit' behave the same for council).
+  // to 'none' — flip it to 'view' for read-only access to the Budget/Planning tab, or to 'edit'
+  // to also let council hand-correct a planned amount there (finance/planning/church/override
+  // and .../override-bulk) — those edits fork into their own chms_config key on first save
+  // (councilBudgetKey in api-finance.js), the same per-user pattern the salary planner uses, so
+  // council's what-if numbers can never overwrite the real admin/finance plan. Regenerating or
+  // committing the plan wholesale stays admin-only regardless of this setting.
   //
   // finance/compensation/budget for finance/staff mirror finance's own historical all-or-
   // nothing access (finance: all three 'edit'; staff: all three 'none') so splitting the item

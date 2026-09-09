@@ -7274,6 +7274,13 @@ function finRenderPlanning() {
   var el = document.getElementById('fin-plan-root');
   if (!el) return;
   var isAdminUI = (_userRole === 'admin');
+  // Council, granted 'budget':'edit' (see api-utils.js), may hand-correct the FY{target} Plan
+  // column only -- api-finance.js forks those edits into their own per-user key rather than the
+  // shared plan, the same pattern the Compensation Planner uses for council's raise plan.
+  // Generate All / growth assumption, Base Projected, FY{base} Actual and Commit all stay
+  // isAdminUI-only -- those regenerate, correct real posted figures, or finalize the shared plan
+  // wholesale, unlike a single hand-typed Plan correction (Andrew, 2026-09-09).
+  var canEditPlan = isAdminUI || (_userRole === 'council' && permEdit('budget'));
 
   // "Board view" (default) reads the categories set on Chart of Accounts, via
   // finBuildBoardTree() — a second reading of the SAME leaves, grouped differently. "QuickBooks
@@ -7359,7 +7366,7 @@ function finRenderPlanning() {
     var editedVal = _finPlanEdits[node.path];
     var cellVal = editedVal !== undefined ? editedVal : (planRow ? String(Math.round(planRow.planned_amount_cents/100)) : '');
     var planCents = finPlanLeafPlanCents(node);
-    var planCell = cols.plan ? ('<td style="text-align:right;padding:4px 8px;' + dim + '">' + (isAdminUI
+    var planCell = cols.plan ? ('<td style="text-align:right;padding:4px 8px;' + dim + '">' + (canEditPlan
       ? '<input type="text" inputmode="numeric" id="' + finPlanCellId('fin-plan-cell', node.path) + '" value="' + cellVal + '" class="fin-editable-input" style="width:100px;text-align:right;" oninput="finPlanEditCell(' + jsAttr(node.path) + ', finPlanSanitizeWholeDollarInput(this))">'
       : (cellVal !== '' ? '$' + finFmtMoney(parseFloat(cellVal)) : '<span style="color:var(--warm-gray);">—</span>')) + '</td>') : '';
 
@@ -7489,10 +7496,15 @@ function finRenderPlanning() {
     + '<tbody>' + (rowsHtml.join('') || '<tr><td colspan="' + (visibleColCount + 1) + '" style="padding:10px;color:var(--warm-gray);">No Church Budget data found for ' + _finPlanBaseYear + ' — sync or import that year first (Church Report tab).</td></tr>')
     + (rowsHtml.length ? netRow : '') + '</tbody></table></div>';
 
-  var actionsHtml = isAdminUI
+  // "Generate All" regenerates the whole shared plan from a growth rate -- stays admin-only.
+  // "Save Changes" + the status line beneath it are shared with council's own Plan-column
+  // edits (canEditPlan), which autosave (finPlanAutoSaveNow) into the same fin-plan-msg line.
+  var actionsHtml = (isAdminUI || canEditPlan)
     ? '<div class="fin-plan-noprint" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;">'
-      + '<label style="font-size:.72rem;color:var(--warm-gray);">Growth Assumption %<br><input type="number" id="fin-plan-growth" step="0.1" value="3" style="width:100px;"></label>'
-      + '<button class="btn-secondary" onclick="finPlanGenerateAll()">Generate All (overwrites every Projected value below)</button>'
+      + (isAdminUI
+        ? '<label style="font-size:.72rem;color:var(--warm-gray);">Growth Assumption %<br><input type="number" id="fin-plan-growth" step="0.1" value="3" style="width:100px;"></label>'
+          + '<button class="btn-secondary" onclick="finPlanGenerateAll()">Generate All (overwrites every Projected value below)</button>'
+        : '')
       + '<button class="btn-primary" onclick="finPlanSaveAll()">Save Changes</button>'
       + '</div>'
       + '<div id="fin-plan-msg" style="font-size:.75rem;color:var(--warm-gray);margin-top:6px;"></div>'

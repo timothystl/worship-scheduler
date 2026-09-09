@@ -42,6 +42,18 @@ function makeDb() {
     category_path TEXT,
     as_of_date TEXT
   )`);
+  sqlite.exec(`CREATE TABLE finance_budget_plan (
+    category             TEXT    NOT NULL,
+    classification        TEXT    NOT NULL DEFAULT 'Expenses',
+    fiscal_year           INTEGER NOT NULL,
+    planned_amount_cents  INTEGER NOT NULL DEFAULT 0,
+    basis                 TEXT    NOT NULL DEFAULT 'manual',
+    growth_pct            REAL,
+    base_amount_cents     INTEGER,
+    notes                 TEXT    NOT NULL DEFAULT '',
+    updated_at            TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (category, fiscal_year)
+  )`);
   sqlite.exec(`CREATE TABLE finance_qb_connection (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     realm_id TEXT NOT NULL DEFAULT '',
@@ -143,18 +155,46 @@ describe('council role — Compensation Planner reads', () => {
     expect(r.status).toBe(200);
   });
 
-  it('the Budget toggle passes council through the outer gate, though every write there stays admin-only regardless', async () => {
+  it('the Budget toggle passes council through the outer gate; granted "edit" it may hand-correct a Plan figure, forked into its own key', async () => {
     // finance/planning/church/override needs 'finance' or 'budget' (financeSegItems); with
     // neither granted, council 403s before ever reaching api-finance.js.
-    const before = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', year: 2027, amount: 100 });
+    const before = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', fiscal_year: 2027, planned_amount: 100 });
     expect(before.status).toBe(403);
     expect(before.body.error).toMatch(/Access denied/);
     await call('admin', '', 'config/role-permissions', 'PUT', { permissions: { council: { budget: 'edit' } } });
-    // Now past the outer gate — but api-finance.js's own handler for this endpoint is
-    // hardcoded admin-only, so a non-admin still can't actually write a budget row.
-    const after = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', year: 2027, amount: 100 });
-    expect(after.status).toBe(403);
-    expect(after.body.error).toMatch(/admin access/);
+    // A real admin/finance figure for the same category+year, to confirm council's edit never
+    // touches it (Andrew, 2026-09-09: "preserve the admin budget data on its own").
+    sqlite.prepare(
+      `INSERT INTO finance_budget_plan (category,classification,fiscal_year,planned_amount_cents,basis) VALUES (?,?,?,?,?)`
+    ).run('Expenses:Utilities', 'Expenses', 2027, 500000, 'manual');
+    const after = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', fiscal_year: 2027, planned_amount: 100 });
+    expect(after.status).toBe(200);
+    // The shared table — what admin/finance and every other viewer sees — is untouched.
+    const sharedRow = sqlite.prepare(`SELECT planned_amount_cents FROM finance_budget_plan WHERE category=? AND fiscal_year=?`).get('Expenses:Utilities', 2027);
+    expect(sharedRow.planned_amount_cents).toBe(500000);
+    // Council's own GET sees their $100 in place of the shared $5,000 figure.
+    const councilGet = await call('council', 'elder1', 'finance/planning/church', 'GET');
+    expect(councilGet.status).toBe(200);
+    const councilRow = councilGet.body.rows.find(r => r.category === 'Expenses:Utilities' && r.fiscal_year === 2027);
+    expect(councilRow.planned_amount_cents).toBe(10000);
+    // A second council login is isolated: still sees the real shared $5,000 figure, never
+    // elder1's fork.
+    const elder2Get = await call('council', 'elder2', 'finance/planning/church', 'GET');
+    const elder2Row = elder2Get.body.rows.find(r => r.category === 'Expenses:Utilities' && r.fiscal_year === 2027);
+    expect(elder2Row.planned_amount_cents).toBe(500000);
+  });
+
+  it('keeps Generate All / Commit / Base Projected / Actual corrections admin-only even with Budget:edit', async () => {
+    await call('admin', '', 'config/role-permissions', 'PUT', { permissions: { council: { budget: 'edit' } } });
+    const generateAll = await call('council', 'elder1', 'finance/planning/church/generate-all', 'POST', { base_year: 2026, target_year: 2027, growth_pct: 0.03 });
+    expect(generateAll.status).toBe(403);
+    expect(generateAll.body.error).toMatch(/admin access/);
+    const commit = await call('council', 'elder1', 'finance/planning/church/commit', 'POST', { fiscal_year: 2027 });
+    expect(commit.status).toBe(403);
+    const baseProj = await call('council', 'elder1', 'finance/planning/base-projection', 'PUT', { year: 2026, rows: [] });
+    expect(baseProj.status).toBe(403);
+    const actualOverride = await call('council', 'elder1', 'finance/church/actual-override', 'PUT', { year: 2026, rows: [{ category: 'Expenses:Utilities', amount: 1 }] });
+    expect(actualOverride.status).toBe(403);
   });
 
   it('403s everywhere else in the app the way a normal council session would not', async () => {

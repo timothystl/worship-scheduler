@@ -399,6 +399,12 @@ function showTab(name, finSection) {
   if (_userRole === 'compensation' && name !== 'finance') {
     name = 'finance';
   }
+  // Council: the Home dashboard's stat cards (giving totals, member counts, etc.) aren't part
+  // of council's reporting/oversight role — Andrew asked (2026-09-09) to hide it. Redirect to
+  // People, same as the member/volunteer/compensation pattern above.
+  if (_userRole === 'council' && name === 'home') {
+    name = 'people';
+  }
   // Enforce role-based tab access — admin-configurable per role, see _userPermissions above.
   // This is a UX convenience (avoid landing on a blank/403'd tab); the real enforcement is
   // server-side in handleChmsApi's ACL block, which reads the same permissions.
@@ -732,7 +738,7 @@ window.addEventListener('load', function() {
     initPeopleViewMode();
     // Restore tab from URL hash (back/forward or bookmarked link), otherwise default
     var hashTab = location.hash.replace('#', '');
-    var defaultTab = _userRole === 'member' ? 'people' : (_userRole === 'volunteer' ? 'volunteers' : (_userRole === 'compensation' ? 'finance' : 'home'));
+    var defaultTab = _userRole === 'member' ? 'people' : (_userRole === 'volunteer' ? 'volunteers' : (_userRole === 'compensation' ? 'finance' : (_userRole === 'council' ? 'people' : 'home')));
     // Replace initial state so back button from first tab exits the app cleanly
     history.replaceState({ tab: hashTab || defaultTab }, '', location.href);
     showTab(hashTab || defaultTab);

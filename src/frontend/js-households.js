@@ -644,7 +644,7 @@ function hvfAfterCommit(id) {
 }
 function hvfRenderInfo(h, members, dispName) {
   var infoEl = document.getElementById('hv-info'); if (!infoEl) return;
-  var canEdit = (_userRole !== 'member');
+  var canEdit = permEdit('directory');
   _recCtx.hv = { rec: h, fields: hvfBuildRegistry(), save: hvSave, canEdit: canEdit, afterCommit: hvfAfterCommit };
   var isFinance = (_userRole === 'admin' || _userRole === 'finance');
 
@@ -763,7 +763,7 @@ function ovfDetailsBody() {
 }
 function ovfRenderInfo(o) {
   var infoEl = document.getElementById('ov-info'); if (!infoEl) return;
-  var canEdit = (_userRole !== 'member');
+  var canEdit = permEdit('directory');
   _recCtx.ov = { rec: o, fields: ovfBuildRegistry(o), save: ovSave, canEdit: canEdit, afterCommit: ovfAfterCommit };
 
   var addr = [o.address1, o.city, o.state && o.zip ? o.state + ' ' + o.zip : (o.state || o.zip || '')].filter(Boolean).join(', ');

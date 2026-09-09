@@ -1491,7 +1491,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
    for all three regardless of config (member is a structurally different, non-configurable
    view), which is why role-member still has its own static rules here as a belt-and-suspenders
    fallback in case JS hasn't run yet. */
-/* .require-edit     = visible for admin + finance + staff + council (not member) -- fixed, not configurable */
+/* .require-edit     = the 'directory' permission item (People/Households/Organizations
+   add/edit) -- admin-configurable per role via applyPermissionUI()/permEdit('directory') in
+   js-core.js (see api-utils.js), NOT fixed. The .role-member rule below is a belt-and-
+   suspenders fallback for before JS has run; member's 'directory' level is clamped to 'none'
+   regardless of config, so it can never diverge from this rule in practice. */
 /* .require-admin    = admin only -- fixed, not configurable */
 /* .no-member        = hidden for member role */
 /* role-volunteer    = a structurally separate tier, like member -- sees ONLY the Volunteers
@@ -1505,6 +1509,11 @@ code{background:var(--linen);padding:1px 5px;border-radius:4px;font-size:.85em;f
 .role-member  .require-register{display:none!important;}
 .role-member .require-edit{display:none!important;}
 .role-member .no-member{display:none!important;}
+/* Council: the Home dashboard is a reporting/oversight tier's stat cards it doesn't need
+   (Andrew, 2026-09-09) -- showTab()'s own council redirect in js-core.js is the real
+   enforcement (a stale #home in the URL still lands on People); this just keeps the sidebar
+   link itself from ever appearing for council. */
+.role-council .s-item[data-tab="home"]{display:none!important;}
 /* Per-feature EDIT affordances (create/edit buttons inside a feature tab) — hidden by
    default; applyPermissionUI() in js-core.js adds a body.perm-edit-<item> class for the
    current role when that item's level is 'edit', which reveals them. Buttons are
