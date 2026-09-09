@@ -4166,6 +4166,35 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
     const row = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(key).first();
     let data = null;
     if (row) { try { data = JSON.parse(row.value); } catch { data = null; } }
+    // Council never sees a worker an admin has flagged hideFromCouncil — dropped from the
+    // roster entirely (never merely disabled) before anything else runs, and the per-worker
+    // method/override maps (keyed by roster array INDEX) re-indexed to match, the same class of
+    // fix finCompRemoveWorker already makes client-side when an admin deletes a row. Runs before
+    // the per-user plan overlay below so council's own saved per-worker method choices — which
+    // can only ever reference what they were shown — line up against this same filtered roster.
+    if (role === 'council' && data && Array.isArray(data.roster)) {
+      const oldToNewIndex = [];
+      const visibleRoster = [];
+      data.roster.forEach((w, i) => {
+        if (w && w.hideFromCouncil) return;
+        oldToNewIndex[i] = visibleRoster.length;
+        visibleRoster.push(w);
+      });
+      const reindex = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const out = {};
+        for (const k of Object.keys(obj)) {
+          const newIndex = oldToNewIndex[Number(k)];
+          if (newIndex !== undefined) out[newIndex] = obj[k];
+        }
+        return out;
+      };
+      data = Object.assign({}, data, {
+        roster: visibleRoster,
+        compPerWorkerMethod: reindex(data.compPerWorkerMethod),
+        compOverrides: reindex(data.compOverrides),
+      });
+    }
     // Council reads the real shared roster/reference data (so their plan is built off the same
     // facts admin/finance see) with only their own saved plan fields laid on top — never the
     // reverse, and never another council member's.

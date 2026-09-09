@@ -792,6 +792,70 @@ describe('workers paid from another budget', () => {
   });
 });
 
+describe('a worker hidden from council — different from externallyFunded, which still shows them', () => {
+  function hide(name) {
+    ctx._finSalaryRoster.filter(x => x.name === name)[0].hideFromCouncil = true;
+  }
+
+  it('is gone from the Council summary view and its printed report entirely', () => {
+    hide('Knapp');
+    const html = render(ctx, 'council');
+    expect(html).not.toContain('Knapp');
+    // finCompPrintCouncil() itself wraps its render in finCompWithCouncilRoster; exercising that
+    // same helper directly here, the way the real print path does.
+    const report = ctx.finCompWithCouncilRoster(() => {
+      const computed = ctx.finCompComputeAll();
+      return ctx.finCompCouncilReportHtml(computed, ctx.finCompTotals(computed));
+    });
+    expect(report).not.toContain('Knapp');
+  });
+
+  it("drops their cost from the Council summary's own totals", () => {
+    const before = ctx.finCompTotals(ctx.finCompComputeAll());
+    const idx = ctx._finSalaryRoster.findIndex(w => w.name === 'Knapp');
+    const theirs = ctx.finCompComputeAll()[idx];
+    hide('Knapp');
+    const html = render(ctx, 'council');
+    // The header strip (shared across every view) reflects the council-facing total while the
+    // council view is active, so it must not still show the pre-hide figure on screen.
+    expect(html).not.toContain(ctx.finCompMoney(before.totalCents));
+    expect(html).toContain(ctx.finCompMoney(before.totalCents - theirs.churchCostCents));
+  });
+
+  it('leaves them fully visible and counted on every OTHER view — plan, fairness, health, rates', () => {
+    hide('Knapp');
+    for (const view of ['plan', 'fairness', 'health', 'rates']) {
+      expect(render(ctx, view)).toContain('Knapp');
+    }
+    // Real, un-narrowed totals for whoever manages the roster (admin/compensation).
+    expect(ctx.finCompCountedCount()).toBe(ctx._finSalaryRoster.length);
+  });
+
+  it('restores the real roster after rendering the Council view — no lasting mutation', () => {
+    hide('Knapp');
+    render(ctx, 'council');
+    expect(ctx._finSalaryRoster.some(w => w.name === 'Knapp')).toBe(true);
+    expect(ctx._finSalaryRoster.length).toBe(3);
+  });
+
+  it('is off by default, so nothing changes for an existing roster', () => {
+    expect(ctx._finSalaryRoster.some(w => ctx.finCompIsHiddenFromCouncil(w))).toBe(false);
+  });
+
+  it("shows an admin the toggle and its warning note, and disables it for a non-editor", () => {
+    ctx._userRole = 'admin';
+    let html = render(ctx, 'plan');
+    expect(html).toContain('finCompHideFromCouncilToggle(0');
+    expect(html).not.toMatch(/finCompHideFromCouncilToggle\(0,this\.checked\)"[^>]*disabled/);
+    hide('Rev. Dinger');
+    html = render(ctx, 'plan');
+    expect(html).toContain('Hidden from council');
+    ctx._userRole = 'finance';
+    html = render(ctx, 'plan');
+    expect(html).toMatch(/finCompHideFromCouncilToggle\(0,this\.checked\)"[^>]*disabled/);
+  });
+});
+
 // Reported: under "No raise" the plan came out 6.1% BELOW the base year. A single net figure cannot
 // say whether the salaries disagree or the benefits do, and those have different causes — so the
 // base-year note now splits it, and two display bugs visible on the same screen are fixed.

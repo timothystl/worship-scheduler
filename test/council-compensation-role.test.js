@@ -225,3 +225,38 @@ describe('council role — saving the plan', () => {
     expect(r.body.data.roster[0].name).toBe('Admin Worker');
   });
 });
+
+describe('council role — a hideFromCouncil worker never reaches a council session', () => {
+  it('drops the flagged worker from the roster council receives, admin still sees everyone', async () => {
+    await call('admin', '', 'finance/planning/salary', 'PUT', {
+      roster: [
+        { name: 'Visible One' },
+        { name: 'Hidden Worker', hideFromCouncil: true },
+        { name: 'Visible Two' },
+      ],
+    });
+    const adminRead = await call('admin', '', 'finance/planning/salary', 'GET');
+    expect(adminRead.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Hidden Worker', 'Visible Two']);
+    const councilRead = await call('council', 'elder1', 'finance/planning/salary', 'GET');
+    expect(councilRead.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Visible Two']);
+  });
+
+  it('re-indexes compPerWorkerMethod/compOverrides so they still point at the right worker', async () => {
+    // Index 1 (Hidden Worker) is removed, so index 2 (Visible Two) becomes the new index 1 —
+    // its per-worker method and hand-typed override must move with it, not stay at "1" and land
+    // on whoever now sits there.
+    await call('admin', '', 'finance/planning/salary', 'PUT', {
+      roster: [
+        { name: 'Visible One' },
+        { name: 'Hidden Worker', hideFromCouncil: true },
+        { name: 'Visible Two' },
+      ],
+      compPerWorkerMethod: { 0: 'worksheet', 1: 'cola', 2: 'custom' },
+      compOverrides: { 2: '99000' },
+    });
+    const r = await call('council', 'elder1', 'finance/planning/salary', 'GET');
+    expect(r.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Visible Two']);
+    expect(r.body.data.compPerWorkerMethod).toEqual({ 0: 'worksheet', 1: 'custom' });
+    expect(r.body.data.compOverrides).toEqual({ 1: '99000' });
+  });
+});
