@@ -4,6 +4,7 @@ import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
 import { buildSummaryV1, FINANCE_SUMMARY_CONTRACT, readSyntheticSummary } from './summary-service.js';
 import { isFinanceMethodAllowed, resolveFinanceRoute } from './route-manifest.js';
 import { FINANCE_PARITY_SECTIONS, resolveFinanceSection } from './parity-manifest.js';
+import { buildFinancialHealthView } from './health-view-model.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = FINANCE_SUMMARY_CONTRACT;
@@ -40,6 +41,11 @@ function formatCents(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0) / 100);
 }
 
+function formatSignedCents(value) {
+  const amount = formatCents(Math.abs(value));
+  return value < 0 ? `−${amount}` : amount;
+}
+
 function renderSectionNav(activeSection) {
   return FINANCE_PARITY_SECTIONS.map((section) =>
     `<a href="/?section=${section.id}"${section.id === activeSection.id ? ' aria-current="page"' : ''}>${section.label}</a>`
@@ -48,13 +54,15 @@ function renderSectionNav(activeSection) {
 
 function renderSectionBody(section, summary, giving) {
   if (section.id === 'health') {
-    return `<section class="grid" aria-label="Synthetic finance summary">
-      <div class="card"><small>Church actual</small><strong>${formatCents(summary.church.actual_cents)}</strong></div>
-      <div class="card"><small>Church budget</small><strong>${formatCents(summary.church.budget_cents)}</strong></div>
-      <div class="card"><small>Balance sheet</small><strong>${formatCents(summary.balanceSheet.balance_cents)}</strong></div>
-      <div class="card"><small>Childcare rooms</small><strong>${Number(summary.childcare.room_count || 0)}</strong></div>
-      <div class="card"><small>Giving net</small><strong>${formatCents(giving.totals.netCents)}</strong></div>
-      <div class="card"><small>Giving records</small><strong>${Number(giving.reconciliation.sourceRecordCount || 0)}</strong></div>
+    const health = buildFinancialHealthView(summary, giving);
+    return `<section aria-label="Synthetic financial health">
+      <div class="section-heading"><div><div class="eyebrow">Financial Health</div><h2>How are we doing, and what should we decide?</h2></div><span class="badge">Synthetic staging</span></div>
+      <div class="grid">
+        <div class="card"><small>Operating result</small><strong>${formatSignedCents(health.operating.actualNetCents)}</strong><span>Budget ${formatSignedCents(health.operating.budgetNetCents)} · variance ${formatSignedCents(health.operating.varianceCents)}</span></div>
+        <div class="card"><small>Financial position</small><strong>${formatCents(health.position.netAssetsCents)}</strong><span>Assets ${formatCents(health.position.assetsCents)} · liabilities ${formatCents(health.position.liabilitiesCents)}</span></div>
+        <div class="card"><small>Giving reconciliation</small><strong>${formatCents(health.giving.netCents)}</strong><span>${health.giving.sourceRecordCount} aggregate records · ${health.giving.reconciled ? 'totals match' : 'review required'}</span></div>
+      </div>
+      <div class="decision-grid">${health.decisions.map((decision) => `<div class="decision"><small>${decision.stream}</small><b>${decision.authority}</b><span>${decision.action}</span></div>`).join('')}</div>
     </section>`;
   }
   return `<section class="parity" aria-label="${section.label} staging scaffold">
@@ -85,6 +93,13 @@ function renderShell(metadata, summary, giving, section) {
     .card { padding: 1rem; border: 1px solid #27425a; border-radius: .65rem; }
     .card small { display: block; color: #80c7ff; margin-bottom: .35rem; }
     .card strong { font-size: 1.3rem; }
+    .card span, .decision span { display:block; margin-top:.4rem; color:#9db0c1; font-size:.78rem; line-height:1.45; }
+    .section-heading { display:flex; justify-content:space-between; gap:1rem; align-items:end; margin-top:1.4rem; }
+    .section-heading h2 { margin:.3rem 0 0; font-size:1.55rem; }
+    .badge { padding:.35rem .6rem; border:1px solid #3c6688; border-radius:999px; color:#80c7ff; font-size:.72rem; }
+    .decision-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:.75rem; margin-top:.75rem; }
+    .decision { padding:1rem; border-left:3px solid #80c7ff; background:#102536; border-radius:.35rem; }
+    .decision small, .decision b { display:block; }
     nav { display:flex; gap:.45rem; overflow-x:auto; padding:.4rem 0 1rem; margin-top:1.25rem; border-bottom:1px solid #27425a; }
     nav a { flex:0 0 auto; padding:.55rem .75rem; border-radius:.45rem; color:#b8c8d6; text-decoration:none; font-size:.82rem; }
     nav a[aria-current="page"] { background:#17486a; color:#fff; }

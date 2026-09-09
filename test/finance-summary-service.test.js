@@ -7,8 +7,8 @@ import {
 
 const rows = [
   { results: [{ value: 'SYNTHETIC-NO-PRODUCTION-DATA' }] },
-  { results: [{ actual_cents: 20000000, budget_cents: 21000000 }] },
-  { results: [{ balance_cents: 60000000 }] },
+  { results: [{ actual_cents: 20000000, budget_cents: 21000000, income_actual_cents: 12000000, expense_actual_cents: 8000000, income_budget_cents: 12500000, expense_budget_cents: 8500000 }] },
+  { results: [{ balance_cents: 60000000, assets_cents: 30000000, liabilities_cents: 10000000, equity_cents: 20000000 }] },
   { results: [{ room_count: 1, billed_cents: 4000000 }] },
 ];
 

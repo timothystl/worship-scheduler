@@ -39,6 +39,7 @@ the migration does not copy production data or authorize a new writer.
 - `summary-service.js` — synthetic D1 read and `finance.summary.v1` contract assembly boundary.
 - `route-manifest.js` — executable route, method, contract, data-source, and query-budget registry.
 - `parity-manifest.js` — source-backed inventory of the existing Finance navigation and capabilities.
+- `health-view-model.js` — pure synthetic operating, position, Giving, and decision framing.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
 reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
@@ -59,6 +60,11 @@ Alpha.9 begins interface parity with the existing nine-section Finance informati
 Only Financial Health renders synthetic metrics; the other familiar sections are explicit staging
 scaffolds listing the workflows that must be rebuilt or deliberately retired. This is not visual or
 functional parity, and product-specific authorization is not yet connected.
+
+Alpha.10 replaces the generic Financial Health cards with the existing workspace's decision-led
+framing: operating result versus budget, financial position, aggregate Giving reconciliation, and
+the board's distinct authority over donor, earned, and passive income. The calculations use only
+the dedicated synthetic D1 aggregates and committed synthetic Giving fixture.
 
 ## Validate
 

@@ -17,8 +17,8 @@ const env = {
     async batch() {
       return [
         { results: [{ value: 'SYNTHETIC-NO-PRODUCTION-DATA' }] },
-        { results: [{ actual_cents: 20000000, budget_cents: 21000000 }] },
-        { results: [{ balance_cents: 60000000 }] },
+        { results: [{ actual_cents: 20000000, budget_cents: 21000000, income_actual_cents: 12000000, expense_actual_cents: 8000000, income_budget_cents: 12500000, expense_budget_cents: 8500000 }] },
+        { results: [{ balance_cents: 60000000, assets_cents: 30000000, liabilities_cents: 10000000, equity_cents: 20000000 }] },
         { results: [{ room_count: 1, billed_cents: 4000000 }] },
       ];
     },
@@ -27,7 +27,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.9');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.10');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -59,7 +59,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.9',
+      version: '1.0.0-alpha.10',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -71,12 +71,16 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.9 · alpha');
-    expect(html).toContain('$200,000');
-    expect(html).toContain('$210,000');
-    expect(html).toContain('$600,000');
+    expect(html).toContain('1.0.0-alpha.10 · alpha');
+    expect(html).toContain('How are we doing, and what should we decide?');
+    expect(html).toContain('Operating result');
+    expect(html).toContain('$40,000');
+    expect(html).toContain('Assets $300,000 · liabilities $100,000');
     expect(html).toContain('$1,450');
-    expect(html).toContain('Giving records</small><strong>6');
+    expect(html).toContain('6 aggregate records · totals match');
+    expect(html).toContain('Full control');
+    expect(html).toContain('Reported, not managed');
+    expect(html).toContain('Timing decision');
     expect(html).toContain('validated locally with no network call');
     expect(html).toContain('deterministic synthetic staging fixtures');
   });
@@ -128,7 +132,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       contract: 'finance.summary.v1',
       dataClassification: 'synthetic',
       release: {
-        product: 'finance', environment: 'staging', version: '1.0.0-alpha.9',
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.10',
         releaseChannel: 'alpha', releaseSha: 'test-sha',
       },
       summary: {
