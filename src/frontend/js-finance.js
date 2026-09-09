@@ -8608,13 +8608,31 @@ function finCompPctFmt(fraction, places) {
   return ((Number(fraction) || 0) * 100).toFixed(places == null ? 2 : places) + '%';
 }
 function finCompIsAdmin() { return _userRole === 'admin'; }
-// Disables every input in a chunk of markup for a non-admin. Same pattern the old tab used: the
-// figures stay visible to anyone who can reach the Compensation tab, only editing is gated (the
-// save endpoint is admin-gated server-side either way).
-function finCompReadOnly(html) {
-  if (finCompIsAdmin()) return html;
+// Everyone who may actually edit the roster on screen — admin, plus the 'compensation' role
+// (view+edit access to this tab only; its saves fork into their own storage rather than the
+// shared admin/finance roster, see api-finance.js). Kept distinct from finCompIsAdmin() itself,
+// which still gates the one action that writes into the SHARED church budget/ledger — "Send to
+// FY budget" — since that one must stay admin-only regardless of who can edit their own roster.
+function finCompCanEdit() { return _userRole === 'admin' || _userRole === 'compensation'; }
+function finCompIsCouncil() { return _userRole === 'council'; }
+// Council may steer the raise PLAN — the roster-wide/per-worker raise method, the custom/scale
+// percentages, and the baseline-only comparison toggle — but never a worker's seed facts (name,
+// position, current pay, District Worksheet inputs) or a hand-typed dollar override; those stay
+// under finCompCanEdit()/finCompReadOnly() below, same as any other non-admin/compensation role.
+// Gated on the real 'compensation' item level (permEdit, from js-core.js), not just the role
+// name — an admin can dial council's Compensation to 'View only' and expect these controls to
+// actually lock, same as every other per-item edit affordance in the app. Enforced again
+// server-side (api-finance.js only persists the plan fields, and only when the ACCESS_GATE's
+// 'compensation' check passes) since UI hiding here is not authorization.
+function finCompCanEditPlanControls() { return finCompCanEdit() || (finCompIsCouncil() && permEdit('compensation')); }
+// Disables every input in a chunk of markup for a role that can't edit. Same pattern the old tab
+// used: the figures stay visible to anyone who can reach the Compensation tab, only editing is
+// gated (the save endpoint is admin/compensation-gated server-side either way).
+function finCompReadOnlyUnless(html, allowed) {
+  if (allowed) return html;
   return html.replace(/<input /g, '<input disabled ').replace(/<select /g, '<select disabled ');
 }
+function finCompReadOnly(html) { return finCompReadOnlyUnless(html, finCompCanEdit()); }
 
 // ── Reference figures (§5.7): entered-for-the-year, else the most recent earlier entered year,
 // else the code constant. Never silently substitutes — every resolution carries the year it came
@@ -8716,6 +8734,35 @@ function finCompSetHealthTier(i, tier) {
 // read with that in mind.
 function finCompIsExternallyFunded(w) {
   return !!(w && w.externallyFunded);
+}
+// A worker an admin has flagged as not for a council audience at all — different from
+// externallyFunded, which still shows the worker (just excludes their figures from church
+// totals). This one removes them entirely: from every Compensation Planner view/report that
+// represents what council sees (the "Council summary" view/print, regardless of who is looking
+// at it — see finCompWithCouncilRoster) AND from a council-role login's own view of every tab
+// (enforced again server-side in api-finance.js, since UI hiding here is not authorization —
+// a council session never even receives this row in the API response).
+function finCompIsHiddenFromCouncil(w) {
+  return !!(w && w.hideFromCouncil);
+}
+function finCompHideFromCouncilToggle(i, checked) {
+  _finSalaryRoster[i].hideFromCouncil = !!checked;
+  finCompSay((_finSalaryRoster[i].name || 'That worker') + (checked
+    ? ' is now hidden from the council view entirely.'
+    : ' is visible to council again.'));
+  finRerenderPlanningPreserveFocus();
+}
+// Runs fn() with the roster temporarily narrowed to non-hidden workers, then restores it —
+// finCompComputeAll/finCompTotals/finCompCountedEntries all read _finSalaryRoster directly
+// rather than taking it as an argument, so this is the only way to reuse that math unchanged
+// for a narrower audience. Entirely synchronous, so nothing else can observe the roster
+// mid-swap. Used by whatever represents "what council sees" — the Council summary view and its
+// print — never by the other views, which stay showing the real, full roster to whoever
+// actually manages it (admin/the compensation role).
+function finCompWithCouncilRoster(fn) {
+  var fullRoster = _finSalaryRoster;
+  _finSalaryRoster = fullRoster.filter(function(w) { return !finCompIsHiddenFromCouncil(w); });
+  try { return fn(); } finally { _finSalaryRoster = fullRoster; }
 }
 // The roster rows that count toward church figures, as [worker, index] pairs so callers can still
 // reach the matching computed row.
@@ -9180,18 +9227,32 @@ function finRenderCompensation() {
     el.innerHTML = finCompHeaderHtml(finCompTotals([]))
       + '<div class="fin-card" style="margin-top:14px;"><div class="fin-card-title">No staff on the roster yet</div>'
       + '<p class="fin-card-sub">Add the church&#39;s called and employed workers to start planning FY' + _finPlanTargetYear + ' compensation.</p>'
-      + (finCompIsAdmin() ? '<button class="btn-primary" onclick="finCompAddWorker()">+ Add a staff member</button>' : '')
+      + (finCompCanEdit() ? '<button class="btn-primary" onclick="finCompAddWorker()">+ Add a staff member</button>' : '')
       + '</div>';
     return;
   }
   if (_finCompSelected >= _finSalaryRoster.length) _finCompSelected = _finSalaryRoster.length - 1;
   var computed = finCompComputeAll();
   var totals = finCompTotals(computed);
-  var body = _finCompView === 'plan' ? finCompRenderPlan(computed, totals)
-    : _finCompView === 'fairness' ? finCompRenderFairness(computed)
-    : _finCompView === 'health' ? finCompRenderHealth(computed, totals)
-    : _finCompView === 'rates' ? finCompRenderRates()
-    : finCompRenderCouncil(computed, totals);
+  var body;
+  if (_finCompView === 'plan') { body = finCompRenderPlan(computed, totals); }
+  else if (_finCompView === 'fairness') { body = finCompRenderFairness(computed); }
+  else if (_finCompView === 'health') { body = finCompRenderHealth(computed, totals); }
+  else if (_finCompView === 'rates') { body = finCompRenderRates(); }
+  else {
+    // Council summary — represents what a council audience actually sees, so its own figures
+    // (and the header strip below, which must match rather than showing a different total on
+    // the same screen) are computed over the non-hidden roster only, even when it's an admin
+    // previewing it before the meeting. The render itself has to happen INSIDE the swap too
+    // (not just the compute step) — finCompRenderCouncil looks worker rows back up out of
+    // _finSalaryRoster by index to match computed, so the roster has to still be the filtered
+    // one while it runs.
+    finCompWithCouncilRoster(function() {
+      computed = finCompComputeAll();
+      totals = finCompTotals(computed);
+      body = finCompRenderCouncil(computed, totals);
+    });
+  }
   el.innerHTML = finCompHeaderHtml(totals) + body + '<div id="fin-comp-print-root" class="fin-comp-print-root"></div>';
 }
 function finCompHeaderHtml(totals) {
@@ -9201,6 +9262,13 @@ function finCompHeaderHtml(totals) {
     return '<span class="fin-comp-pill' + (active ? ' active' : '') + '" onclick="finCompSetView(' + jsAttr(v.key) + ')">' + v.label + '</span>';
   }).join('');
   return '<div class="fin-comp-shell">'
+    + (finCompIsCouncil()
+        ? '<div class="fin-comp-note" style="margin-bottom:8px;">'
+          + (finCompCanEditPlanControls()
+              ? 'You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.'
+              : 'This view is read-only for your account. Every figure here reflects the church&#39;s actual compensation plan.')
+          + '</div>'
+        : '')
     + '<div class="fin-comp-titlebar">'
     + '<div><div class="fin-comp-title">Compensation Planner &mdash; FY' + _finPlanTargetYear + '</div>'
     + '<div class="fin-comp-subtitle">' + finCompMethodSummary() + '</div></div>'
@@ -9268,7 +9336,7 @@ function finCompRenderPlan(computed, totals) {
     + '<thead><tr><th class="fin-comp-th">Worker</th>' + heads
     + '<th class="fin-comp-th">Vs. district scale</th><th class="fin-comp-th num">Total comp.</th></tr></thead>'
     + '<tbody>' + rows
-    + (finCompIsAdmin() ? '<tr><td colspan="' + (FIN_COMP_METHODS.length + 3) + '" style="padding:9px 6px;"><span class="fin-comp-add" onclick="finCompAddWorker()"><span class="fin-comp-add-plus">+</span> Add a staff member</span></td></tr>' : '')
+    + (finCompCanEdit() ? '<tr><td colspan="' + (FIN_COMP_METHODS.length + 3) + '" style="padding:9px 6px;"><span class="fin-comp-add" onclick="finCompAddWorker()"><span class="fin-comp-add-plus">+</span> Add a staff member</span></td></tr>' : '')
     + '<tr class="fin-comp-total-row"><td class="fin-comp-td">Total</td>' + methodTotals
     + '<td class="fin-comp-td" style="font-size:.76rem;font-weight:600;color:' + scaleTotal.color + ';" title="District scale ' + finCompMoney(totals.worksheetCents) + '">' + scaleTotal.text + '</td>'
     + '<td class="fin-comp-td num">' + finCompMoney(totals.totalCents) + '</td></tr>'
@@ -9282,7 +9350,7 @@ function finCompRenderPlan(computed, totals) {
     + '<div class="fin-comp-chiprow">'
     + '<span class="fin-comp-chiprow-lbl">Applied to everyone</span>'
     + '<span style="display:flex;gap:6px;flex-wrap:wrap;">' + chips + '</span>'
-    + finCompReadOnly(customBox)
+    + finCompReadOnlyUnless(customBox, finCompCanEditPlanControls())
     + '<span style="font-size:.74rem;color:var(--warm-gray);">Click a column for everyone, a cell for one person, or type an exact figure in the panel.</span>'
     + (finCompOverrideCount() ? '<span class="fin-comp-link" onclick="finCompClearOverrides()">&#8634; clear ' + finCompOverrideCount() + ' hand-set figure(s)</span>' : '')
     + '</div>'
@@ -9434,7 +9502,7 @@ function finCompRenderBaselineNote(totals) {
       + '. That is a departed or vacant post, a worker missing from the roster, or someone excluded as paid from another budget'
       + ' &mdash; and while it is counted, the base year covers more people than the plan does, so the plan reads cheaper than it is.</div>'
       + list(b.unmatchedRows)
-      + (finCompIsAdmin()
+      + (finCompCanEditPlanControls()
           ? '<div><span class="fin-comp-link" onclick="finCompToggleBaselineRosterOnly()">'
             + (b.rosterOnly ? '&#8634; count these accounts again' : 'Leave these out and compare like for like &rarr;') + '</span></div>'
           : '');
@@ -9548,8 +9616,10 @@ function finCompRenderDrawer(computed) {
     + '</select></label>'
     + '</div>'
     + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompCashOnlyToggle(' + i + ',this.checked)"' + (finCompIsCashOnly(w) ? ' checked' : '') + '> Cash salary only &mdash; no pension, disability or health</label>'
-    + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompExternallyFundedToggle(' + i + ',this.checked)"' + (finCompIsExternallyFunded(w) ? ' checked' : '') + (finCompIsAdmin() ? '' : ' disabled') + '> Paid from another budget &mdash; keep on the roster but leave out of every church figure</label>'
+    + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompExternallyFundedToggle(' + i + ',this.checked)"' + (finCompIsExternallyFunded(w) ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> Paid from another budget &mdash; keep on the roster but leave out of every church figure</label>'
     + (finCompIsExternallyFunded(w) ? '<div style="font-size:.72rem;color:var(--deep-amber);margin-top:4px;">Costed elsewhere: this worker is in no total on this tab or in the Council report. The FY' + _finPlanBaseYear + ' comparison figure still comes from the church payroll accounts as they stand.</div>' : '')
+    + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompHideFromCouncilToggle(' + i + ',this.checked)"' + (finCompIsHiddenFromCouncil(w) ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> Hide entirely from the council view &mdash; not shown, not on the Council report, not to a council login</label>'
+    + (finCompIsHiddenFromCouncil(w) ? '<div style="font-size:.72rem;color:var(--deep-amber);margin-top:4px;">Hidden from council: this worker never appears in any Compensation Planner view or report a council member or the Council summary/print shows, and a council-role login never receives this row at all.</div>' : '')
     + (finCompIsCashOnly(w)
         ? '<div class="fin-comp-note">Concordia\u2019s plans have an hours floor, so a very part-time worker draws none of them. Employer FICA still applies &mdash; it is owed on any wage however few the hours.</div>'
         : (finCompIsPartTime(w) ? '<div class="fin-comp-note">At ' + finCompFtePct(w) + '% of full time this worker is still shown as benefits-eligible. Tick the box above if they are not.</div>' : ''))
@@ -9576,12 +9646,12 @@ function finCompRenderDrawer(computed) {
     + finCompPayRow('Cash salary', finCompMoney(c.salaryCents))
     + finCompPayRow('Pension ' + (b.cashOnly ? '' : finCompPctFmt(finCompPensionRate(_finPlanTargetYear).rate)), b.cashOnly ? '<span style="color:var(--warm-gray);font-weight:400;">not eligible</span>' : finCompMoney(b.pensionCents))
     + finCompPayRow('Health', b.cashOnly ? '<span style="color:var(--warm-gray);font-weight:400;">not eligible</span>' : finCompMoney(b.healthCents))
-    + finCompPayRow('Disability' + (b.cashOnly ? '' : ' <label class="fin-comp-inline-check"><input type="checkbox" onchange="finCompDependentsToggle(' + i + ',this.checked)"' + (w.hasDependents ? ' checked' : '') + (finCompIsAdmin() ? '' : ' disabled') + '> dependents</label>'), b.cashOnly ? '<span style="color:var(--warm-gray);font-weight:400;">not eligible</span>' : finCompMoney(b.disabilityCents))
-    + finCompPayRow('Employer FICA <label class="fin-comp-inline-check"><input type="checkbox" onchange="finCompSecaToggle(' + i + ',this.checked)"' + (w.selfEmployedFica ? ' checked' : '') + (finCompIsAdmin() ? '' : ' disabled') + '> minister</label>', finCompMoney(b.ficaCents))
+    + finCompPayRow('Disability' + (b.cashOnly ? '' : ' <label class="fin-comp-inline-check"><input type="checkbox" onchange="finCompDependentsToggle(' + i + ',this.checked)"' + (w.hasDependents ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> dependents</label>'), b.cashOnly ? '<span style="color:var(--warm-gray);font-weight:400;">not eligible</span>' : finCompMoney(b.disabilityCents))
+    + finCompPayRow('Employer FICA <label class="fin-comp-inline-check"><input type="checkbox" onchange="finCompSecaToggle(' + i + ',this.checked)"' + (w.selfEmployedFica ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> minister</label>', finCompMoney(b.ficaCents))
     + (w.selfEmployedFica ? '<div class="fin-comp-seca"><span>Employer half the worker covers themselves &mdash; ' + finCompPctFmt(finCompFicaRate()) + ' of ' + finCompMoney(c.salaryCents) + '<br><span style="font-size:.7rem;color:var(--warm-meta);">As a minister they pay SECA, so this employer share comes out of their own pay. It is in no total below. The employee half is not shown; everyone pays that.</span></span><b style="color:var(--deep-amber);">&minus;' + finCompMoney(b.secaSelfCents) + '</b></div>' : '')
     + '<div class="fin-comp-payrow total"><span>Total</span><b>' + finCompMoney(c.churchCostCents) + '</b></div>'
     + '</div>'
-    + (finCompIsAdmin() ? '<button class="btn-secondary" style="margin-top:10px;font-size:.74rem;color:var(--danger);" onclick="finCompRemoveWorker(' + i + ')">Remove this worker</button>' : '')
+    + (finCompCanEdit() ? '<button class="btn-secondary" style="margin-top:10px;font-size:.74rem;color:var(--danger);" onclick="finCompRemoveWorker(' + i + ')">Remove this worker</button>' : '')
     + '</div>';
 }
 function finCompPayRow(label, value) {
@@ -9642,7 +9712,7 @@ function finCompRenderFairness(computed) {
       + (delta === 0 ? 'no change' : finCompMoneySigned(delta) + (c.currentCents ? ' (' + (delta / c.currentCents * 100).toFixed(1) + '%)' : '')) + '</div></div>'
       + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
       + '<span class="fin-comp-verdict" style="background:' + verdict.bg + ';color:' + verdict.color + ';">' + verdict.text + '</span>'
-      + (verdict.matchLabel && finCompIsAdmin() ? '<span class="fin-comp-link" onclick="finCompMatchMidpoint(' + i + ')">' + verdict.matchLabel + '</span>' : '')
+      + (verdict.matchLabel && finCompCanEdit() ? '<span class="fin-comp-link" onclick="finCompMatchMidpoint(' + i + ')">' + verdict.matchLabel + '</span>' : '')
       + '</div></div>'
       + bars + '</div>';
   }).join('');
@@ -9755,7 +9825,7 @@ function finCompRenderHealth(computed, totals) {
       basis = 'Opt-out cash &mdash; default ' + finCompMoney(finCompOptOutCents()) + ' from this year&#39;s rates';
     }
     return '<tr><td class="fin-comp-td"><div style="font-weight:700;">' + esc(w.name || '(unnamed)') + '</div><div style="font-size:.72rem;color:var(--warm-gray);">' + esc(w.position || '') + '</div></td>'
-      + '<td class="fin-comp-td"><select onchange="finCompSetHealthTier(' + i + ',this.value)"' + (finCompIsAdmin() ? '' : ' disabled') + '>'
+      + '<td class="fin-comp-td"><select onchange="finCompSetHealthTier(' + i + ',this.value)"' + (finCompCanEdit() ? '' : ' disabled') + '>'
       + FIN_HEALTH_TIERS.map(function(t) { return '<option value="' + t.key + '"' + (tier === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>'; }).join('')
       + '<option value="optout"' + (tier === 'optout' ? ' selected' : '') + '>Opts out (cash)</option>'
       + '</select></td>'
@@ -9838,7 +9908,7 @@ function finCompBreakevenHtml() {
   var sizeMatters = finHealthFamilySizeMatters(renewalOpt) || finHealthFamilySizeMatters(selOpt);
   var sizePicker = sizeMatters
     ? '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-      + '<label style="font-size:.72rem;">Family members assumed <select onchange="finCompFamilySizeChange(this.value)"' + (finCompIsAdmin() ? '' : ' disabled') + '>'
+      + '<label style="font-size:.72rem;">Family members assumed <select onchange="finCompFamilySizeChange(this.value)"' + (finCompCanEdit() ? '' : ' disabled') + '>'
       + [1,2,3,4,5,6].map(function(n) { return '<option value="' + n + '"' + (n === members ? ' selected' : '') + '>' + n + '</option>'; }).join('')
       + '</select></label>'
       + '<span style="font-size:.7rem;color:var(--warm-meta);max-width:520px;">On an <b>embedded</b> plan each member has their own limit inside the family one and starts paying coinsurance once they personally meet it, so how many people share the costs changes the total.</span></div>'
@@ -9973,7 +10043,7 @@ function finCompRenderRates() {
     + '</tbody></table></div>'
     + '<div style="font-size:.72rem;color:var(--warm-gray);margin-top:6px;max-width:940px;"><b>Embedded</b> &mdash; each family member has their own limit inside the family limit; no one member contributes more than the single figure toward the family deductible, and once they meet it they start paying coinsurance even if the family deductible has not been met. <b>Non-embedded</b> &mdash; one true family deductible with no individual limits: members pool expenses and one person can pay the full family amount alone. On a non-embedded option the single figures below apply to a <i>self-only contract</i>, not as a per-person cap inside family coverage.</div>'
     + '<div class="fin-comp-bar mist"><span style="font-weight:700;color:var(--color-navy);">Plan the church covers in full:</span>'
-    + '<span style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;"><select onchange="finCompPickPlan(this.value)"' + (finCompIsAdmin() ? '' : ' disabled') + '>'
+    + '<span style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;"><select onchange="finCompPickPlan(this.value)"' + (finCompCanEdit() ? '' : ' disabled') + '>'
     + FIN_COMP_PLAN_KEYS.map(function(k) { var c = finComputeHealthPlanTotalCents(k); return '<option value="' + k + '"' + (k === _finHealthPlanSelectedOption ? ' selected' : '') + '>' + esc(c.label) + ' &middot; ' + finCompMoney(c.totalCents) + '</option>'; }).join('')
     + '</select><span style="font-size:.78rem;color:var(--warm-gray);">Anyone choosing another option pays the difference themselves.</span></span></div>'
     + '</div>';
@@ -10418,8 +10488,12 @@ function finCompSendToBudget() {
 function finCompPrintCouncil() {
   var root = document.getElementById('fin-comp-print-root');
   if (!root) return;
-  var computed = finCompComputeAll();
-  root.innerHTML = finCompCouncilReportHtml(computed, finCompTotals(computed));
+  // Same non-hidden-roster swap the on-screen Council summary uses (finCompWithCouncilRoster) —
+  // a worker flagged hideFromCouncil never reaches the printed report either, whoever prints it.
+  finCompWithCouncilRoster(function() {
+    var computed = finCompComputeAll();
+    root.innerHTML = finCompCouncilReportHtml(computed, finCompTotals(computed));
+  });
   document.body.classList.add('printing-comp');
   // Same cleanup shape as printBoardPage(): afterprint fires in every browser that supports it,
   // and the timeout is the fallback for the ones that don't (and for a cancelled dialog), so the

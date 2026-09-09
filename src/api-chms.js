@@ -75,17 +75,29 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   const db = env.DB;
 
   // ── Role-based access control ────────────────────────────────────
-  // Roles: admin | finance | staff | council | member | volunteer
+  // Roles: admin | finance | staff | council | member | volunteer | compensation
   //   admin   — always full access, not configurable (can never be locked out)
   //   finance | staff | council — every feature item below is admin-configurable per role
   //             (Settings → Role Permissions). See api-utils.js for the defaults.
-  //   council — the governance tier (renamed from `office`): sees the Finance workspace and
-  //             the Reports tab, and giving only at the 'anon' level — totals, never donors.
+  //   council — the governance tier (renamed from `office`): sees the Reports tab and giving
+  //             only at the 'anon' level (totals, never donors). Finance is three independent
+  //             items for every configurable role (see financeSegItems below): `finance` is the
+  //             rest of the workspace (Church Report, Balance Sheet, Daycare Report, Commercial
+  //             Property, Chart of Accounts, Data & Imports), `compensation` is the Compensation
+  //             Planner, `budget` is the Budget/Planning tab. Council defaults to `finance`:
+  //             'none', `compensation`: 'edit' — so out of the box a council member reaches only
+  //             the Compensation Planner, and can save their own raise-plan toggles/percentages
+  //             there, forked into a storage key scoped to their own username so it can never
+  //             overwrite the real admin/finance plan or another council member's (see
+  //             api-finance.js) — but an admin can grant/revoke any of the three independently.
   //   member  — GET people filtered to member_type='member' only; a structurally different
   //             read-only view, not part of the configurable matrix
   //   volunteer — read-only access to the public Volunteers admin screen only (Signups /
   //             Ministry Roles / Events / Templates, all in api-admin.js); denied outright
   //             everywhere in this file. Not part of the configurable matrix either.
+  //   compensation — view+edit access to the Compensation Planner sub-tab of Finance only,
+  //             and nothing else in this file. Not part of the configurable matrix (see the
+  //             dedicated block below, right after `canEdit`).
   const isAdmin = role === 'admin';
   const perms = await getRolePermissions(db);
   const rolePerms = permissionsForRole(perms, role);
@@ -120,6 +132,74 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   // are the feature areas layered on top, not the directory itself).
   const canEdit    = role === 'admin' || role === 'finance' || role === 'staff' || role === 'council';
 
+  // ── Compensation role — Compensation Planner only, everything else denied ─────────────
+  // Fully self-contained and hardcoded: unlike finance/staff/council it is not in the
+  // configurable matrix above, so it short-circuits here rather than flowing through the
+  // ACCESS_GATE loop below (which would 403 it — permissionsForRole gives it 'finance':'view'
+  // only so its sidebar tab renders, not enough to pass the item-level check that loop runs).
+  // Nothing outside People/Households/Giving/Reports/etc. in this file is reachable for it.
+  //
+  // The allowed GET set is exactly what the Compensation tab's own bootstrap calls (see
+  // loadFinance()/finLoadPlanning() in js-finance.js) — nothing from the rest of the Finance
+  // module (Church Report, Daycare, Property detail writes, Balance Sheet, Data & Imports,
+  // QuickBooks) is reachable. Note the underlying payloads for a couple of these (the church
+  // ledger/budget tree behind finance/church/this-year and finance/planning/church) carry more
+  // than compensation figures — the Compensation tab filters them down to salary/benefit lines
+  // client-side rather than the server slicing them narrower. The one write it may make, PUT
+  // finance/planning/salary, never touches the shared admin/finance roster — api-finance.js
+  // forks it to its own storage key so this role's edits can never overwrite what admin/
+  // finance/council see.
+  if (role === 'compensation') {
+    const allowedGet = seg === 'finance/status' || seg === 'finance/overview' || seg === 'finance/daycare'
+      || seg === 'finance/planning/church' || seg === 'finance/church/this-year'
+      || seg === 'finance/planning/base-projection' || seg === 'finance/planning/board-categories'
+      || seg === 'finance/planning/purpose-tags' || seg === 'finance/planning/salary'
+      || seg === 'finance/property/ivanhoe';
+    const allowedWrite = seg === 'finance/planning/salary' && method === 'PUT';
+    if (!((method === 'GET' && allowedGet) || allowedWrite)) {
+      return json({ error: 'Access denied' }, 403);
+    }
+    const result = await handleFinanceApi(req, env, url, method, seg, db, false, true, role);
+    return result !== null ? result : json({ error: 'Not found' }, 404);
+  }
+
+  // Which of the three Finance sub-permissions (finance/compensation/budget) can grant a given
+  // Finance segment, for the configurable roles (finance/staff/council) — the ACCESS_GATE below
+  // allows a segment if the role has view (or, for a write, edit) on ANY of the returned items,
+  // so a role holding only 'compensation' still reaches exactly the Compensation Planner, a role
+  // holding only 'budget' reaches exactly the Budget tab, and 'finance' alone still covers
+  // everything else, matching finance/staff's historical all-or-nothing access unchanged.
+  //
+  // A few reads are genuinely shared infrastructure, not a leak between the three: loadFinance()
+  // fetches finance/status, finance/overview and finance/daycare unconditionally on every visit
+  // to ANY Finance section (see its own comment in js-finance.js) — the tab shell cannot load
+  // without them — and finLoadPlanning()'s four reads (the church ledger/budget tree and its
+  // sibling config) are one shared fetch behind Budget, Chart of Accounts AND the Compensation
+  // Planner's own "current pay from this worker's budget line" lookups (see FIN_SECTION_LOADERS
+  // in js-finance.js). Those payloads carry more than compensation (or budget) figures — the
+  // Compensation tab filters its slice down to salary/benefit lines client-side rather than the
+  // server slicing it narrower, the same tradeoff the original `compensation` role's own
+  // allowlist already accepted.
+  //
+  // finance/planning/salary is the one segment gated by 'compensation' ALONE, deliberately not
+  // falling back to 'finance' — it is the actual restrictable action ("edit compensation data"),
+  // so an admin who explicitly sets it to 'none' for a role means it, regardless of that role's
+  // blanket Finance access. Note this only controls whether the request reaches api-finance.js
+  // at all; that file's own PUT handler still only recognizes admin, the dedicated `compensation`
+  // role and `council` by name for its write, so granting 'compensation':'edit' here to
+  // finance/staff does not (yet) let them save it — it only affects what they can reach/see.
+  function financeSegItems(seg) {
+    if (seg === 'finance/status' || seg === 'finance/overview' || seg === 'finance/daycare'
+        || seg === 'finance/planning/church' || seg === 'finance/church/this-year'
+        || seg === 'finance/planning/base-projection' || seg === 'finance/planning/board-categories'
+        || seg === 'finance/planning/purpose-tags') {
+      return ['finance', 'budget', 'compensation'];
+    }
+    if (seg === 'finance/planning/salary') return ['compensation'];
+    if (seg.startsWith('finance/planning/') || seg === 'finance/property/ivanhoe') return ['finance', 'budget'];
+    return ['finance'];
+  }
+
   // ── Central per-item access gate ──────────────────────────────────────────
   // Each feature segment maps to exactly one configurable item. 'none' → no access at all;
   // a non-GET request to an item the role only has 'view' on is blocked here, so a
@@ -138,6 +218,17 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   ];
   for (const rule of ACCESS_GATE) {
     if (rule.match(seg)) {
+      // Finance is really three independently grantable items (see financeSegItems above) —
+      // access is granted if ANY of the candidates for this segment clears the bar, rather than
+      // the single 'finance' item the other rules below check.
+      if (rule.item === 'finance') {
+        const candidates = financeSegItems(seg);
+        if (!candidates.some((it) => canView(it))) return json({ error: 'Access denied' }, 403);
+        if (method !== 'GET' && !candidates.some((it) => canEditItem(it))) {
+          return json({ error: 'Access denied: view-only permission for this area' }, 403);
+        }
+        break;
+      }
       if (!canView(rule.item)) return json({ error: 'Access denied' }, 403);
       if (method !== 'GET' && !canEditItem(rule.item)) {
         return json({ error: 'Access denied: view-only permission for this area' }, 403);
@@ -615,9 +706,13 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   }
 
   // ── Finance Overview (QuickBooks + daycare) → api-finance.js ───────────
-  // connecting/disconnecting QuickBooks is further restricted to admin inside api-finance.js
+  // connecting/disconnecting QuickBooks is further restricted to admin inside api-finance.js.
+  // The ACCESS_GATE above has already verified this exact segment+method against whichever of
+  // finance/compensation/budget governs it (financeSegItems) before this line is ever reached —
+  // isFinance is `true` unconditionally rather than re-checking the single 'finance' item, which
+  // would wrongly 403 e.g. a council member who was let through above on 'compensation' alone.
   if (seg.startsWith('finance')) {
-    const result = await handleFinanceApi(req, env, url, method, seg, db, isAdmin, canView('finance'));
+    const result = await handleFinanceApi(req, env, url, method, seg, db, isAdmin, true, role);
     if (result !== null) return result;
   }
 

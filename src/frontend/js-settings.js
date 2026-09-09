@@ -42,15 +42,21 @@ function saveMemberTypes() {
 // Read-only items (Audit Log, Reports tab) offer only No access / View only.
 // Member is the filtered directory view — it can never edit, and only the safe items
 // (Reports tab) are toggleable; everything else is fixed at No access.
+// finance/compensation/budget are three independent slices of the Finance module (see
+// financeSegItems in api-chms.js) — Finance Overview is the rest of the workspace (Church
+// Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
+// Imports), Compensation is the Compensation Planner, Budget is the Budget/Planning tab.
 var ROLE_PERM_ITEMS = [
-  { key: 'giving',     label: 'Giving',            editable: true  },
-  { key: 'tuitionaid', label: 'Tuition Aid',       editable: true  },
-  { key: 'finance',    label: 'Finance Overview',  editable: true  },
-  { key: 'attendance', label: 'Attendance',        editable: true  },
-  { key: 'followups',  label: 'Follow-ups',        editable: true  },
-  { key: 'audit',      label: 'Audit Log',         editable: false },
-  { key: 'register',   label: 'Register',          editable: true  },
-  { key: 'reports',    label: 'Reports tab',       editable: false },
+  { key: 'giving',       label: 'Giving',            editable: true  },
+  { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
+  { key: 'finance',      label: 'Finance Overview',  editable: true  },
+  { key: 'compensation', label: 'Compensation',      editable: true  },
+  { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'attendance',   label: 'Attendance',        editable: true  },
+  { key: 'followups',    label: 'Follow-ups',        editable: true  },
+  { key: 'audit',        label: 'Audit Log',         editable: false },
+  { key: 'register',     label: 'Register',          editable: true  },
+  { key: 'reports',      label: 'Reports tab',       editable: false },
 ];
 var ROLE_PERM_ROLES = ['finance', 'staff', 'council', 'member'];
 // Items a member is even allowed to be granted (view only). Anything else is locked to none.
@@ -91,7 +97,12 @@ function renderRolePermTable(perms) {
       + '<td style="padding:8px;">' + esc(item.label) + '</td>'
       + ROLE_PERM_ROLES.map(function(role) {
         var cur = (perms[role] && perms[role][item.key]) || 'none';
-        return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + '</td>';
+        // Council's Compensation saves are per-username (api-finance.js) rather than the
+        // shared admin/finance plan — called out here so "Edit" doesn't read as full control
+        // over the real plan.
+        var note = (item.key === 'compensation' && role === 'council')
+          ? '<div style="font-size:.68rem;color:var(--warm-gray);margin-top:2px;">Each council member saves their own plan</div>' : '';
+        return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + note + '</td>';
       }).join('')
       + '</tr>';
   }).join('');
@@ -133,7 +144,7 @@ function renderUsersList() {
     el.innerHTML = '<p style="font-size:.85rem;color:var(--warm-gray);">No user accounts yet. Add one below.</p>';
     return;
   }
-  var roleColors = { admin:'#0A3C5C', finance:'#1B4332', staff:'#1E40AF', council:'#8A5A00', member:'#4A1D6B', volunteer:'#0F6B5C' };
+  var roleColors = { admin:'#0A3C5C', finance:'#1B4332', staff:'#1E40AF', council:'#8A5A00', member:'#4A1D6B', volunteer:'#0F6B5C', compensation:'#9D2235' };
   el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.87rem;">'
     + '<thead><tr style="border-bottom:1px solid var(--border);">'
     + '<th style="text-align:left;padding:6px 8px;font-size:.72rem;color:var(--warm-gray);font-weight:700;text-transform:uppercase;">Username</th>'
@@ -173,7 +184,7 @@ function openUserForm(userId) {
     + '<div class="field" style="margin-bottom:10px;"><label>Display Name</label><input type="text" id="um-display" placeholder="e.g. Jane Smith" value="'+esc(u?u.display_name:'')+'" style="'+inp+'"></div>'
     + '<div class="field" style="margin-bottom:10px;"><label>Email <span style="color:var(--warm-gray);font-weight:400;">(for password reset)</span></label><input type="email" id="um-email" placeholder="e.g. jane@church.org" autocomplete="off" value="'+esc(u?(u.email||''):'')+'" style="'+inp+'"></div>'
     + '<div class="field" style="margin-bottom:10px;"><label>Role</label><select id="um-role" style="'+inp+'padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:.9rem;">'
-    + ['admin','finance','staff','council','member','volunteer'].map(function(r){return '<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r.charAt(0).toUpperCase()+r.slice(1)+'</option>';}).join('')
+    + ['admin','finance','staff','council','member','volunteer','compensation'].map(function(r){return '<option value="'+r+'"'+(u&&u.role===r?' selected':'')+'>'+r.charAt(0).toUpperCase()+r.slice(1)+'</option>';}).join('')
     + '</select></div>'
     + '<div class="field" style="margin-bottom:10px;"><label>'+(u?'New Password (leave blank to keep)':'Password')+'</label><input type="password" id="um-password" placeholder="At least 8 characters" autocomplete="new-password" style="'+inp+'"></div>'
     + (u ? '<div style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;"><input type="checkbox" id="um-active"'+(u.active?' checked':'')+'>Active</label></div>' : '');

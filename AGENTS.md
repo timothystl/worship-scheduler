@@ -43,15 +43,19 @@ The target architecture has four staff products: Church Website, Connect, Financ
 
 ## Access and data safety
 
-- Roles are `admin`, `finance`, `staff`, `council`, `member`, and `volunteer`; feature access is
-  resolved by the server-side permission matrix. UI hiding is never authorization.
+- Roles are `admin`, `finance`, `staff`, `council`, `member`, `volunteer`, and `compensation`
+  (view+edit access to the Compensation Planner sub-tab of Finance only, saved separately from
+  the shared admin/finance roster); feature access is resolved by the server-side permission
+  matrix. UI hiding is never authorization.
 - Council Giving access is aggregate/anonymous only. New anonymous endpoints are denied until
   explicitly allowlisted.
 - Never expose credentials or personal, giving, payroll, HR, child/family, or payment data.
 - `SECRETS.md` is security-sensitive reference material, not startup reading. Do not reproduce
   values. Any removal requires credential inventory, rotation decisions, and Git-history review.
-- No production query, migration, deployment, auth/configuration change, data move, or destructive
-  cleanup without Andrew's explicit approval for that operation.
+- Documentation changes and read-only production queries do not require separate approval.
+- Ask Andrew before changing application source code. Production migrations, deployments,
+  authentication or configuration changes, data moves, and destructive cleanup also require his
+  explicit approval for that operation.
 
 ## Git, deployment, and verification
 
@@ -72,20 +76,24 @@ The target architecture has four staff products: Church Website, Connect, Financ
 - Preparation 0 is complete.
 - Preparation 1 is closed by Andrew's acceptance of remaining stabilization uncertainty.
 - Preparation 2's seven-day usage baseline is waived and closed.
-- Preparation 3 is in progress. The CHMS Git bundle was integrity-tested and restored from
-  a retained copy; Andrew has copies on SharePoint and his hard drive. On September 8,
-  `tlc-volunteer-db` was exported and restored into disposable D1 databases locally and through
-  GitHub Actions: integrity, 117 schema objects, 60 table counts, and 36 numeric financial controls
-  matched, with zero foreign-key violations; plaintext and disposable copies were deleted. The
-  repeatable workflow uses a dedicated D1 token. Andrew approved weekly encrypted independent
-  exports, additional exports before significant schema or data migrations, eight weeks of weekly
-  retention, twelve months of month-end retention, and quarterly disposable restore tests. Issue
-  #846 records a restricted SharePoint folder as the primary independent destination and an
-  encrypted local or external drive as the secondary copy. It still tracks the exact folder,
-  encryption implementation, alternate operator, and retained-copy evidence.
+- Preparation 3 is in progress. The repeatable `tlc-volunteer-db` exercise passed locally and
+  in GitHub Actions, matching 117 schema objects, 60 table counts, 36 numeric financial controls,
+  integrity and foreign keys before deleting plaintext and disposable copies. On September 8, the
+  first encrypted source-and-D1 package passed a restricted-SharePoint upload/download checksum
+  test. A later full package added current source at `c0a78bc`, a fresh D1 export, all 244 objects
+  (112,920,749 bytes) from R2 `tlc-chms-photos`, and a Cloudflare configuration/secret-name
+  inventory. Its local encryption/decryption, Git, D1 and per-object checks passed. A downloaded
+  SharePoint copy then matched the original encrypted package by size and SHA-256. A disposable R2
+  restore remains open. The same recovery key is held separately. Issue #846 records a restricted
+  SharePoint folder as the primary independent destination and an encrypted local or external
+  drive as the secondary copy, alongside the approved cadence and retention. It still tracks the
+  exact folder, encryption implementation, alternate operator, and retained-copy evidence.
 - The approved myMDO authorization migrations are live and synchronized to source through
-  childcare-portal PR #328. Do not reapply them. Cron, advisor, function-drift and role-governance
-  follow-up remains open in the existing preparation issues.
+  childcare-portal PR #328. Do not reapply them. Cron, advisor and function-drift follow-up remains
+  open. Andrew approved the Preparation 5 role defaults with granular per-user checkboxes: presets
+  seed least-privilege defaults, authorized administrators can narrow or deliberately extend grants,
+  and high-risk permissions remain explicit, server-enforced and audited. Named assignments, live
+  Connect overrides, myMDO enforcement evidence, and report/data ownership remain open in #844.
 - The deployment-safety part of Implementation 1 was pulled forward and completed in PR #831.
   No other implementation phase is authorized.
 - Preparation 6 documentation reset is underway. Finance extraction, repository renames,

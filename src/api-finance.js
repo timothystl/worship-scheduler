@@ -5,7 +5,7 @@
 // QBO amounts are kept as QBO returns them (decimal dollars) rather than converted to this
 // app's integer-cents convention — they're display-only, never combined arithmetically with
 // giving_entries/tuition figures.
-import { json } from './auth.js';
+import { json, getAuthInfo } from './auth.js';
 import { resolveGeneralFundIds, resolveGeneralFundBudget } from './api-utils.js';
 import { getAuthorizeUrl, exchangeCodeForTokens, refreshTokens, revokeToken, makeQboClient, qboConfigured } from './quickbooks.js';
 import { makeDaycareClient, daycareConfigured } from './daycare.js';
@@ -2920,7 +2920,7 @@ function coalesceChurchYear(year, compute) {
   return p;
 }
 
-export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, isFinance) {
+export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, isFinance, role = 'admin') {
   if (!isFinance) return json({ error: 'Access denied: finance data requires finance access' }, 403);
 
   // ── Commercial Property (only 'ivanhoe' exists today; propertyKey is threaded through so a
@@ -4138,20 +4138,106 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
   // small nested-settings blobs elsewhere in this file. Not fiscal-year-scoped (the roster is a
   // standing list of current staff, not a per-year plan), so it's read once and reused across
   // whatever base/target year the admin is currently viewing.
+  // The 'compensation' role (view+edit access to this tab only, nothing else in Finance —
+  // see api-chms.js) never reads or writes the shared admin/finance roster: its edits are
+  // forked into their own config key on first save, so they can never overwrite what
+  // admin/finance/council see. Until it has saved at least once, it reads the same starting
+  // point everyone else does.
+  //
+  // 'council' (finance restricted to this tab only, see isCompensationPlannerRequest in
+  // api-chms.js) is different again: it may only steer the raise PLAN — the roster-wide/
+  // per-worker raise method, the custom/scale percentages, and the baseline-only comparison
+  // toggle — never a worker's seed facts (name, position, current pay, District Worksheet
+  // inputs) or a hand-typed dollar override. Each council login saves under its OWN username,
+  // not one shared fork, so one council member's plan can never overwrite another's, and never
+  // the real admin/finance plan. See COUNCIL_EDITABLE_FIELDS/councilPlannerKey below.
+  const SALARY_PLANNER_KEY = 'finance_salary_planner';
+  const SALARY_PLANNER_COMPENSATION_KEY = 'finance_salary_planner_compensation';
+  const COUNCIL_EDITABLE_FIELDS = ['compMethod', 'compPerWorkerMethod', 'compCustomPct', 'compScalePct', 'compBaselineRosterOnly'];
+  function councilPlannerKey(username) {
+    return 'finance_salary_planner_council_' + String(username || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  }
   if (seg === 'finance/planning/salary' && method === 'GET') {
-    const row = await db.prepare("SELECT value FROM chms_config WHERE key='finance_salary_planner'").first();
+    let key = SALARY_PLANNER_KEY;
+    if (role === 'compensation') {
+      const forkExists = await db.prepare("SELECT 1 FROM chms_config WHERE key=?").bind(SALARY_PLANNER_COMPENSATION_KEY).first();
+      if (forkExists) key = SALARY_PLANNER_COMPENSATION_KEY;
+    }
+    const row = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(key).first();
     let data = null;
     if (row) { try { data = JSON.parse(row.value); } catch { data = null; } }
+    // Council never sees a worker an admin has flagged hideFromCouncil — dropped from the
+    // roster entirely (never merely disabled) before anything else runs, and the per-worker
+    // method/override maps (keyed by roster array INDEX) re-indexed to match, the same class of
+    // fix finCompRemoveWorker already makes client-side when an admin deletes a row. Runs before
+    // the per-user plan overlay below so council's own saved per-worker method choices — which
+    // can only ever reference what they were shown — line up against this same filtered roster.
+    if (role === 'council' && data && Array.isArray(data.roster)) {
+      const oldToNewIndex = [];
+      const visibleRoster = [];
+      data.roster.forEach((w, i) => {
+        if (w && w.hideFromCouncil) return;
+        oldToNewIndex[i] = visibleRoster.length;
+        visibleRoster.push(w);
+      });
+      const reindex = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const out = {};
+        for (const k of Object.keys(obj)) {
+          const newIndex = oldToNewIndex[Number(k)];
+          if (newIndex !== undefined) out[newIndex] = obj[k];
+        }
+        return out;
+      };
+      data = Object.assign({}, data, {
+        roster: visibleRoster,
+        compPerWorkerMethod: reindex(data.compPerWorkerMethod),
+        compOverrides: reindex(data.compOverrides),
+      });
+    }
+    // Council reads the real shared roster/reference data (so their plan is built off the same
+    // facts admin/finance see) with only their own saved plan fields laid on top — never the
+    // reverse, and never another council member's.
+    if (role === 'council' && data) {
+      let username = '';
+      try { username = ((await getAuthInfo(req, env)) || {}).username || ''; } catch { username = ''; }
+      if (username) {
+        const overlayRow = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(councilPlannerKey(username)).first();
+        if (overlayRow) {
+          let overlay = null;
+          try { overlay = JSON.parse(overlayRow.value); } catch { overlay = null; }
+          if (overlay && typeof overlay === 'object') {
+            data = Object.assign({}, data);
+            for (const f of COUNCIL_EDITABLE_FIELDS) if (overlay[f] !== undefined) data[f] = overlay[f];
+          }
+        }
+      }
+    }
     return json({ data });
   }
   if (seg === 'finance/planning/salary' && method === 'PUT') {
-    if (!isAdmin) return json({ error: 'Access denied: editing the salary planner requires admin access' }, 403);
+    if (!isAdmin && role !== 'compensation' && role !== 'council') return json({ error: 'Access denied: editing the salary planner requires admin access' }, 403);
     const b = await req.json().catch(() => null);
     if (!b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'Invalid payload' }, 400);
     if (b.roster !== undefined && !Array.isArray(b.roster)) return json({ error: 'roster must be an array' }, 400);
+    if (role === 'council') {
+      let username = '';
+      try { username = ((await getAuthInfo(req, env)) || {}).username || ''; } catch { username = ''; }
+      if (!username) return json({ error: 'Access denied: this account has no username to save under' }, 403);
+      // Only the raise-plan fields survive — the roster itself, reference figures, hand-typed
+      // overrides, target category and health-plan settings are silently dropped even if the
+      // client sent them, so a modified request body can never smuggle a seed-data edit through.
+      const overlay = {};
+      for (const f of COUNCIL_EDITABLE_FIELDS) if (b[f] !== undefined) overlay[f] = b[f];
+      await db.prepare(
+        `INSERT INTO chms_config (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+      ).bind(councilPlannerKey(username), JSON.stringify(overlay)).run();
+      return json({ ok: true });
+    }
+    const key = role === 'compensation' ? SALARY_PLANNER_COMPENSATION_KEY : SALARY_PLANNER_KEY;
     await db.prepare(
-      `INSERT INTO chms_config (key,value) VALUES ('finance_salary_planner',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
-    ).bind(JSON.stringify(b)).run();
+      `INSERT INTO chms_config (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+    ).bind(key, JSON.stringify(b)).run();
     return json({ ok: true });
   }
 

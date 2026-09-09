@@ -28,7 +28,11 @@ function mockDb(configJson) {
 async function call(seg, { role = 'council', method = 'GET', config = null } = {}) {
   const env = { DB: mockDb(config) };
   const url = new URL('https://connect.example/admin/api/' + seg);
-  const req = { json: async () => ({}) };
+  // No real cookie is ever set here — role is handed straight to handleChmsApi, exactly how
+  // every other test in this file works. The bare `get` stub only exists so that a handler
+  // resolving the caller's identity via getAuthInfo(req, env) (as the council salary-planner
+  // branch does) finds no cookie rather than throwing on a missing `headers` object.
+  const req = { json: async () => ({}), headers: { get: () => null } };
   try {
     const res = await handleChmsApi(req, env, url, method, seg, role);
     return { status: res.status, body: await res.json() };
@@ -83,15 +87,48 @@ describe('council / anonymous giving gate', () => {
     }
   });
 
-  it('still lets council read the Finance workspace and the Reports tab', async () => {
+  it('still lets council read the shared Compensation/Budget bootstrap and the Reports tab', async () => {
+    // finance/church/this-year is shared infrastructure behind Budget, Chart of Accounts AND
+    // the Compensation Planner (financeSegItems in api-chms.js) — council's default
+    // 'compensation':'edit' is enough to read it even though 'finance' itself defaults 'none'.
     await expectAllowed('finance/church/this-year');
     await expectAllowed('reports/membership');
-    await expectAllowed('register');
   });
 
-  it('does not let council write Finance — it is view-only there', async () => {
+  // Preparation 5 governance decision (issue #844): Council is a reporting/oversight tier,
+  // not an operational one, so its former register access (edit, then briefly view) was
+  // removed entirely.
+  it('no longer lets council reach the Register at all', async () => {
+    const r = await call('register');
+    expect(r.status).toBe(403);
+  });
+
+  it('does not let council write Finance without a resolvable username', async () => {
+    // Council's `compensation` item defaults to 'edit' (see role-permissions.test.js), and
+    // finance/planning/salary PUT is gated by 'compensation' alone (financeSegItems in
+    // api-chms.js) — but this suite's `call()` never sets a real auth cookie, so getAuthInfo(req,
+    // env) inside the council save branch (api-finance.js) can never resolve a username here,
+    // and the save is refused rather than silently attributed to nobody. A real login always
+    // carries one; see council-compensation-role.test.js for the full read/write/per-user-
+    // isolation behavior with a real cookie.
     const r = await call('finance/planning/salary', { method: 'PUT' });
     expect(r.status).toBe(403);
+    expect(r.body.error).toMatch(/no username/);
+  });
+
+  it('still refuses a council write to a Budget-only Finance segment by default', async () => {
+    // finance/planning/church/override needs 'finance' or 'budget' (financeSegItems) — council
+    // defaults both to 'none', so it 403s before ever reaching api-finance.js's own admin-only
+    // check on that endpoint.
+    const r = await call('finance/planning/church/override', { method: 'POST' });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toMatch(/Access denied/);
+  });
+
+  it('refuses council reads of Finance segments outside Compensation/Budget by default', async () => {
+    const r = await call('finance/church/balances');
+    expect(r.status).toBe(403);
+    expect(r.body.error).toMatch(/Access denied/);
   });
 
   it('gives finance and admin the per-donor endpoints council is refused', async () => {
