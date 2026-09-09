@@ -95,7 +95,10 @@ The target architecture has four staff products: Church Website, Connect, Financ
   and high-risk permissions remain explicit, server-enforced and audited. Named assignments, live
   Connect overrides, myMDO enforcement evidence, and report/data ownership remain open in #844.
 - The deployment-safety part of Implementation 1 was pulled forward and completed in PR #831.
-  No other implementation phase is authorized.
+  On September 9 Andrew authorized beginning the overhaul with non-destructive parallel staging.
+  The first Finance slice is a separately deployable `1.0.0-alpha.1` shell with no data, auth,
+  outbound, cron or production bindings. That authorization does not permit Finance data movement,
+  shared-auth rollout, production routes or competing writers without a separately reviewed slice.
 - Preparation 6 documentation reset is underway. Finance extraction, repository renames,
   shared-auth rollout, payroll movement, and documentation deletion remain blocked until its
   signoff. Preparation 7 is the formal go/no-go for the broader implementation sequence.
