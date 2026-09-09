@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:connect:person-reference:v1",
+  "title": "Connect audience-bound person reference v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "dataClassification",
+    "sourceProduct",
+    "consumerProduct",
+    "personRef",
+    "issuedAt",
+    "status",
+    "authorizationGranted",
+    "assurance"
+  ],
+  "properties": {
+    "contract": { "const": "connect.person-reference.v1" },
+    "dataClassification": { "const": "restricted-pseudonymous" },
+    "sourceProduct": { "const": "connect" },
+    "consumerProduct": { "enum": ["website", "finance", "mymdo"] },
+    "personRef": {
+      "type": "string",
+      "pattern": "^pr_[A-Za-z0-9_-]{32,96}$",
+      "description": "Opaque audience-bound reference; never a Connect database person_id."
+    },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["active", "inactive", "merged"] },
+    "replacementPersonRef": { "type": "string", "pattern": "^pr_[A-Za-z0-9_-]{32,96}$" },
+    "authorizationGranted": {
+      "const": false,
+      "description": "Identity correlation never grants a product role or capability."
+    },
+    "assurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "verifiedAt"],
+      "properties": {
+        "method": { "const": "connect-authoritative-record" },
+        "verifiedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "merged" } }, "required": ["status"] },
+      "then": {
+        "properties": { "replacementPersonRef": true },
+        "required": ["replacementPersonRef"]
+      },
+      "else": {
+        "properties": { "replacementPersonRef": false }
+      }
+    }
+  ]
+}

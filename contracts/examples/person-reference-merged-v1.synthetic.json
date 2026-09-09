@@ -1,0 +1,15 @@
+{
+  "contract": "connect.person-reference.v1",
+  "dataClassification": "restricted-pseudonymous",
+  "sourceProduct": "connect",
+  "consumerProduct": "mymdo",
+  "personRef": "pr_SYNTHETIC_MYMDO_OLD_REFERENCE_000001",
+  "issuedAt": "2026-09-09T17:00:00Z",
+  "status": "merged",
+  "replacementPersonRef": "pr_SYNTHETIC_MYMDO_NEW_REFERENCE_000001",
+  "authorizationGranted": false,
+  "assurance": {
+    "method": "connect-authoritative-record",
+    "verifiedAt": "2026-09-09T16:59:59Z"
+  }
+}
