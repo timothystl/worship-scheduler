@@ -18,26 +18,38 @@ describe('resolveRolePermissions', () => {
 
   it('defaults preserve historical access exactly', () => {
     const d = DEFAULT_ROLE_PERMISSIONS;
-    // finance = giving/tuition/finance edit + reports view
-    expect(d.finance).toEqual({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
+    // finance = giving/tuition/finance/compensation/budget edit + reports view. Finance is
+    // split three ways (finance/compensation/budget — see financeSegItems in api-chms.js) but
+    // finance role's default is 'edit' on all three, so its effective access is unchanged.
+    expect(d.finance).toEqual({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
     // staff = attendance/follow-ups/register edit + reports view. Audit is admin-only (removed
-    // from staff per the Preparation 5 governance decision, issue #844).
+    // from staff per the Preparation 5 governance decision, issue #844). All three Finance
+    // items default 'none', same as before the split.
     expect(d.staff.attendance).toBe('edit');
     expect(d.staff.register).toBe('edit');
     expect(d.staff.audit).toBe('none');
     expect(d.staff.giving).toBe('none');
+    expect(d.staff.finance).toBe('none');
+    expect(d.staff.compensation).toBe('none');
+    expect(d.staff.budget).toBe('none');
     // council = no register access at all (its edit access was removed per the same #844
     // decision: Council is a reporting/oversight tier, not an operational one), plus Reports to
-    // read and giving only in aggregate. `finance` defaults to 'edit' so a council member can
-    // save their own compensation plan out of the box, but — unlike finance/staff — this does
-    // NOT open the whole Finance workspace: it is hardcoded server-side to the Compensation
-    // Planner sub-tab only (see isCompensationPlannerRequest in api-chms.js).
+    // read and giving only in aggregate. Unlike finance/staff, council's plain `finance` item
+    // (the rest of the Finance workspace — Church Report, Balance Sheet, etc.) defaults to
+    // 'none' — its Finance access is meant to be exactly the Compensation Planner, granted
+    // through the independent `compensation` item ('edit' by default, so a council member can
+    // save their own plan out of the box) and, if an admin turns it on, `budget` ('none' by
+    // default).
     expect(d.council.register).toBe('none');
-    expect(d.council.finance).toBe('edit');
+    expect(d.council.finance).toBe('none');
+    expect(d.council.compensation).toBe('edit');
+    expect(d.council.budget).toBe('none');
     expect(d.council.reports).toBe('view');
     expect(d.council.giving).toBe('anon');
     // member = nothing extra
     expect(d.member.reports).toBe('none');
+    expect(d.member.compensation).toBe('none');
+    expect(d.member.budget).toBe('none');
   });
 
   it('applies a partial override without disturbing other items/roles', () => {
@@ -86,11 +98,15 @@ describe('resolveRolePermissions', () => {
     expect(perms.staff).toEqual(DEFAULT_ROLE_PERMISSIONS.staff);
     // The legacy row is keyed `office`, the role it configures is now `council`, and its
     // booleans resolve to register-edit only — so it lands as the pre-rename office grant
-    // (register 'edit', not today's 'view' default), NOT the new council default (which adds
-    // finance/reports/anon giving and has register at 'view').
+    // (register 'edit', not today's 'none' default), NOT the new council default (which adds
+    // reports/anon giving/compensation and has register at 'none').
     expect(perms.council.register).toBe('edit');
     expect(perms.council.giving).toBe('none');
     expect(perms.council.finance).toBe('none');
+    // compensation/budget aren't part of the legacy shape at all, so they fall through to
+    // council's own defaults untouched by the migration.
+    expect(perms.council.compensation).toBe('edit');
+    expect(perms.council.budget).toBe('none');
   });
 
   it('every role in the defaults has every item defined with a valid level', () => {

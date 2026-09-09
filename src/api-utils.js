@@ -76,15 +76,23 @@ export const ROLE_PERMISSION_LEVELS = ['none', 'anon', 'view', 'edit'];
 export const ANON_CAPABLE_ITEMS = { giving: true };
 // editable:false items (Reports, Audit Log) are inherently read-only — their max level is
 // 'view'; the UI still lets you pick none/view but never edit.
+// finance/compensation/budget are three independently grantable slices of the Finance module —
+// see financeSegItems in api-chms.js for exactly which routes each one covers, and the note
+// there on the handful of bootstrap/shared reads any one of the three can unlock so a role
+// holding only one of them can still load its own tab. 'finance' is the rest of the workspace
+// (Church Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
+// Imports); 'compensation' is the Compensation Planner; 'budget' is the Budget/Planning tab.
 export const ROLE_PERMISSION_ITEMS = [
-  { key: 'giving',     label: 'Giving',            editable: true  },
-  { key: 'tuitionaid', label: 'Tuition Aid',       editable: true  },
-  { key: 'finance',    label: 'Finance Overview',  editable: true  },
-  { key: 'attendance', label: 'Attendance',        editable: true  },
-  { key: 'followups',  label: 'Follow-ups',        editable: true  },
-  { key: 'audit',      label: 'Audit Log',         editable: false },
-  { key: 'register',   label: 'Register',          editable: true  },
-  { key: 'reports',    label: 'Reports tab',       editable: false },
+  { key: 'giving',       label: 'Giving',            editable: true  },
+  { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
+  { key: 'finance',      label: 'Finance Overview',  editable: true  },
+  { key: 'compensation', label: 'Compensation',      editable: true  },
+  { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'attendance',   label: 'Attendance',        editable: true  },
+  { key: 'followups',    label: 'Follow-ups',        editable: true  },
+  { key: 'audit',        label: 'Audit Log',         editable: false },
+  { key: 'register',     label: 'Register',          editable: true  },
+  { key: 'reports',      label: 'Reports tab',       editable: false },
 ];
 export const ROLE_PERMISSION_ITEM_KEYS = ROLE_PERMISSION_ITEMS.map(i => i.key);
 // Per-item ceiling — read-only items cap at 'view'.
@@ -103,21 +111,25 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   // decision (issue #844): Council is a reporting/oversight tier, not an operational one, so
   // register stays editable (or even viewable) only for whoever actually runs it
   // (finance/staff/admin) — plus the Reports tab, and giving at 'anon' only, so a council
-  // member sees what the congregation gave and never who gave it.
+  // member sees what the congregation gave and never who gave it. `finance` (the rest of the
+  // Finance workspace — Church Report, Balance Sheet, Daycare Report, Commercial Property,
+  // Chart of Accounts, Data & Imports) defaults to 'none': council's Finance access is meant to
+  // be exactly the Compensation Planner, granted through the `compensation` item instead, not
+  // the whole module. `compensation` defaults to 'edit' so a council member can save their own
+  // raise-plan toggles/percentages there out of the box (see api-finance.js); `budget` defaults
+  // to 'none' — flip it on to give council read access to the Budget/Planning tab too (every
+  // write there is admin-only regardless, so 'view' and 'edit' behave the same for council).
   //
-  // finance: 'edit' here does NOT open the whole Finance workspace to council the way it does
-  // for finance/staff — council's `finance` item is hardcoded (see isCompensationPlannerRequest
-  // in api-chms.js) to the Compensation Planner sub-tab only, nothing else in Finance, same
-  // narrowing the dedicated `compensation` role gets. 'edit' is what lets a council member save
-  // their own raise-plan toggles/percentages there (see api-finance.js); dial it to 'view' to
-  // make that tab read-only for council, or 'none' to remove it from their sidebar entirely.
+  // finance/compensation/budget for finance/staff mirror finance's own historical all-or-
+  // nothing access (finance: all three 'edit'; staff: all three 'none') so splitting the item
+  // three ways changes nothing for either role by default.
   //
   // audit: 'view' was removed from staff per the same Preparation 5 decision (#844) — the
   // Audit Log is now admin-only for every configurable role, not just council/finance/member.
-  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
-  council: { giving: 'anon', tuitionaid: 'none', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
+  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
+  council: { giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
 };
 
 function levelRank(l) { const i = ROLE_PERMISSION_LEVELS.indexOf(l); return i < 0 ? 0 : i; }

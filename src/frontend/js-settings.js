@@ -42,15 +42,21 @@ function saveMemberTypes() {
 // Read-only items (Audit Log, Reports tab) offer only No access / View only.
 // Member is the filtered directory view — it can never edit, and only the safe items
 // (Reports tab) are toggleable; everything else is fixed at No access.
+// finance/compensation/budget are three independent slices of the Finance module (see
+// financeSegItems in api-chms.js) — Finance Overview is the rest of the workspace (Church
+// Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
+// Imports), Compensation is the Compensation Planner, Budget is the Budget/Planning tab.
 var ROLE_PERM_ITEMS = [
-  { key: 'giving',     label: 'Giving',            editable: true  },
-  { key: 'tuitionaid', label: 'Tuition Aid',       editable: true  },
-  { key: 'finance',    label: 'Finance Overview',  editable: true  },
-  { key: 'attendance', label: 'Attendance',        editable: true  },
-  { key: 'followups',  label: 'Follow-ups',        editable: true  },
-  { key: 'audit',      label: 'Audit Log',         editable: false },
-  { key: 'register',   label: 'Register',          editable: true  },
-  { key: 'reports',    label: 'Reports tab',       editable: false },
+  { key: 'giving',       label: 'Giving',            editable: true  },
+  { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
+  { key: 'finance',      label: 'Finance Overview',  editable: true  },
+  { key: 'compensation', label: 'Compensation',      editable: true  },
+  { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'attendance',   label: 'Attendance',        editable: true  },
+  { key: 'followups',    label: 'Follow-ups',        editable: true  },
+  { key: 'audit',        label: 'Audit Log',         editable: false },
+  { key: 'register',     label: 'Register',          editable: true  },
+  { key: 'reports',      label: 'Reports tab',       editable: false },
 ];
 var ROLE_PERM_ROLES = ['finance', 'staff', 'council', 'member'];
 // Items a member is even allowed to be granted (view only). Anything else is locked to none.
@@ -91,12 +97,11 @@ function renderRolePermTable(perms) {
       + '<td style="padding:8px;">' + esc(item.label) + '</td>'
       + ROLE_PERM_ROLES.map(function(role) {
         var cur = (perms[role] && perms[role][item.key]) || 'none';
-        // Council's Finance permission is hardcoded server-side (see
-        // isCompensationPlannerRequest in api-chms.js) to the Compensation Planner sub-tab
-        // only, never the rest of Finance that finance/staff get at the same level — called
-        // out here so this dropdown doesn't read as opening the whole workspace to council.
-        var note = (item.key === 'finance' && role === 'council')
-          ? '<div style="font-size:.68rem;color:var(--warm-gray);margin-top:2px;">Compensation Planner only</div>' : '';
+        // Council's Compensation saves are per-username (api-finance.js) rather than the
+        // shared admin/finance plan — called out here so "Edit" doesn't read as full control
+        // over the real plan.
+        var note = (item.key === 'compensation' && role === 'council')
+          ? '<div style="font-size:.68rem;color:var(--warm-gray);margin-top:2px;">Each council member saves their own plan</div>' : '';
         return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + note + '</td>';
       }).join('')
       + '</tr>';

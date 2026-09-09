@@ -8619,9 +8619,12 @@ function finCompIsCouncil() { return _userRole === 'council'; }
 // percentages, and the baseline-only comparison toggle — but never a worker's seed facts (name,
 // position, current pay, District Worksheet inputs) or a hand-typed dollar override; those stay
 // under finCompCanEdit()/finCompReadOnly() below, same as any other non-admin/compensation role.
-// Enforced again server-side (api-finance.js only persists the plan fields for this role) since
-// UI hiding here is not authorization.
-function finCompCanEditPlanControls() { return finCompCanEdit() || finCompIsCouncil(); }
+// Gated on the real 'compensation' item level (permEdit, from js-core.js), not just the role
+// name — an admin can dial council's Compensation to 'View only' and expect these controls to
+// actually lock, same as every other per-item edit affordance in the app. Enforced again
+// server-side (api-finance.js only persists the plan fields, and only when the ACCESS_GATE's
+// 'compensation' check passes) since UI hiding here is not authorization.
+function finCompCanEditPlanControls() { return finCompCanEdit() || (finCompIsCouncil() && permEdit('compensation')); }
 // Disables every input in a chunk of markup for a role that can't edit. Same pattern the old tab
 // used: the figures stay visible to anyone who can reach the Compensation tab, only editing is
 // gated (the save endpoint is admin/compensation-gated server-side either way).
@@ -8731,6 +8734,35 @@ function finCompSetHealthTier(i, tier) {
 // read with that in mind.
 function finCompIsExternallyFunded(w) {
   return !!(w && w.externallyFunded);
+}
+// A worker an admin has flagged as not for a council audience at all — different from
+// externallyFunded, which still shows the worker (just excludes their figures from church
+// totals). This one removes them entirely: from every Compensation Planner view/report that
+// represents what council sees (the "Council summary" view/print, regardless of who is looking
+// at it — see finCompWithCouncilRoster) AND from a council-role login's own view of every tab
+// (enforced again server-side in api-finance.js, since UI hiding here is not authorization —
+// a council session never even receives this row in the API response).
+function finCompIsHiddenFromCouncil(w) {
+  return !!(w && w.hideFromCouncil);
+}
+function finCompHideFromCouncilToggle(i, checked) {
+  _finSalaryRoster[i].hideFromCouncil = !!checked;
+  finCompSay((_finSalaryRoster[i].name || 'That worker') + (checked
+    ? ' is now hidden from the council view entirely.'
+    : ' is visible to council again.'));
+  finRerenderPlanningPreserveFocus();
+}
+// Runs fn() with the roster temporarily narrowed to non-hidden workers, then restores it —
+// finCompComputeAll/finCompTotals/finCompCountedEntries all read _finSalaryRoster directly
+// rather than taking it as an argument, so this is the only way to reuse that math unchanged
+// for a narrower audience. Entirely synchronous, so nothing else can observe the roster
+// mid-swap. Used by whatever represents "what council sees" — the Council summary view and its
+// print — never by the other views, which stay showing the real, full roster to whoever
+// actually manages it (admin/the compensation role).
+function finCompWithCouncilRoster(fn) {
+  var fullRoster = _finSalaryRoster;
+  _finSalaryRoster = fullRoster.filter(function(w) { return !finCompIsHiddenFromCouncil(w); });
+  try { return fn(); } finally { _finSalaryRoster = fullRoster; }
 }
 // The roster rows that count toward church figures, as [worker, index] pairs so callers can still
 // reach the matching computed row.
@@ -9202,11 +9234,25 @@ function finRenderCompensation() {
   if (_finCompSelected >= _finSalaryRoster.length) _finCompSelected = _finSalaryRoster.length - 1;
   var computed = finCompComputeAll();
   var totals = finCompTotals(computed);
-  var body = _finCompView === 'plan' ? finCompRenderPlan(computed, totals)
-    : _finCompView === 'fairness' ? finCompRenderFairness(computed)
-    : _finCompView === 'health' ? finCompRenderHealth(computed, totals)
-    : _finCompView === 'rates' ? finCompRenderRates()
-    : finCompRenderCouncil(computed, totals);
+  var body;
+  if (_finCompView === 'plan') { body = finCompRenderPlan(computed, totals); }
+  else if (_finCompView === 'fairness') { body = finCompRenderFairness(computed); }
+  else if (_finCompView === 'health') { body = finCompRenderHealth(computed, totals); }
+  else if (_finCompView === 'rates') { body = finCompRenderRates(); }
+  else {
+    // Council summary — represents what a council audience actually sees, so its own figures
+    // (and the header strip below, which must match rather than showing a different total on
+    // the same screen) are computed over the non-hidden roster only, even when it's an admin
+    // previewing it before the meeting. The render itself has to happen INSIDE the swap too
+    // (not just the compute step) — finCompRenderCouncil looks worker rows back up out of
+    // _finSalaryRoster by index to match computed, so the roster has to still be the filtered
+    // one while it runs.
+    finCompWithCouncilRoster(function() {
+      computed = finCompComputeAll();
+      totals = finCompTotals(computed);
+      body = finCompRenderCouncil(computed, totals);
+    });
+  }
   el.innerHTML = finCompHeaderHtml(totals) + body + '<div id="fin-comp-print-root" class="fin-comp-print-root"></div>';
 }
 function finCompHeaderHtml(totals) {
@@ -9217,7 +9263,11 @@ function finCompHeaderHtml(totals) {
   }).join('');
   return '<div class="fin-comp-shell">'
     + (finCompIsCouncil()
-        ? '<div class="fin-comp-note" style="margin-bottom:8px;">You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.</div>'
+        ? '<div class="fin-comp-note" style="margin-bottom:8px;">'
+          + (finCompCanEditPlanControls()
+              ? 'You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.'
+              : 'This view is read-only for your account. Every figure here reflects the church&#39;s actual compensation plan.')
+          + '</div>'
         : '')
     + '<div class="fin-comp-titlebar">'
     + '<div><div class="fin-comp-title">Compensation Planner &mdash; FY' + _finPlanTargetYear + '</div>'
@@ -9568,6 +9618,8 @@ function finCompRenderDrawer(computed) {
     + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompCashOnlyToggle(' + i + ',this.checked)"' + (finCompIsCashOnly(w) ? ' checked' : '') + '> Cash salary only &mdash; no pension, disability or health</label>'
     + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompExternallyFundedToggle(' + i + ',this.checked)"' + (finCompIsExternallyFunded(w) ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> Paid from another budget &mdash; keep on the roster but leave out of every church figure</label>'
     + (finCompIsExternallyFunded(w) ? '<div style="font-size:.72rem;color:var(--deep-amber);margin-top:4px;">Costed elsewhere: this worker is in no total on this tab or in the Council report. The FY' + _finPlanBaseYear + ' comparison figure still comes from the church payroll accounts as they stand.</div>' : '')
+    + '<label class="fin-comp-inline-check" style="margin:6px 0 0;"><input type="checkbox" onchange="finCompHideFromCouncilToggle(' + i + ',this.checked)"' + (finCompIsHiddenFromCouncil(w) ? ' checked' : '') + (finCompCanEdit() ? '' : ' disabled') + '> Hide entirely from the council view &mdash; not shown, not on the Council report, not to a council login</label>'
+    + (finCompIsHiddenFromCouncil(w) ? '<div style="font-size:.72rem;color:var(--deep-amber);margin-top:4px;">Hidden from council: this worker never appears in any Compensation Planner view or report a council member or the Council summary/print shows, and a council-role login never receives this row at all.</div>' : '')
     + (finCompIsCashOnly(w)
         ? '<div class="fin-comp-note">Concordia\u2019s plans have an hours floor, so a very part-time worker draws none of them. Employer FICA still applies &mdash; it is owed on any wage however few the hours.</div>'
         : (finCompIsPartTime(w) ? '<div class="fin-comp-note">At ' + finCompFtePct(w) + '% of full time this worker is still shown as benefits-eligible. Tick the box above if they are not.</div>' : ''))
@@ -10436,8 +10488,12 @@ function finCompSendToBudget() {
 function finCompPrintCouncil() {
   var root = document.getElementById('fin-comp-print-root');
   if (!root) return;
-  var computed = finCompComputeAll();
-  root.innerHTML = finCompCouncilReportHtml(computed, finCompTotals(computed));
+  // Same non-hidden-roster swap the on-screen Council summary uses (finCompWithCouncilRoster) —
+  // a worker flagged hideFromCouncil never reaches the printed report either, whoever prints it.
+  finCompWithCouncilRoster(function() {
+    var computed = finCompComputeAll();
+    root.innerHTML = finCompCouncilReportHtml(computed, finCompTotals(computed));
+  });
   document.body.classList.add('printing-comp');
   // Same cleanup shape as printBoardPage(): afterprint fires in every browser that supports it,
   // and the timeout is the fallback for the ones that don't (and for a cancelled dialog), so the

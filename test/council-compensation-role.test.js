@@ -3,15 +3,23 @@ import { DatabaseSync } from 'node:sqlite';
 import { handleAdminApi } from '../src/api-admin.js';
 import { authCookieHeader } from '../src/auth.js';
 
-// Council gets a narrower, per-user slice of the Compensation Planner: unlike finance/staff
-// (whose `finance` permission opens the whole Finance workspace) and unlike the dedicated
-// `compensation` role (one shared fork), council's `finance` item is hardcoded to the
-// Compensation Planner sub-tab only (isCompensationPlannerRequest in api-chms.js), and each
-// council login may steer only the raise PLAN — the roster-wide/per-worker raise method, the
-// custom/scale percentages, and the baseline-only comparison toggle — never a worker's seed
-// facts or a hand-typed dollar override. Every council save lands under a key scoped to that
-// user's own username (api-finance.js), so one council member's plan can never overwrite
-// another's or the real admin/finance plan.
+// Council gets a narrower, per-user slice of the Compensation Planner. Finance is three
+// independently grantable items for every configurable role (see financeSegItems in
+// api-chms.js): plain `finance` (the rest of the Finance workspace), `compensation` (this
+// tab) and `budget` (the Budget/Planning tab). Council's defaults are finance:'none',
+// compensation:'edit', budget:'none' — so out of the box it reaches only the Compensation
+// Planner, same practical result as before this item existed, but now a real, independently
+// toggleable permission rather than a hardcoded role-based carve-out.
+//
+// Unlike the dedicated `compensation` role (one shared fork), council's own save is further
+// restricted: only the raise PLAN — the roster-wide/per-worker raise method, the custom/scale
+// percentages, and the baseline-only comparison toggle — never a worker's seed facts or a
+// hand-typed dollar override. Every council save lands under a key scoped to that user's own
+// username (api-finance.js), so one council member's plan can never overwrite another's or the
+// real admin/finance plan. api-finance.js's PUT handler for this segment still only recognizes
+// admin, the dedicated `compensation` role and `council` by name — granting finance/staff the
+// `compensation` item only affects what they can reach/see, not this write, unless that inner
+// check is later widened too.
 
 const SECRET = 'test-signing-secret';
 
@@ -29,6 +37,11 @@ function makeDb() {
     last_login TEXT
   )`);
   sqlite.exec(`CREATE TABLE chms_config (key TEXT PRIMARY KEY, value TEXT)`);
+  sqlite.exec(`CREATE TABLE finance_church_balances (
+    fiscal_year INTEGER,
+    category_path TEXT,
+    as_of_date TEXT
+  )`);
   sqlite.exec(`CREATE TABLE finance_qb_connection (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     realm_id TEXT NOT NULL DEFAULT '',
@@ -87,11 +100,13 @@ async function call(role, username, path, method, body) {
 }
 
 describe('council role — GET /admin/api/me', () => {
-  it('resolves finance:edit (narrowed to Compensation Planner) and giving:anon', async () => {
+  it('resolves finance:none, compensation:edit, budget:none, and giving:anon', async () => {
     const r = await call('council', 'elder1', 'me', 'GET');
     expect(r.status).toBe(200);
     expect(r.body.role).toBe('council');
-    expect(r.body.permissions.finance).toBe('edit');
+    expect(r.body.permissions.finance).toBe('none');
+    expect(r.body.permissions.compensation).toBe('edit');
+    expect(r.body.permissions.budget).toBe('none');
     expect(r.body.permissions.giving).toBe('anon');
     expect(r.body.permissions.register).toBe('none');
   });
@@ -99,22 +114,47 @@ describe('council role — GET /admin/api/me', () => {
 
 describe('council role — Compensation Planner reads', () => {
   it('can read the bootstrap segments the tab needs', async () => {
-    // finance/overview/finance/daycare/etc. are also on the allowlist (isCompensationPlannerRequest
-    // in api-chms.js) but pull in QuickBooks/daycare tables this minimal harness doesn't model;
-    // finance/status and finance/planning/salary are the two exercised by compensation-role.test.js
-    // for the same reason and are representative of the read path being tested here.
+    // finance/overview/finance/daycare/etc. are also grantable via 'compensation' alone
+    // (financeSegItems in api-chms.js) but pull in QuickBooks/daycare tables this minimal
+    // harness doesn't model; finance/status and finance/planning/salary are the two exercised
+    // by compensation-role.test.js for the same reason and are representative of the read path
+    // being tested here.
     for (const seg of ['finance/status', 'finance/planning/salary']) {
       const r = await call('council', 'elder1', seg, 'GET');
       expect(r.status, seg).toBe(200);
     }
   });
 
-  it('403s the rest of the Finance module', async () => {
+  it('403s the rest of the Finance module (finance:\'none\' by default)', async () => {
     for (const seg of ['finance/church/balances', 'finance/qb/connect', 'finance/property/detail']) {
       const r = await call('council', 'elder1', seg, 'GET');
       expect(r.status, seg).toBe(403);
-      expect(r.body.error, seg).toMatch(/Compensation Planner only/);
     }
+  });
+
+  it('reaches those same segments once an admin grants council plain Finance access', async () => {
+    // Confirms 'finance' still means the rest of the workspace and is independent of
+    // 'compensation' — granting one doesn't require or imply the other.
+    const configRes = await call('admin', '', 'config/role-permissions', 'PUT', {
+      permissions: { council: { finance: 'view' } },
+    });
+    expect(configRes.status).toBe(200);
+    const r = await call('council', 'elder1', 'finance/church/balances', 'GET');
+    expect(r.status).toBe(200);
+  });
+
+  it('the Budget toggle passes council through the outer gate, though every write there stays admin-only regardless', async () => {
+    // finance/planning/church/override needs 'finance' or 'budget' (financeSegItems); with
+    // neither granted, council 403s before ever reaching api-finance.js.
+    const before = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', year: 2027, amount: 100 });
+    expect(before.status).toBe(403);
+    expect(before.body.error).toMatch(/Access denied/);
+    await call('admin', '', 'config/role-permissions', 'PUT', { permissions: { council: { budget: 'edit' } } });
+    // Now past the outer gate — but api-finance.js's own handler for this endpoint is
+    // hardcoded admin-only, so a non-admin still can't actually write a budget row.
+    const after = await call('council', 'elder1', 'finance/planning/church/override', 'POST', { category: 'Expenses:Utilities', year: 2027, amount: 100 });
+    expect(after.status).toBe(403);
+    expect(after.body.error).toMatch(/admin access/);
   });
 
   it('403s everywhere else in the app the way a normal council session would not', async () => {
@@ -183,5 +223,40 @@ describe('council role — saving the plan', () => {
     await call('admin', '', 'finance/planning/salary', 'PUT', { roster: [{ name: 'Admin Worker' }] });
     const r = await call('council', 'elder1', 'finance/planning/salary', 'GET');
     expect(r.body.data.roster[0].name).toBe('Admin Worker');
+  });
+});
+
+describe('council role — a hideFromCouncil worker never reaches a council session', () => {
+  it('drops the flagged worker from the roster council receives, admin still sees everyone', async () => {
+    await call('admin', '', 'finance/planning/salary', 'PUT', {
+      roster: [
+        { name: 'Visible One' },
+        { name: 'Hidden Worker', hideFromCouncil: true },
+        { name: 'Visible Two' },
+      ],
+    });
+    const adminRead = await call('admin', '', 'finance/planning/salary', 'GET');
+    expect(adminRead.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Hidden Worker', 'Visible Two']);
+    const councilRead = await call('council', 'elder1', 'finance/planning/salary', 'GET');
+    expect(councilRead.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Visible Two']);
+  });
+
+  it('re-indexes compPerWorkerMethod/compOverrides so they still point at the right worker', async () => {
+    // Index 1 (Hidden Worker) is removed, so index 2 (Visible Two) becomes the new index 1 —
+    // its per-worker method and hand-typed override must move with it, not stay at "1" and land
+    // on whoever now sits there.
+    await call('admin', '', 'finance/planning/salary', 'PUT', {
+      roster: [
+        { name: 'Visible One' },
+        { name: 'Hidden Worker', hideFromCouncil: true },
+        { name: 'Visible Two' },
+      ],
+      compPerWorkerMethod: { 0: 'worksheet', 1: 'cola', 2: 'custom' },
+      compOverrides: { 2: '99000' },
+    });
+    const r = await call('council', 'elder1', 'finance/planning/salary', 'GET');
+    expect(r.body.data.roster.map(w => w.name)).toEqual(['Visible One', 'Visible Two']);
+    expect(r.body.data.compPerWorkerMethod).toEqual({ 0: 'worksheet', 1: 'custom' });
+    expect(r.body.data.compOverrides).toEqual({ 1: '99000' });
   });
 });
