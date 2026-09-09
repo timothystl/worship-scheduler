@@ -84,9 +84,10 @@ The target architecture has four staff products: Church Website, Connect, Financ
   (112,920,749 bytes) from R2 `tlc-chms-photos`, and a Cloudflare configuration/secret-name
   inventory. Its local encryption/decryption, Git, D1 and per-object checks passed. A downloaded
   SharePoint copy then matched the original encrypted package by size and SHA-256. A disposable R2
-  restore remains open. The same recovery key is held separately. Issue #846 tracks the approved
-  cadence, retention, primary SharePoint destination,
-  secondary encrypted copy and alternate operator.
+  restore remains open. The same recovery key is held separately. Issue #846 records a restricted
+  SharePoint folder as the primary independent destination and an encrypted local or external
+  drive as the secondary copy, alongside the approved cadence and retention. It still tracks the
+  exact folder, encryption implementation, alternate operator, and retained-copy evidence.
 - The approved myMDO authorization migrations are live and synchronized to source through
   childcare-portal PR #328. Do not reapply them. Cron, advisor and function-drift follow-up remains
   open. Andrew approved the Preparation 5 role defaults with granular per-user checkboxes: presets
