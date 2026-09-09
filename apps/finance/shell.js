@@ -3,6 +3,7 @@ import givingFixture from '../../contracts/examples/giving-summary-v1.synthetic.
 import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
 import { buildSummaryV1, FINANCE_SUMMARY_CONTRACT, readSyntheticSummary } from './summary-service.js';
 import { isFinanceMethodAllowed, resolveFinanceRoute } from './route-manifest.js';
+import { FINANCE_PARITY_SECTIONS, resolveFinanceSection } from './parity-manifest.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = FINANCE_SUMMARY_CONTRACT;
@@ -39,7 +40,31 @@ function formatCents(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0) / 100);
 }
 
-function renderShell(metadata, summary, giving) {
+function renderSectionNav(activeSection) {
+  return FINANCE_PARITY_SECTIONS.map((section) =>
+    `<a href="/?section=${section.id}"${section.id === activeSection.id ? ' aria-current="page"' : ''}>${section.label}</a>`
+  ).join('');
+}
+
+function renderSectionBody(section, summary, giving) {
+  if (section.id === 'health') {
+    return `<section class="grid" aria-label="Synthetic finance summary">
+      <div class="card"><small>Church actual</small><strong>${formatCents(summary.church.actual_cents)}</strong></div>
+      <div class="card"><small>Church budget</small><strong>${formatCents(summary.church.budget_cents)}</strong></div>
+      <div class="card"><small>Balance sheet</small><strong>${formatCents(summary.balanceSheet.balance_cents)}</strong></div>
+      <div class="card"><small>Childcare rooms</small><strong>${Number(summary.childcare.room_count || 0)}</strong></div>
+      <div class="card"><small>Giving net</small><strong>${formatCents(giving.totals.netCents)}</strong></div>
+      <div class="card"><small>Giving records</small><strong>${Number(giving.reconciliation.sourceRecordCount || 0)}</strong></div>
+    </section>`;
+  }
+  return `<section class="parity" aria-label="${section.label} staging scaffold">
+    <h2>${section.label}</h2>
+    <p>This familiar workspace is retained in the parity plan. Its production workflow and data are not connected to staging.</p>
+    <ul>${section.capabilities.map((capability) => `<li>${capability}</li>`).join('')}</ul>
+  </section>`;
+}
+
+function renderShell(metadata, summary, giving, section) {
   const release = `${metadata.version} · ${metadata.releaseChannel}`;
   return `<!doctype html>
 <html lang="en">
@@ -51,7 +76,7 @@ function renderShell(metadata, summary, giving) {
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
     body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #08131f; color: #e8f0f7; }
-    main { width: min(42rem, calc(100% - 2rem)); padding: 2.5rem; border: 1px solid #27425a; border-radius: 1rem; background: #0e1e2d; }
+    main { width: min(72rem, calc(100% - 2rem)); padding: 2.5rem; border: 1px solid #27425a; border-radius: 1rem; background: #0e1e2d; }
     .eyebrow { color: #80c7ff; font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
     h1 { margin: .65rem 0 1rem; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1; }
     p { color: #b8c8d6; line-height: 1.6; }
@@ -60,6 +85,12 @@ function renderShell(metadata, summary, giving) {
     .card { padding: 1rem; border: 1px solid #27425a; border-radius: .65rem; }
     .card small { display: block; color: #80c7ff; margin-bottom: .35rem; }
     .card strong { font-size: 1.3rem; }
+    nav { display:flex; gap:.45rem; overflow-x:auto; padding:.4rem 0 1rem; margin-top:1.25rem; border-bottom:1px solid #27425a; }
+    nav a { flex:0 0 auto; padding:.55rem .75rem; border-radius:.45rem; color:#b8c8d6; text-decoration:none; font-size:.82rem; }
+    nav a[aria-current="page"] { background:#17486a; color:#fff; }
+    .parity { margin-top:1.25rem; padding:1.25rem; border:1px solid #27425a; border-radius:.65rem; }
+    .parity h2 { margin:0 0 .5rem; }
+    .parity ul { columns:2; color:#b8c8d6; line-height:1.8; }
     footer { margin-top: 2rem; color: #7890a4; font-size: .8rem; }
   </style>
 </head>
@@ -69,14 +100,8 @@ function renderShell(metadata, summary, giving) {
     <h1>Timothy Finance</h1>
     <p>The rebuilt Finance application boundary is running. Business data and production workflows are not connected in this alpha release.</p>
     <div class="status">Environment ready · no production writers attached</div>
-    <section class="grid" aria-label="Synthetic finance summary">
-      <div class="card"><small>Church actual</small><strong>${formatCents(summary.church.actual_cents)}</strong></div>
-      <div class="card"><small>Church budget</small><strong>${formatCents(summary.church.budget_cents)}</strong></div>
-      <div class="card"><small>Balance sheet</small><strong>${formatCents(summary.balanceSheet.balance_cents)}</strong></div>
-      <div class="card"><small>Childcare rooms</small><strong>${Number(summary.childcare.room_count || 0)}</strong></div>
-      <div class="card"><small>Giving net</small><strong>${formatCents(giving.totals.netCents)}</strong></div>
-      <div class="card"><small>Giving records</small><strong>${Number(giving.reconciliation.sourceRecordCount || 0)}</strong></div>
-    </section>
+    <nav aria-label="Finance workspace">${renderSectionNav(section)}</nav>
+    ${renderSectionBody(section, summary, giving)}
     <p><small>All values shown here are deterministic synthetic staging fixtures. Giving is the committed Connect contract example, validated locally with no network call.</small></p>
     <footer>${release}</footer>
   </main>
@@ -150,7 +175,8 @@ export default {
     if (route.id === 'shell') {
       if (request.method === 'HEAD') return response(null, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       try {
-        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB), SYNTHETIC_GIVING), {
+        const section = resolveFinanceSection(url.searchParams.get('section'));
+        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB), SYNTHETIC_GIVING, section), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
       } catch {
