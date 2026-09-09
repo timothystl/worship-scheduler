@@ -24,7 +24,11 @@
       "additionalProperties": false,
       "required": ["sourceRecordCount", "fundCount", "totalsMatch"],
       "properties": {
-        "sourceRecordCount": { "type": "integer", "minimum": 0 },
+        "sourceRecordCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total gift records represented; must equal the sum of funds[].giftCount."
+        },
         "fundCount": { "type": "integer", "minimum": 0 },
         "totalsMatch": { "const": true }
       }
@@ -58,7 +62,11 @@
       "properties": {
         "fundRef": { "type": "string", "minLength": 1, "maxLength": 128 },
         "fundLabel": { "type": "string", "minLength": 1, "maxLength": 160 },
-        "giftCount": { "type": "integer", "minimum": 0 },
+        "giftCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Gift records represented for this fund and period."
+        },
         "householdCount": { "type": "integer", "minimum": 0 },
         "amounts": { "$ref": "#/$defs/amounts" }
       }
