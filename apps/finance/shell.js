@@ -1,10 +1,10 @@
 import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from './version.js';
 import givingFixture from '../../contracts/examples/giving-summary-v1.synthetic.json';
 import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
-import { runBudgetedReadBatch } from './query-budget.js';
+import { buildSummaryV1, FINANCE_SUMMARY_CONTRACT, readSyntheticSummary } from './summary-service.js';
 
 const PRODUCT = 'finance';
-const SUMMARY_CONTRACT = 'finance.summary.v1';
+const SUMMARY_CONTRACT = FINANCE_SUMMARY_CONTRACT;
 const GIVING_CONTRACT = 'connect.giving-summary.v1';
 const SYNTHETIC_GIVING = acceptConnectGivingSummaryV1(givingFixture);
 
@@ -83,38 +83,6 @@ function renderShell(metadata, summary, giving) {
 </html>`;
 }
 
-async function readSyntheticSummary(db) {
-  const statements = [
-    "SELECT value FROM finance_settings WHERE key='fixture_label'",
-    'SELECT COALESCE(SUM(own_actual_cents),0) AS actual_cents, COALESCE(SUM(own_budget_cents),0) AS budget_cents FROM finance_church_entries',
-    'SELECT COALESCE(SUM(own_balance_cents),0) AS balance_cents FROM finance_church_balances',
-    'SELECT COUNT(*) AS room_count, COALESCE(SUM(billed_cents),0) AS billed_cents FROM finance_daycare_rooms',
-  ];
-  const { results } = await runBudgetedReadBatch(db, 'summary', statements);
-  const first = (index) => results[index]?.results?.[0] || {};
-  if (first(0).value !== 'SYNTHETIC-NO-PRODUCTION-DATA') throw new Error('Synthetic fixture marker missing');
-  return { church: first(1), balanceSheet: first(2), childcare: first(3) };
-}
-
-function summaryV1(metadata, summary) {
-  return {
-    contract: SUMMARY_CONTRACT,
-    dataClassification: 'synthetic',
-    release: metadata,
-    summary: {
-      church: {
-        actualCents: Number(summary.church.actual_cents || 0),
-        budgetCents: Number(summary.church.budget_cents || 0),
-      },
-      balanceSheet: { balanceCents: Number(summary.balanceSheet.balance_cents || 0) },
-      childcare: {
-        roomCount: Number(summary.childcare.room_count || 0),
-        billedCents: Number(summary.childcare.billed_cents || 0),
-      },
-    },
-  };
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -135,7 +103,7 @@ export default {
     if (url.pathname === '/api/v1/summary') {
       try {
         const summary = await readSyntheticSummary(env.FINANCE_DB);
-        const body = request.method === 'HEAD' ? null : JSON.stringify(summaryV1(metadata, summary));
+        const body = request.method === 'HEAD' ? null : JSON.stringify(buildSummaryV1(metadata, summary));
         return response(body, { headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'X-Finance-Contract': SUMMARY_CONTRACT,
