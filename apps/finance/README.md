@@ -34,12 +34,13 @@ the migration does not copy production data or authorize a new writer.
 - `contracts/` — versioned JSON Schemas for staging APIs.
 - `../../wrangler.finance.staging.jsonc` — isolated staging Worker configuration.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
-- `connect-giving-consumer.js` — offline fail-closed parser for the proposed aggregate Giving contract.
+- `connect-giving-consumer.js` — fail-closed parser for the proposed aggregate Giving contract.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
-reconciliation before returning detached aggregate data. It is not imported by the staging Worker,
-creates no endpoint or scheduled fetch, and holds no credential. Runtime transport remains a
-separately gated step.
+reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
+committed synthetic producer example, displays its aggregate net/count, and serves it at
+`/api/v1/connect-giving-preview`. There is no network fetch, scheduled delivery, service binding,
+or credential. Runtime producer transport remains a separately gated step.
 
 ## Validate
 

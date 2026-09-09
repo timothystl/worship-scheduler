@@ -1,7 +1,11 @@
 import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from './version.js';
+import givingFixture from '../../contracts/examples/giving-summary-v1.synthetic.json';
+import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = 'finance.summary.v1';
+const GIVING_CONTRACT = 'connect.giving-summary.v1';
+const SYNTHETIC_GIVING = acceptConnectGivingSummaryV1(givingFixture);
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
@@ -33,7 +37,7 @@ function formatCents(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0) / 100);
 }
 
-function renderShell(metadata, summary) {
+function renderShell(metadata, summary, giving) {
   const release = `${metadata.version} · ${metadata.releaseChannel}`;
   return `<!doctype html>
 <html lang="en">
@@ -68,8 +72,10 @@ function renderShell(metadata, summary) {
       <div class="card"><small>Church budget</small><strong>${formatCents(summary.church.budget_cents)}</strong></div>
       <div class="card"><small>Balance sheet</small><strong>${formatCents(summary.balanceSheet.balance_cents)}</strong></div>
       <div class="card"><small>Childcare rooms</small><strong>${Number(summary.childcare.room_count || 0)}</strong></div>
+      <div class="card"><small>Giving net</small><strong>${formatCents(giving.totals.netCents)}</strong></div>
+      <div class="card"><small>Giving records</small><strong>${Number(giving.reconciliation.sourceRecordCount || 0)}</strong></div>
     </section>
-    <p><small>All values shown here are deterministic synthetic staging fixtures.</small></p>
+    <p><small>All values shown here are deterministic synthetic staging fixtures. Giving is the committed Connect contract example, validated locally with no network call.</small></p>
     <footer>${release}</footer>
   </main>
 </body>
@@ -141,6 +147,14 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/v1/connect-giving-preview') {
+      const body = request.method === 'HEAD' ? null : JSON.stringify(SYNTHETIC_GIVING);
+      return response(body, { headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Finance-Contract': GIVING_CONTRACT,
+      } });
+    }
+
     if (url.pathname === '/api/summary') {
       try {
         const summary = await readSyntheticSummary(env.FINANCE_DB);
@@ -161,7 +175,7 @@ export default {
     if (url.pathname === '/' || url.pathname === '/index.html') {
       if (request.method === 'HEAD') return response(null, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       try {
-        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB)), {
+        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB), SYNTHETIC_GIVING), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
       } catch {
