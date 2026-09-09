@@ -20,14 +20,16 @@ describe('resolveRolePermissions', () => {
     const d = DEFAULT_ROLE_PERMISSIONS;
     // finance = giving/tuition/finance edit + reports view
     expect(d.finance).toEqual({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
-    // staff = attendance/follow-ups/register edit + audit/reports view
+    // staff = attendance/follow-ups/register edit + reports view. Audit is admin-only (removed
+    // from staff per the Preparation 5 governance decision, issue #844).
     expect(d.staff.attendance).toBe('edit');
     expect(d.staff.register).toBe('edit');
-    expect(d.staff.audit).toBe('view');
+    expect(d.staff.audit).toBe('none');
     expect(d.staff.giving).toBe('none');
-    // council = the old office register access, plus the board-facing financial picture:
-    // Finance + Reports to read, and giving only in aggregate.
-    expect(d.council.register).toBe('edit');
+    // council = no register access at all (its edit access was removed per the same #844
+    // decision: Council is a reporting/oversight tier, not an operational one), plus the
+    // board-facing financial picture: Finance + Reports to read, and giving only in aggregate.
+    expect(d.council.register).toBe('none');
     expect(d.council.finance).toBe('view');
     expect(d.council.reports).toBe('view');
     expect(d.council.giving).toBe('anon');
@@ -39,7 +41,7 @@ describe('resolveRolePermissions', () => {
     const perms = resolveRolePermissions(JSON.stringify({ council: { reports: 'none' } }));
     expect(perms.council.reports).toBe('none');
     // untouched council items keep their default
-    expect(perms.council.register).toBe('edit');
+    expect(perms.council.register).toBe('none');
     expect(perms.council.giving).toBe('anon');
     // other roles unaffected
     expect(perms.finance).toEqual(DEFAULT_ROLE_PERMISSIONS.finance);
@@ -75,10 +77,14 @@ describe('resolveRolePermissions', () => {
     };
     const perms = resolveRolePermissions(JSON.stringify(legacy));
     expect(perms.finance).toEqual(DEFAULT_ROLE_PERMISSIONS.finance);
+    // audit is always 'none' out of the legacy migration now (Preparation 5 / #844 made it
+    // admin-only outright, not staff-view), which is also today's staff default — so this
+    // still lands on an exact match.
     expect(perms.staff).toEqual(DEFAULT_ROLE_PERMISSIONS.staff);
     // The legacy row is keyed `office`, the role it configures is now `council`, and its
-    // booleans resolve to register-edit only — so it lands as the pre-rename office grant,
-    // NOT the new council default (which adds finance/reports/anon giving).
+    // booleans resolve to register-edit only — so it lands as the pre-rename office grant
+    // (register 'edit', not today's 'view' default), NOT the new council default (which adds
+    // finance/reports/anon giving and has register at 'view').
     expect(perms.council.register).toBe('edit');
     expect(perms.council.giving).toBe('none');
     expect(perms.council.finance).toBe('none');
