@@ -11,6 +11,9 @@
     "ajv-formats": "3.0.1",
     "playwright-core": "^1.48.0",
     "vitest": "^4.1.11",
-    "wrangler": "^4.84.1"
+    "wrangler": "^4.130.0"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
   }
 }
