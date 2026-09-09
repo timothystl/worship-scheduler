@@ -1,6 +1,7 @@
 import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from './version.js';
 
 const PRODUCT = 'finance';
+const SUMMARY_CONTRACT = 'finance.summary.v1';
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
@@ -88,6 +89,25 @@ async function readSyntheticSummary(db) {
   return { church: first(1), balanceSheet: first(2), childcare: first(3) };
 }
 
+function summaryV1(metadata, summary) {
+  return {
+    contract: SUMMARY_CONTRACT,
+    dataClassification: 'synthetic',
+    release: metadata,
+    summary: {
+      church: {
+        actualCents: Number(summary.church.actual_cents || 0),
+        budgetCents: Number(summary.church.budget_cents || 0),
+      },
+      balanceSheet: { balanceCents: Number(summary.balanceSheet.balance_cents || 0) },
+      childcare: {
+        roomCount: Number(summary.childcare.room_count || 0),
+        billedCents: Number(summary.childcare.billed_cents || 0),
+      },
+    },
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -105,11 +125,31 @@ export default {
       return response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
     }
 
+    if (url.pathname === '/api/v1/summary') {
+      try {
+        const summary = await readSyntheticSummary(env.FINANCE_DB);
+        const body = request.method === 'HEAD' ? null : JSON.stringify(summaryV1(metadata, summary));
+        return response(body, { headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-Finance-Contract': SUMMARY_CONTRACT,
+        } });
+      } catch {
+        return response(JSON.stringify({ error: 'Synthetic staging data unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      }
+    }
+
     if (url.pathname === '/api/summary') {
       try {
         const summary = await readSyntheticSummary(env.FINANCE_DB);
         const body = request.method === 'HEAD' ? null : JSON.stringify({ ...metadata, dataClassification: 'synthetic', summary });
-        return response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+        return response(body, { headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          Deprecation: 'true',
+          Link: '</api/v1/summary>; rel="successor-version"',
+        } });
       } catch {
         return response(JSON.stringify({ error: 'Synthetic staging data unavailable' }), {
           status: 503,

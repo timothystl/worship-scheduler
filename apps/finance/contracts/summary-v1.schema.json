@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:finance:summary:v1",
+  "title": "Timothy Finance synthetic summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "dataClassification", "release", "summary"],
+  "properties": {
+    "contract": { "const": "finance.summary.v1" },
+    "dataClassification": { "const": "synthetic" },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "environment", "version", "releaseChannel", "releaseSha"],
+      "properties": {
+        "product": { "const": "finance" },
+        "environment": { "const": "staging" },
+        "version": { "type": "string", "pattern": "^1\\.0\\.0-alpha\\.[0-9]+$" },
+        "releaseChannel": { "const": "alpha" },
+        "releaseSha": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["church", "balanceSheet", "childcare"],
+      "properties": {
+        "church": { "$ref": "#/$defs/church" },
+        "balanceSheet": { "$ref": "#/$defs/balanceSheet" },
+        "childcare": { "$ref": "#/$defs/childcare" }
+      }
+    }
+  },
+  "$defs": {
+    "cents": { "type": "integer" },
+    "church": {
+      "type": "object", "additionalProperties": false,
+      "required": ["actualCents", "budgetCents"],
+      "properties": { "actualCents": { "$ref": "#/$defs/cents" }, "budgetCents": { "$ref": "#/$defs/cents" } }
+    },
+    "balanceSheet": {
+      "type": "object", "additionalProperties": false,
+      "required": ["balanceCents"],
+      "properties": { "balanceCents": { "$ref": "#/$defs/cents" } }
+    },
+    "childcare": {
+      "type": "object", "additionalProperties": false,
+      "required": ["roomCount", "billedCents"],
+      "properties": { "roomCount": { "type": "integer", "minimum": 0 }, "billedCents": { "$ref": "#/$defs/cents" } }
+    }
+  }
+}
