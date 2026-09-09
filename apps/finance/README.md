@@ -38,6 +38,7 @@ the migration does not copy production data or authorize a new writer.
 - `query-budget.js` — named, fail-closed D1 read budgets for independently observable routes.
 - `summary-service.js` — synthetic D1 read and `finance.summary.v1` contract assembly boundary.
 - `route-manifest.js` — executable route, method, contract, data-source, and query-budget registry.
+- `parity-manifest.js` — source-backed inventory of the existing Finance navigation and capabilities.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
 reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
@@ -53,6 +54,11 @@ expectation.
 The route manifest is the closed inventory for the alpha Worker. Every published path is read-only
 and declares whether it uses no data, the dedicated synthetic D1, or a committed synthetic static
 fixture. Routes that read D1 name their query budget; unknown paths fail closed with `404`.
+
+Alpha.9 begins interface parity with the existing nine-section Finance information architecture.
+Only Financial Health renders synthetic metrics; the other familiar sections are explicit staging
+scaffolds listing the workflows that must be rebuilt or deliberately retired. This is not visual or
+functional parity, and product-specific authorization is not yet connected.
 
 ## Validate
 

@@ -27,7 +27,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.8');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.9');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -59,7 +59,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.8',
+      version: '1.0.0-alpha.9',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -71,7 +71,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.8 · alpha');
+    expect(html).toContain('1.0.0-alpha.9 · alpha');
     expect(html).toContain('$200,000');
     expect(html).toContain('$210,000');
     expect(html).toContain('$600,000');
@@ -79,6 +79,20 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(html).toContain('Giving records</small><strong>6');
     expect(html).toContain('validated locally with no network call');
     expect(html).toContain('deterministic synthetic staging fixtures');
+  });
+
+  it('renders the familiar Finance navigation and explicit non-connected parity scaffolds', async () => {
+    const res = await worker.fetch(new Request('https://finance.test/?section=property'), env);
+    const html = await res.text();
+    for (const label of [
+      'Financial Health', 'Church Report', 'Balance Sheet', 'Daycare Report',
+      'Commercial Property', 'Budget', 'Chart of Accounts', 'Compensation', 'Data & Imports',
+    ]) expect(html).toContain(label);
+    expect(html).toContain('href="/?section=property" aria-current="page"');
+    expect(html).toContain('Commercial Property staging scaffold');
+    expect(html).toContain('production workflow and data are not connected to staging');
+    expect(html).toContain('monthly financials');
+    expect(html).not.toContain('$1,450');
   });
 
   it('serves only synthetic read-only summary data', async () => {
@@ -114,7 +128,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       contract: 'finance.summary.v1',
       dataClassification: 'synthetic',
       release: {
-        product: 'finance', environment: 'staging', version: '1.0.0-alpha.8',
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.9',
         releaseChannel: 'alpha', releaseSha: 'test-sha',
       },
       summary: {
