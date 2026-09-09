@@ -1,0 +1,15 @@
+{
+  "contract": "connect.person-reference.v1",
+  "dataClassification": "restricted-pseudonymous",
+  "sourceProduct": "connect",
+  "consumerProduct": "finance",
+  "personRef": "pr_SYNTHETIC_FINANCE_AUDIENCE_0000000001",
+  "issuedAt": "2026-09-09T17:00:00Z",
+  "expiresAt": "2027-09-09T17:00:00Z",
+  "status": "active",
+  "authorizationGranted": false,
+  "assurance": {
+    "method": "connect-authoritative-record",
+    "verifiedAt": "2026-09-09T16:59:59Z"
+  }
+}

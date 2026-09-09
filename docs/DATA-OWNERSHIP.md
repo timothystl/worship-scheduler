@@ -49,3 +49,10 @@ people, consent, or message history.
 The paired `message-delivery-result-v1.schema.json` limits adapter outcomes to accepted, delivered,
 temporary failure, or permanent failure with explicit retry, dead-letter, or no-retry disposition.
 It forbids unbounded raw provider responses.
+
+`contracts/person-reference-v1.schema.json` defines an audience-bound pseudonymous reference for a
+Connect-authoritative person record. It never exposes the internal numeric `person_id`, identity or
+contact fields, demographics, household/membership, Giving, roles, or permissions. References are
+separate per consumer and explicitly carry `authorizationGranted: false`; correlation never grants
+access. The schema and examples do not create a lookup, matching flow, account link, shared login,
+database mapping, or production identity traffic.
