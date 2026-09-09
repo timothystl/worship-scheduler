@@ -127,9 +127,10 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   const isFinance   = canViewGivingSums && !givingAnon;
   const isStaff     = canView('attendance') || canView('followups') || canView('audit');
   const canRegister = canView('register');
-  // People / Households / Tags / Orgs / Funds editing — unchanged blanket flag: every
-  // non-member role can edit the baseline directory (the per-item view/edit toggles above
-  // are the feature areas layered on top, not the directory itself).
+  // Tags / Attendance / Register / Funds editing — unchanged blanket flag: every non-member
+  // role can edit these (the per-item view/edit toggles above are the feature areas layered on
+  // top). People/Households/Organizations editing is NOT part of this flag — see the 'directory'
+  // item check further down, where it's gated like any other configurable item instead.
   const canEdit    = role === 'admin' || role === 'finance' || role === 'staff' || role === 'council';
 
   // ── Compensation role — Compensation Planner only, everything else denied ─────────────
@@ -285,12 +286,25 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     if (!allowedSegs) return json({ error: 'Access denied' }, 403);
     if (method !== 'GET') return json({ error: 'Access denied' }, 403);
   }
-  // Write operations — require canEdit (not member)
+  // Write operations on Tags/Attendance/Register/Funds — require canEdit (not member). Left as
+  // the original blanket flag; only People/Households/Organizations moved to their own item
+  // below, which is what Andrew's 2026-09-09 request was actually about.
   if (method !== 'GET' && !canEdit &&
-      (seg.startsWith('people') || seg.startsWith('households') || seg.startsWith('tags') ||
-       seg.startsWith('attendance') || seg.startsWith('register') || seg.startsWith('funds') ||
-       seg.startsWith('organizations'))) {
+      (seg.startsWith('tags') || seg.startsWith('attendance') || seg.startsWith('register') ||
+       seg.startsWith('funds'))) {
     return json({ error: 'Access denied: editing requires staff, council, or finance access' }, 403);
+  }
+  // People / Households / Organizations writes — gated by the 'directory' item specifically,
+  // not the blanket non-member flag above. Reads are still unconditional for every non-member/
+  // non-volunteer role (unchanged) — deliberately NOT added to the ACCESS_GATE loop above, since
+  // that loop runs before the member-role carve-out further up and 'directory' clamps to 'none'
+  // for member (see clampMemberRow in api-utils.js), which would 403 member's own filtered
+  // directory reads before ever reaching its bespoke allowlist. Finance/staff default to 'edit'
+  // (unchanged from before); council defaults to 'view' — it can still browse the directory but
+  // can no longer add or edit a person/household/organization.
+  if (method !== 'GET' && !canEditItem('directory') &&
+      (seg.startsWith('people') || seg.startsWith('households') || seg.startsWith('organizations'))) {
+    return json({ error: 'Access denied: editing the directory requires explicit permission' }, 403);
   }
 
   // ── Dashboard ────────────────────────────────────────────────────

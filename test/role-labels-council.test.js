@@ -30,10 +30,14 @@ describe('write-refusal message names the current role, not the retired one (P24
   // so this specific message only fires as a defense-in-depth catch for a role string that
   // isn't one of the six known ones — still worth pinning, since a stale rename here would
   // otherwise sit unnoticed exactly the way the original "office" wording did.
+  // Uses tags/1, not people/1: People/Households/Organizations writes moved to their own
+  // 'directory' permission-item gate (see api-chms.js and the directory tests below), which
+  // never mentions 'council' or 'office' at all. Tags/Attendance/Register/Funds are still on
+  // the original blanket canEdit flag this test is about.
   it('says "council", never "office", when an unrecognized role tries to write', async () => {
-    const url = new URL('https://connect.timothystl.org/admin/api/people/1');
+    const url = new URL('https://connect.timothystl.org/admin/api/tags/1');
     const res = await handleChmsApi(
-      new Request(url, { method: 'PUT' }), makeEnv(), url, 'PUT', 'people/1', 'some-unknown-role'
+      new Request(url, { method: 'PUT' }), makeEnv(), url, 'PUT', 'tags/1', 'some-unknown-role'
     );
     expect(res.status).toBe(403);
     const body = await res.json();
@@ -42,15 +46,68 @@ describe('write-refusal message names the current role, not the retired one (P24
   });
 
   it('a council account is not blocked by this canEdit gate at all', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/tags/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'PUT', body: '{}' }), makeEnv(), url, 'PUT', 'tags/1', 'council'
+    );
+    // Not the 403 this test is about — it may still fail downstream on the fake DB, but it
+    // must not be blocked by the canEdit check.
+    if (res.status === 403) {
+      const body = await res.json();
+      expect(body.error).not.toMatch(/editing requires/);
+    }
+  });
+});
+
+describe('the "directory" permission item gates People/Households/Organizations writes', () => {
+  it('blocks a council account (default: view-only) from writing a person', async () => {
     const url = new URL('https://connect.timothystl.org/admin/api/people/1');
     const res = await handleChmsApi(
       new Request(url, { method: 'PUT', body: '{}' }), makeEnv(), url, 'PUT', 'people/1', 'council'
     );
-    // Not the 403 this test is about — it may still fail downstream on the fake DB (people
-    // write goes further than this gate), but it must not be blocked by the canEdit check.
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/directory/);
+  });
+
+  it('does not block a council account from reading people (GET is unconditional)', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/people/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'GET' }), makeEnv(), url, 'GET', 'people/1', 'council'
+    );
+    expect(res.status).not.toBe(403);
+  });
+
+  it('does not block finance (default: edit) from writing a household', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/households/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'PUT', body: '{}' }), makeEnv(), url, 'PUT', 'households/1', 'finance'
+    );
     if (res.status === 403) {
       const body = await res.json();
-      expect(body.error).not.toMatch(/editing requires/);
+      expect(body.error).not.toMatch(/directory/);
+    }
+  });
+
+  it('does not block staff (default: edit) from writing an organization', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/organizations/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'PUT', body: '{}' }), makeEnv(), url, 'PUT', 'organizations/1', 'staff'
+    );
+    if (res.status === 403) {
+      const body = await res.json();
+      expect(body.error).not.toMatch(/directory/);
+    }
+  });
+
+  it('never blocks admin, regardless of the directory setting', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/people/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'PUT', body: '{}' }), makeEnv(), url, 'PUT', 'people/1', 'admin'
+    );
+    if (res.status === 403) {
+      const body = await res.json();
+      expect(body.error).not.toMatch(/directory/);
     }
   });
 });

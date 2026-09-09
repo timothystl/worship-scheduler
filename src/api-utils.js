@@ -82,12 +82,17 @@ export const ANON_CAPABLE_ITEMS = { giving: true };
 // holding only one of them can still load its own tab. 'finance' is the rest of the workspace
 // (Church Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
 // Imports); 'compensation' is the Compensation Planner; 'budget' is the Budget/Planning tab.
+// 'directory' covers People/Households/Organizations editing — adding or editing a person,
+// household or organization record. Read access to the directory is NOT gated by this item (see
+// the note in handleChmsApi/api-chms.js on why — briefly, the member role's own bespoke
+// allowlist runs through the same central gate and must not collide with it); only writes are.
 export const ROLE_PERMISSION_ITEMS = [
   { key: 'giving',       label: 'Giving',            editable: true  },
   { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
   { key: 'finance',      label: 'Finance Overview',  editable: true  },
   { key: 'compensation', label: 'Compensation',      editable: true  },
   { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'directory',    label: 'Directory (People/Households/Orgs)', editable: true  },
   { key: 'attendance',   label: 'Attendance',        editable: true  },
   { key: 'followups',    label: 'Follow-ups',        editable: true  },
   { key: 'audit',        label: 'Audit Log',         editable: false },
@@ -124,12 +129,22 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   // nothing access (finance: all three 'edit'; staff: all three 'none') so splitting the item
   // three ways changes nothing for either role by default.
   //
+  // directory (People/Households/Organizations edit — adding or editing a record) used to be an
+  // unconditional blanket (any non-member role could do it, with no way to turn it off). Andrew
+  // asked (2026-09-09) for every role's access to be something explicitly granted, not an
+  // implicit non-member perk: finance/staff default to 'edit', preserving their actual day-to-day
+  // access unchanged; council — "a reporting/oversight tier, not an operational one" per the
+  // Preparation 5 decision above — defaults to 'view', so it can still browse the directory but
+  // can no longer add or edit a person/household/organization. Directory READS are not gated by
+  // this item at all (see the comment on ROLE_PERMISSION_ITEMS above), so 'view' vs 'edit' here
+  // only ever affects writes.
+  //
   // audit: 'view' was removed from staff per the same Preparation 5 decision (#844) — the
   // Audit Log is now admin-only for every configurable role, not just council/finance/member.
-  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
-  council: { giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
+  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', directory: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', directory: 'edit', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
+  council: { giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', directory: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', directory: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
 };
 
 function levelRank(l) { const i = ROLE_PERMISSION_LEVELS.indexOf(l); return i < 0 ? 0 : i; }
