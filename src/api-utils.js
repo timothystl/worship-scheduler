@@ -96,15 +96,20 @@ const MEMBER_ALLOWED_ITEMS = { reports: 'view' };
 
 export const DEFAULT_ROLE_PERMISSIONS = {
   // finance → giving/tuition/finance (edit) + reports (view); staff → attendance/follow-ups/
-  // register (edit) + audit/reports (view); member → filtered directory, nothing extra.
+  // register (edit) + reports (view); member → filtered directory, nothing extra.
   //
-  // council (formerly `office`) is the church-governance tier: it keeps the register access
-  // the old office role had, and adds the board-facing financial picture — the Finance
-  // workspace and the Reports tab, but giving at 'anon' only, so a council member sees what
-  // the congregation gave and never who gave it.
+  // council (formerly `office`) is the church-governance tier: it sees register at 'view' —
+  // its own register-edit access was removed per the Preparation 5 governance decision (issue
+  // #844): Council is a reporting/oversight tier, not an operational one, so register stays
+  // editable only for whoever actually runs it (finance/staff/admin) — plus the board-facing
+  // financial picture: the Finance workspace and the Reports tab, but giving at 'anon' only,
+  // so a council member sees what the congregation gave and never who gave it.
+  //
+  // audit: 'view' was removed from staff per the same Preparation 5 decision (#844) — the
+  // Audit Log is now admin-only for every configurable role, not just council/finance/member.
   finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'edit', followups: 'edit', audit: 'view', register: 'edit', reports: 'view' },
-  council: { giving: 'anon', tuitionaid: 'none', finance: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'edit', reports: 'view' },
+  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
+  council: { giving: 'anon', tuitionaid: 'none', finance: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'view', reports: 'view' },
   member:  { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
 };
 
@@ -128,7 +133,9 @@ function clampMemberRow(row) {
 // A stored role object from before this change used boolean values keyed by the old coarse
 // groups {finance,staff,register,reports}. Detect that shape (any boolean value) and map it
 // forward to the granular tri-state model, preserving the old effective access (everything
-// accessible was also editable, so old true → 'edit'; read-only groups → 'view').
+// accessible was also editable, so old true → 'edit'; read-only groups → 'view') — except
+// audit, which the Preparation 5 governance decision (issue #844) made admin-only outright, so
+// a legacy staff=true no longer resurrects the old audit-view grant either.
 function migrateLegacyRow(row) {
   const isLegacy = Object.values(row).some(v => typeof v === 'boolean');
   if (!isLegacy) return row;
@@ -138,7 +145,7 @@ function migrateLegacyRow(row) {
     finance:    row.finance ? 'edit' : 'none',
     attendance: row.staff ? 'edit' : 'none',
     followups:  row.staff ? 'edit' : 'none',
-    audit:      row.staff ? 'view' : 'none',
+    audit:      'none',
     register:   row.register ? 'edit' : 'none',
     reports:    row.reports ? 'view' : 'none',
   };
