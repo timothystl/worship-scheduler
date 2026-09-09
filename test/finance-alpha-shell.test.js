@@ -25,7 +25,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.2');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.3');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -57,7 +57,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.2',
+      version: '1.0.0-alpha.3',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -69,7 +69,11 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.2 · alpha');
+    expect(html).toContain('1.0.0-alpha.3 · alpha');
+    expect(html).toContain('$200,000');
+    expect(html).toContain('$210,000');
+    expect(html).toContain('$600,000');
+    expect(html).toContain('deterministic synthetic staging fixtures');
   });
 
   it('serves only synthetic read-only summary data', async () => {
