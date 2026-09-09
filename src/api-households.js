@@ -397,17 +397,26 @@ export async function handleHouseholdsApi(req, env, url, method, seg, db, isAdmi
   // ── Funds ────────────────────────────────────────────────────────
   if (seg === 'funds' && method === 'GET') {
     const rows = (await db.prepare('SELECT * FROM funds ORDER BY sort_order,name').all()).results || [];
-    // Gift count/total per fund — lets the Manage Funds screen show which funds are actually
-    // safe to deactivate (0 gifts, e.g. leftover placeholder Breeze funds) vs. ones with history.
-    const stats = (await db.prepare(
-      `SELECT fund_id, COUNT(*) cnt, COALESCE(SUM(amount),0) total_cents FROM giving_entries GROUP BY fund_id`
-    ).all()).results || [];
-    const statMap = new Map(stats.map(s => [s.fund_id, s]));
+    // The ordinary fund picker needs only this small table. Manage Funds explicitly asks for
+    // lifetime statistics, which are summed from the maintained month/fund read model rather
+    // than rescanning every individual gift.
+    const includeStats = isAdmin && url.searchParams.get('include_stats') === '1';
+    let statMap = null;
+    if (includeStats) {
+      const stats = (await db.prepare(
+        `SELECT fund_id, COALESCE(SUM(gift_count),0) cnt,
+                COALESCE(SUM(total_cents),0) total_cents
+           FROM giving_monthly_fund_totals GROUP BY fund_id`
+      ).all()).results || [];
+      statMap = new Map(stats.map(s => [s.fund_id, s]));
+    }
     const funds = rows.map(f => {
-      const s = statMap.get(f.id) || { cnt: 0, total_cents: 0 };
       // category is normalized on the way out so a fund written before migration 0033 (or by a
       // path that doesn't know about categories) always reads as a real lens key, never ''.
-      return { ...f, category: normalizeFundCategory(f.category), entry_count: s.cnt, total_cents: s.total_cents };
+      const normalized = { ...f, category: normalizeFundCategory(f.category) };
+      if (!statMap) return normalized;
+      const s = statMap.get(f.id) || { cnt: 0, total_cents: 0 };
+      return { ...normalized, entry_count: s.cnt, total_cents: s.total_cents };
     });
     return json({ funds });
   }
@@ -480,8 +489,9 @@ export async function handleHouseholdsApi(req, env, url, method, seg, db, isAdmi
     if (!isAdmin) return json({ error: 'Access denied' }, 403);
     const funds = (await db.prepare('SELECT * FROM funds ORDER BY name,id').all()).results || [];
     const stats = (await db.prepare(
-      `SELECT fund_id, COUNT(*) cnt, COALESCE(SUM(amount),0) total_cents
-       FROM giving_entries GROUP BY fund_id`
+      `SELECT fund_id, COALESCE(SUM(gift_count),0) cnt,
+              COALESCE(SUM(total_cents),0) total_cents
+         FROM giving_monthly_fund_totals GROUP BY fund_id`
     ).all()).results || [];
     const statMap = new Map(stats.map(s => [s.fund_id, s]));
     const groups = new Map();

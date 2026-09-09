@@ -9,21 +9,95 @@ import { handleGivingApi } from './api-giving.js';
 import { handleTuitionAidApi } from './api-tuition-aid.js';
 import { handleFinanceApi } from './api-finance.js';
 
+// The Home Dashboard used to aggregate the lifetime giving_entries table three times per load.
+// Completed months now come from one materialized fund/month row (maintained by D1 triggers in
+// migration 0044). Only the matching partial month from last year still reads individual gifts,
+// because "last year YTD" must stop on the same month/day rather than include the entire month.
+export const DASHBOARD_GIVING_TOTALS_SQL = `
+  WITH general_months AS (
+    SELECT m.month, m.total_cents
+      FROM giving_monthly_fund_totals m
+      JOIN funds f ON f.id=m.fund_id
+     WHERE f.name LIKE '40085%'
+  ), rollup AS (
+    SELECT
+      COALESCE(SUM(CASE WHEN month BETWEEN ? AND ? THEN total_cents ELSE 0 END),0) AS ytd,
+      COALESCE(SUM(CASE WHEN month BETWEEN ? AND ? THEN total_cents ELSE 0 END),0) AS last_total,
+      COALESCE(SUM(CASE WHEN month >= ? AND month < ? THEN total_cents ELSE 0 END),0) AS last_complete_months
+      FROM general_months
+  ), partial AS (
+    SELECT COALESCE(SUM(ge.amount),0) AS cents
+      FROM giving_entries ge INDEXED BY idx_giving_date_fund
+      JOIN funds f ON f.id=ge.fund_id
+     WHERE ge.contribution_date BETWEEN ? AND ?
+       AND f.name LIKE '40085%'
+  )
+  SELECT rollup.ytd AS gf_ytd,
+         rollup.last_total AS gf_last_year_total,
+         rollup.last_complete_months + partial.cents AS gf_last_year_ytd
+    FROM rollup CROSS JOIN partial`;
+
+export async function loadDashboardGivingTotals(db, asOf = new Date()) {
+  const iso = asOf.toISOString().slice(0, 10);
+  const year = parseInt(iso.slice(0, 4));
+  const monthDay = iso.slice(5);
+  const month = iso.slice(5, 7);
+  const prior = year - 1;
+  const row = await db.prepare(DASHBOARD_GIVING_TOTALS_SQL).bind(
+    `${year}-01`, `${year}-12`,
+    `${prior}-01`, `${prior}-12`,
+    `${prior}-01`, `${prior}-${month}`,
+    `${prior}-${month}-01`, `${prior}-${monthDay}`,
+  ).first();
+  return {
+    gfYtd: row?.gf_ytd || 0,
+    gfLastYearYtd: row?.gf_last_year_ytd || 0,
+    gfLastYearTotal: row?.gf_last_year_total || 0,
+  };
+}
+
+export const DASHBOARD_FIRST_GIVERS_SQL = `
+  SELECT p.id, p.first_name, p.last_name, MIN(ge.contribution_date) AS first_gift_date
+    FROM giving_entries ge
+    JOIN people p ON p.id=ge.person_id
+   WHERE ge.contribution_date >= date('now','-60 days')
+     AND p.first_gift_noted=0
+     AND NOT EXISTS (
+       SELECT 1 FROM giving_entries older
+        WHERE older.person_id=ge.person_id
+          AND older.contribution_date < date('now','-60 days')
+     )
+   GROUP BY ge.person_id
+   ORDER BY first_gift_date DESC
+   LIMIT 20`;
+
 export async function handleChmsApi(req, env, url, method, seg, role = 'admin') {
   const db = env.DB;
 
   // ── Role-based access control ────────────────────────────────────
-  // Roles: admin | finance | staff | council | member | volunteer
+  // Roles: admin | finance | staff | council | member | volunteer | compensation
   //   admin   — always full access, not configurable (can never be locked out)
   //   finance | staff | council — every feature item below is admin-configurable per role
   //             (Settings → Role Permissions). See api-utils.js for the defaults.
-  //   council — the governance tier (renamed from `office`): sees the Finance workspace and
-  //             the Reports tab, and giving only at the 'anon' level — totals, never donors.
+  //   council — the governance tier (renamed from `office`): sees the Reports tab and giving
+  //             only at the 'anon' level (totals, never donors). Finance is three independent
+  //             items for every configurable role (see financeSegItems below): `finance` is the
+  //             rest of the workspace (Church Report, Balance Sheet, Daycare Report, Commercial
+  //             Property, Chart of Accounts, Data & Imports), `compensation` is the Compensation
+  //             Planner, `budget` is the Budget/Planning tab. Council defaults to `finance`:
+  //             'none', `compensation`: 'edit' — so out of the box a council member reaches only
+  //             the Compensation Planner, and can save their own raise-plan toggles/percentages
+  //             there, forked into a storage key scoped to their own username so it can never
+  //             overwrite the real admin/finance plan or another council member's (see
+  //             api-finance.js) — but an admin can grant/revoke any of the three independently.
   //   member  — GET people filtered to member_type='member' only; a structurally different
   //             read-only view, not part of the configurable matrix
   //   volunteer — read-only access to the public Volunteers admin screen only (Signups /
   //             Ministry Roles / Events / Templates, all in api-admin.js); denied outright
   //             everywhere in this file. Not part of the configurable matrix either.
+  //   compensation — view+edit access to the Compensation Planner sub-tab of Finance only,
+  //             and nothing else in this file. Not part of the configurable matrix (see the
+  //             dedicated block below, right after `canEdit`).
   const isAdmin = role === 'admin';
   const perms = await getRolePermissions(db);
   const rolePerms = permissionsForRole(perms, role);
@@ -58,6 +132,74 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   // are the feature areas layered on top, not the directory itself).
   const canEdit    = role === 'admin' || role === 'finance' || role === 'staff' || role === 'council';
 
+  // ── Compensation role — Compensation Planner only, everything else denied ─────────────
+  // Fully self-contained and hardcoded: unlike finance/staff/council it is not in the
+  // configurable matrix above, so it short-circuits here rather than flowing through the
+  // ACCESS_GATE loop below (which would 403 it — permissionsForRole gives it 'finance':'view'
+  // only so its sidebar tab renders, not enough to pass the item-level check that loop runs).
+  // Nothing outside People/Households/Giving/Reports/etc. in this file is reachable for it.
+  //
+  // The allowed GET set is exactly what the Compensation tab's own bootstrap calls (see
+  // loadFinance()/finLoadPlanning() in js-finance.js) — nothing from the rest of the Finance
+  // module (Church Report, Daycare, Property detail writes, Balance Sheet, Data & Imports,
+  // QuickBooks) is reachable. Note the underlying payloads for a couple of these (the church
+  // ledger/budget tree behind finance/church/this-year and finance/planning/church) carry more
+  // than compensation figures — the Compensation tab filters them down to salary/benefit lines
+  // client-side rather than the server slicing them narrower. The one write it may make, PUT
+  // finance/planning/salary, never touches the shared admin/finance roster — api-finance.js
+  // forks it to its own storage key so this role's edits can never overwrite what admin/
+  // finance/council see.
+  if (role === 'compensation') {
+    const allowedGet = seg === 'finance/status' || seg === 'finance/overview' || seg === 'finance/daycare'
+      || seg === 'finance/planning/church' || seg === 'finance/church/this-year'
+      || seg === 'finance/planning/base-projection' || seg === 'finance/planning/board-categories'
+      || seg === 'finance/planning/purpose-tags' || seg === 'finance/planning/salary'
+      || seg === 'finance/property/ivanhoe';
+    const allowedWrite = seg === 'finance/planning/salary' && method === 'PUT';
+    if (!((method === 'GET' && allowedGet) || allowedWrite)) {
+      return json({ error: 'Access denied' }, 403);
+    }
+    const result = await handleFinanceApi(req, env, url, method, seg, db, false, true, role);
+    return result !== null ? result : json({ error: 'Not found' }, 404);
+  }
+
+  // Which of the three Finance sub-permissions (finance/compensation/budget) can grant a given
+  // Finance segment, for the configurable roles (finance/staff/council) — the ACCESS_GATE below
+  // allows a segment if the role has view (or, for a write, edit) on ANY of the returned items,
+  // so a role holding only 'compensation' still reaches exactly the Compensation Planner, a role
+  // holding only 'budget' reaches exactly the Budget tab, and 'finance' alone still covers
+  // everything else, matching finance/staff's historical all-or-nothing access unchanged.
+  //
+  // A few reads are genuinely shared infrastructure, not a leak between the three: loadFinance()
+  // fetches finance/status, finance/overview and finance/daycare unconditionally on every visit
+  // to ANY Finance section (see its own comment in js-finance.js) — the tab shell cannot load
+  // without them — and finLoadPlanning()'s four reads (the church ledger/budget tree and its
+  // sibling config) are one shared fetch behind Budget, Chart of Accounts AND the Compensation
+  // Planner's own "current pay from this worker's budget line" lookups (see FIN_SECTION_LOADERS
+  // in js-finance.js). Those payloads carry more than compensation (or budget) figures — the
+  // Compensation tab filters its slice down to salary/benefit lines client-side rather than the
+  // server slicing it narrower, the same tradeoff the original `compensation` role's own
+  // allowlist already accepted.
+  //
+  // finance/planning/salary is the one segment gated by 'compensation' ALONE, deliberately not
+  // falling back to 'finance' — it is the actual restrictable action ("edit compensation data"),
+  // so an admin who explicitly sets it to 'none' for a role means it, regardless of that role's
+  // blanket Finance access. Note this only controls whether the request reaches api-finance.js
+  // at all; that file's own PUT handler still only recognizes admin, the dedicated `compensation`
+  // role and `council` by name for its write, so granting 'compensation':'edit' here to
+  // finance/staff does not (yet) let them save it — it only affects what they can reach/see.
+  function financeSegItems(seg) {
+    if (seg === 'finance/status' || seg === 'finance/overview' || seg === 'finance/daycare'
+        || seg === 'finance/planning/church' || seg === 'finance/church/this-year'
+        || seg === 'finance/planning/base-projection' || seg === 'finance/planning/board-categories'
+        || seg === 'finance/planning/purpose-tags') {
+      return ['finance', 'budget', 'compensation'];
+    }
+    if (seg === 'finance/planning/salary') return ['compensation'];
+    if (seg.startsWith('finance/planning/') || seg === 'finance/property/ivanhoe') return ['finance', 'budget'];
+    return ['finance'];
+  }
+
   // ── Central per-item access gate ──────────────────────────────────────────
   // Each feature segment maps to exactly one configurable item. 'none' → no access at all;
   // a non-GET request to an item the role only has 'view' on is blocked here, so a
@@ -76,6 +218,17 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   ];
   for (const rule of ACCESS_GATE) {
     if (rule.match(seg)) {
+      // Finance is really three independently grantable items (see financeSegItems above) —
+      // access is granted if ANY of the candidates for this segment clears the bar, rather than
+      // the single 'finance' item the other rules below check.
+      if (rule.item === 'finance') {
+        const candidates = financeSegItems(seg);
+        if (!candidates.some((it) => canView(it))) return json({ error: 'Access denied' }, 403);
+        if (method !== 'GET' && !candidates.some((it) => canEditItem(it))) {
+          return json({ error: 'Access denied: view-only permission for this area' }, 403);
+        }
+        break;
+      }
       if (!canView(rule.item)) return json({ error: 'Access denied' }, 403);
       if (method !== 'GET' && !canEditItem(rule.item)) {
         return json({ error: 'Access denied: view-only permission for this area' }, 403);
@@ -156,7 +309,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const [
       mtCfgRowDash, typeCountsRes, totalHouseholdsRow, memberCountRow, memberHHCountRow,
       confirmedCountRow, baptizedCountRow, addedThisMonthRow, addedThisYearRow,
-      gfYtdRow, gfLastYearYtdRow, gfLastYearTotalRow,
+      dashboardGivingTotals,
       birthdaysRes, annRowsRes, baptismAnniversariesRes, annIssueCandidatesRes,
     ] = await Promise.all([
       // Membership counts by type — GROUP BY LOWER() to merge case variants (e.g. "member" vs "Member")
@@ -189,30 +342,9 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
       db.prepare(
         `SELECT COUNT(*) as n FROM people WHERE active=1 AND created_at >= date('now','start of year')`
       ).first(),
-      // Giving dashboard stats — General Fund only (funds whose name starts with '40085')
-      db.prepare(
-        `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         JOIN funds f ON ge.fund_id=f.id
-         WHERE substr(COALESCE(NULLIF(ge.contribution_date,''),gb.batch_date),1,4)=strftime('%Y','now')
-           AND f.name LIKE '40085%'`
-      ).first(),
-      db.prepare(
-        `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         JOIN funds f ON ge.fund_id=f.id
-         WHERE COALESCE(NULLIF(ge.contribution_date,''),gb.batch_date)
-                 BETWEEN strftime('%Y','now','-1 year')||'-01-01'
-                     AND strftime('%Y-%m-%d','now','-1 year')
-           AND f.name LIKE '40085%'`
-      ).first(),
-      db.prepare(
-        `SELECT COALESCE(SUM(ge.amount),0) as total FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         JOIN funds f ON ge.fund_id=f.id
-         WHERE substr(COALESCE(NULLIF(ge.contribution_date,''),gb.batch_date),1,4)=cast(strftime('%Y','now')-1 as text)
-           AND f.name LIKE '40085%'`
-      ).first(),
+      // General Fund totals come from fund/month summary rows; only one prior-year partial month
+      // reads individual gifts for an exact same-day YTD comparison.
+      loadDashboardGivingTotals(db),
       db.prepare(
         `SELECT id, first_name, last_name, dob FROM people
          WHERE active=1 AND (status IS NULL OR status='active')
@@ -275,9 +407,7 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
     const baptizedCount = baptizedCountRow?.n || 0;
     const addedThisMonth = addedThisMonthRow?.n || 0;
     const addedThisYear = addedThisYearRow?.n || 0;
-    const gfYtd = gfYtdRow?.total || 0;
-    const gfLastYearYtd = gfLastYearYtdRow?.total || 0;
-    const gfLastYearTotal = gfLastYearTotalRow?.total || 0;
+    const { gfYtd, gfLastYearYtd, gfLastYearTotal } = dashboardGivingTotals;
     // Group same-household + same-date pairs into one entry ("Bob & Alice Johnson")
     const _annRoleOrder = { head: 0, spouse: 1, child: 2, other: 3 };
     const annGroupMap = new Map();
@@ -392,16 +522,9 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
          WHERE f.completed=0 ORDER BY f.created_at DESC LIMIT 50`
       ).all(),
       // First-time givers in the last 60 days (exclude dismissed records)
-      db.prepare(
-        `SELECT p.id, p.first_name, p.last_name, MIN(COALESCE(NULLIF(ge.contribution_date,''),gb.batch_date)) as first_gift_date
-         FROM giving_entries ge
-         JOIN giving_batches gb ON ge.batch_id=gb.id
-         JOIN people p ON p.id=ge.person_id
-         WHERE p.first_gift_noted = 0
-         GROUP BY ge.person_id
-         HAVING first_gift_date >= date('now','-60 days')
-         ORDER BY first_gift_date DESC LIMIT 20`
-      ).all(),
+      // Start with the indexed 60-day gift slice and prove no older gift exists through the
+      // covering person/date index, rather than grouping every historical gift first.
+      db.prepare(DASHBOARD_FIRST_GIVERS_SQL).all(),
       // People not seen recently (last_seen_date set more than 8 weeks ago, or never seen but added 8+ weeks ago)
       db.prepare(
         `SELECT id, first_name, last_name, member_type, last_seen_date, created_at FROM people
@@ -583,9 +706,13 @@ export async function handleChmsApi(req, env, url, method, seg, role = 'admin') 
   }
 
   // ── Finance Overview (QuickBooks + daycare) → api-finance.js ───────────
-  // connecting/disconnecting QuickBooks is further restricted to admin inside api-finance.js
+  // connecting/disconnecting QuickBooks is further restricted to admin inside api-finance.js.
+  // The ACCESS_GATE above has already verified this exact segment+method against whichever of
+  // finance/compensation/budget governs it (financeSegItems) before this line is ever reached —
+  // isFinance is `true` unconditionally rather than re-checking the single 'finance' item, which
+  // would wrongly 403 e.g. a council member who was let through above on 'compensation' alone.
   if (seg.startsWith('finance')) {
-    const result = await handleFinanceApi(req, env, url, method, seg, db, isAdmin, canView('finance'));
+    const result = await handleFinanceApi(req, env, url, method, seg, db, isAdmin, true, role);
     if (result !== null) return result;
   }
 

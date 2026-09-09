@@ -1,5 +1,10 @@
 # PLAN.md — CR10 Remediation Plan (Phases 21–28)
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **This file is the running order for all open work.** It was written 2026-08-19 out of the CR10
 whole-codebase review and lives here, rather than inside `CLAUDE.md`, for one reason: `CLAUDE.md`
 is ~600 KB and a session that skims or truncates it will not find the plan. This file is small
@@ -16,6 +21,42 @@ Update BOTH when an item ships: check the box here, and mark the original code c
 Phases 21 and 22 are ordered by risk; 23 onward by dependency, not urgency.
 
 ---
+
+## Operational performance follow-up (2026-09-05)
+
+- [x] Materialize giving totals by fund/month and household/year. Dashboard and Finance aggregate
+  views now read compact rollups; a relevant write causes one indexed yearly refresh, then normal
+  reads return to zero full gift scans. Raw gifts remain reserved for transaction detail and
+  explicitly individual-level analysis.
+
+## Cross-app design-system workstream (added 2026-09-05)
+
+**Goal:** make visual consistency a maintained part of the codebase instead of allowing each page
+or AI editing session to inherit whichever local pattern it encounters first. This begins with an
+evidence-gathering audit, not a redesign or a palette substitution.
+
+- [ ] **DS1 — Surface inventory and evidence.** List every church and MDO app, identify ownership
+  and shared code, and capture representative desktop/mobile screens and important states.
+- [ ] **DS2 — Pattern audit.** Catalog colors, typography, spacing, layout, navigation, cards,
+  buttons, forms, tables, dialogs, status treatments, responsiveness, and accessibility. Mark each
+  difference as intentional, accidental, or unresolved before changing it.
+- [ ] **DS3 — Shared Timothy foundation.** Define common semantic tokens and interaction rules for
+  spacing, breakpoints, focus, motion, validation, accessibility, and component behavior.
+- [ ] **DS4 — Church visual system.** Define the calm, pastoral, mature expression used across the
+  church website, Connect/ChMS, Scheduler, Serve, and church administration.
+- [ ] **DS5 — MDO visual system.** Define a related but distinct child-centered expression for the
+  MDO website, childcare portal, and future family/teacher tools: warmer color, softer form, and
+  friendlier imagery without losing Timothy identity or accessibility.
+- [ ] **DS6 — Canonical components.** Establish the approved component APIs and variants for each
+  family; centralize implementation as code ownership is refactored rather than duplicating CSS.
+- [ ] **DS7 — Reference screens and usage rules.** Build representative screens and document when
+  to use each pattern, including examples of intentional Church/MDO differences.
+- [ ] **DS8 — Anti-drift guardrails for AI work.** Require agents to inspect the tokens, component
+  rules, and reference screens before UI edits; add screenshot/visual-regression checks and lint or
+  build checks where objective rules can be enforced.
+- [ ] **DS9 — Staged adoption.** Refactor one app at a time, preserve behavior, verify accessibility
+  and responsive states, and record approved exceptions. Do not attempt a family-wide visual
+  rewrite in one release.
 
 ## The work queue — priority order (rebuilt 2026-08-20)
 
@@ -127,6 +168,14 @@ These are why the earlier phases held up:
 one phase per PR · `npm test` green before and after · `DEPLOY_VERSION` bumped on any frontend change ·
 every new test checked for vacuity by injecting the exact regression it guards · a `Not verified` line
 naming what was not exercised (a live browser, a real phone, real D1, a real sent email).
+
+**Out-of-plan production remediation:** PERF8 closed 2026-09-04. Ordinary `GET /funds` calls no
+longer run the lifetime giving-history aggregation; only Manage Funds opts in. See CLAUDE.md PERF8
+and NOTES.md v1.225.1. This was a measured D1 incident fix, not a new queue item.
+
+**PERF9 follow-up closed 2026-09-05:** the Finance Data & Imports legacy timestamp fallback now
+uses a covering `(source, synced_at)` index instead of scanning every imported account/year row.
+See CLAUDE.md PERF9 and NOTES.md v1.228.2.
 
 ---
 

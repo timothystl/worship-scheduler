@@ -332,6 +332,68 @@ describe('§10.10 — a non-admin sees every figure and can change nothing', () 
   });
 });
 
+describe('council — can steer the plan, never the seed data', () => {
+  // finCompCanEditPlanControls() checks permEdit('compensation') (js-core.js), which reads the
+  // real per-item permissions object — not just the role name — so a council member only gets
+  // live percentage/toggle inputs when an admin has actually granted 'compensation':'edit'
+  // (council's own default, per api-utils.js).
+  it('leaves the custom/scale percentage inputs enabled when compensation is edit', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
+    const html = render(ctx, 'plan');
+    const pct = html.split('<input').slice(1)
+      .filter(c => /fin-comp-custom-pct|fin-comp-scale-pct/.test(c.slice(0, c.indexOf('>'))));
+    expect(pct.length).toBe(2);
+    expect(pct.every(c => !/disabled/.test(c.slice(0, c.indexOf('>'))))).toBe(true);
+  });
+
+  it('disables the percentage inputs too when compensation is only view', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'view' };
+    const html = render(ctx, 'plan');
+    const pct = html.split('<input').slice(1)
+      .filter(c => /fin-comp-custom-pct|fin-comp-scale-pct/.test(c.slice(0, c.indexOf('>'))));
+    expect(pct.length).toBe(2);
+    expect(pct.every(c => /disabled/.test(c.slice(0, c.indexOf('>'))))).toBe(true);
+  });
+
+  it('still disables every roster/seed input — name, position, current pay, hand-typed override', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
+    const html = render(ctx, 'plan');
+    const seedInputs = html.split('<input').slice(1)
+      .map(c => c.slice(0, c.indexOf('>')))
+      .filter(t => /fin-comp-name-|fin-comp-position-|fin-comp-curpay-|fin-comp-salary-|fin-comp-years-/.test(t));
+    expect(seedInputs.length).toBeGreaterThan(0);
+    expect(seedInputs.filter(t => !/disabled/.test(t))).toEqual([]);
+  });
+
+  it('hides admin-only actions the same as any other non-editor', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
+    const plan = render(ctx, 'plan');
+    expect(plan).not.toContain('finCompAddWorker()');
+    expect(plan).not.toContain('finCompSendToBudget()');
+  });
+
+  it('shows a note that saving here never touches the real roster, when it can edit', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
+    expect(render(ctx, 'plan')).toContain('never the church&#39;s actual roster');
+  });
+
+  it('shows a read-only note instead when compensation is only view', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'view' };
+    expect(render(ctx, 'plan')).toContain('read-only for your account');
+  });
+
+  it('an admin gets no such note', () => {
+    ctx._userRole = 'admin';
+    expect(render(ctx, 'plan')).not.toContain('never the church&#39;s actual roster');
+  });
+});
+
 describe('the five views', () => {
   it('renders each one, with its own sub-nav pill active', () => {
     for (const [view, marker] of [
@@ -727,6 +789,70 @@ describe('workers paid from another budget', () => {
   it('is off by default, so nothing changes for an existing roster', () => {
     expect(ctx._finSalaryRoster.some(w => ctx.finCompIsExternallyFunded(w))).toBe(false);
     expect(ctx.finCompCountedCount()).toBe(ctx._finSalaryRoster.length);
+  });
+});
+
+describe('a worker hidden from council — different from externallyFunded, which still shows them', () => {
+  function hide(name) {
+    ctx._finSalaryRoster.filter(x => x.name === name)[0].hideFromCouncil = true;
+  }
+
+  it('is gone from the Council summary view and its printed report entirely', () => {
+    hide('Knapp');
+    const html = render(ctx, 'council');
+    expect(html).not.toContain('Knapp');
+    // finCompPrintCouncil() itself wraps its render in finCompWithCouncilRoster; exercising that
+    // same helper directly here, the way the real print path does.
+    const report = ctx.finCompWithCouncilRoster(() => {
+      const computed = ctx.finCompComputeAll();
+      return ctx.finCompCouncilReportHtml(computed, ctx.finCompTotals(computed));
+    });
+    expect(report).not.toContain('Knapp');
+  });
+
+  it("drops their cost from the Council summary's own totals", () => {
+    const before = ctx.finCompTotals(ctx.finCompComputeAll());
+    const idx = ctx._finSalaryRoster.findIndex(w => w.name === 'Knapp');
+    const theirs = ctx.finCompComputeAll()[idx];
+    hide('Knapp');
+    const html = render(ctx, 'council');
+    // The header strip (shared across every view) reflects the council-facing total while the
+    // council view is active, so it must not still show the pre-hide figure on screen.
+    expect(html).not.toContain(ctx.finCompMoney(before.totalCents));
+    expect(html).toContain(ctx.finCompMoney(before.totalCents - theirs.churchCostCents));
+  });
+
+  it('leaves them fully visible and counted on every OTHER view — plan, fairness, health, rates', () => {
+    hide('Knapp');
+    for (const view of ['plan', 'fairness', 'health', 'rates']) {
+      expect(render(ctx, view)).toContain('Knapp');
+    }
+    // Real, un-narrowed totals for whoever manages the roster (admin/compensation).
+    expect(ctx.finCompCountedCount()).toBe(ctx._finSalaryRoster.length);
+  });
+
+  it('restores the real roster after rendering the Council view — no lasting mutation', () => {
+    hide('Knapp');
+    render(ctx, 'council');
+    expect(ctx._finSalaryRoster.some(w => w.name === 'Knapp')).toBe(true);
+    expect(ctx._finSalaryRoster.length).toBe(3);
+  });
+
+  it('is off by default, so nothing changes for an existing roster', () => {
+    expect(ctx._finSalaryRoster.some(w => ctx.finCompIsHiddenFromCouncil(w))).toBe(false);
+  });
+
+  it("shows an admin the toggle and its warning note, and disables it for a non-editor", () => {
+    ctx._userRole = 'admin';
+    let html = render(ctx, 'plan');
+    expect(html).toContain('finCompHideFromCouncilToggle(0');
+    expect(html).not.toMatch(/finCompHideFromCouncilToggle\(0,this\.checked\)"[^>]*disabled/);
+    hide('Rev. Dinger');
+    html = render(ctx, 'plan');
+    expect(html).toContain('Hidden from council');
+    ctx._userRole = 'finance';
+    html = render(ctx, 'plan');
+    expect(html).toMatch(/finCompHideFromCouncilToggle\(0,this\.checked\)"[^>]*disabled/);
   });
 });
 

@@ -1359,6 +1359,165 @@ async function _doInitDb(db) {
     'ALTER TABLE giving_entries ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
     // ChMS giving: per-gift date (more accurate than batch_date for Breeze imports)
     'ALTER TABLE giving_entries ADD COLUMN contribution_date TEXT NOT NULL DEFAULT ""',
+    // Covering indexes for the contribution_date range every finance and giving report filters
+    // on. Without them each of those reports is a full SCAN of every year of giving ever
+    // recorded in order to read one year; with them SQLite answers from the index alone. See
+    // migrations/0042_giving_contribution_date_indexes.sql for the EXPLAIN QUERY PLAN evidence.
+    //
+    // ⚠ These belong HERE and not in DB_INIT: contribution_date is added by the ALTER directly
+    // above, so DB_INIT runs before the column exists and the index creation fails with
+    // "no such column: contribution_date" on a fresh database.
+    'CREATE INDEX IF NOT EXISTS idx_giving_date_fund ON giving_entries(contribution_date, fund_id, amount)',
+    'CREATE INDEX IF NOT EXISTS idx_giving_date_person ON giving_entries(contribution_date, person_id, amount)',
+    // Materialized giving summaries. The numbered migration performs the existing-data backfill
+    // once; never put that scan in this runtime initializer. These objects cover fresh databases.
+    `CREATE TABLE IF NOT EXISTS giving_monthly_fund_totals (
+      month       TEXT    NOT NULL,
+      fund_id     INTEGER NOT NULL,
+      gift_count  INTEGER NOT NULL DEFAULT 0,
+      total_cents INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (month, fund_id)
+    )`,
+    // deploy.yml deploys the Worker but does not run `wrangler d1 migrations apply`. Production
+    // therefore needs this guarded safety net for the first request after rollout. The empty-table
+    // predicate is evaluated once: it permits one historical scan, then every later cold start
+    // reads one summary row and skips giving_entries entirely.
+    `INSERT INTO giving_monthly_fund_totals(month,fund_id,gift_count,total_cents)
+     SELECT substr(contribution_date,1,7),fund_id,COUNT(*),COALESCE(SUM(amount),0)
+       FROM giving_entries
+      WHERE contribution_date!=''
+        AND NOT EXISTS (SELECT 1 FROM giving_monthly_fund_totals LIMIT 1)
+      GROUP BY substr(contribution_date,1,7),fund_id`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_monthly_totals_insert
+     AFTER INSERT ON giving_entries
+     WHEN COALESCE(NULLIF(NEW.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=NEW.batch_id),'')!=''
+     BEGIN
+       INSERT INTO giving_monthly_fund_totals(month,fund_id,gift_count,total_cents)
+       VALUES(substr(COALESCE(NULLIF(NEW.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=NEW.batch_id)),1,7),NEW.fund_id,1,NEW.amount)
+       ON CONFLICT(month,fund_id) DO UPDATE SET gift_count=gift_count+1,total_cents=total_cents+excluded.total_cents;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_monthly_totals_delete
+     AFTER DELETE ON giving_entries
+     WHEN COALESCE(NULLIF(OLD.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=OLD.batch_id),'')!=''
+     BEGIN
+       UPDATE giving_monthly_fund_totals SET gift_count=gift_count-1,total_cents=total_cents-OLD.amount
+        WHERE month=substr(COALESCE(NULLIF(OLD.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=OLD.batch_id)),1,7)
+          AND fund_id=OLD.fund_id;
+       DELETE FROM giving_monthly_fund_totals WHERE gift_count<=0;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_monthly_totals_update
+     AFTER UPDATE OF batch_id,contribution_date,fund_id,amount ON giving_entries
+     BEGIN
+       UPDATE giving_monthly_fund_totals SET gift_count=gift_count-1,total_cents=total_cents-OLD.amount
+        WHERE COALESCE(NULLIF(OLD.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=OLD.batch_id),'')!=''
+          AND month=substr(COALESCE(NULLIF(OLD.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=OLD.batch_id)),1,7)
+          AND fund_id=OLD.fund_id;
+       DELETE FROM giving_monthly_fund_totals WHERE gift_count<=0;
+       INSERT INTO giving_monthly_fund_totals(month,fund_id,gift_count,total_cents)
+       SELECT substr(COALESCE(NULLIF(NEW.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=NEW.batch_id)),1,7),NEW.fund_id,1,NEW.amount
+        WHERE COALESCE(NULLIF(NEW.contribution_date,''),(SELECT batch_date FROM giving_batches WHERE id=NEW.batch_id),'')!=''
+       ON CONFLICT(month,fund_id) DO UPDATE SET gift_count=gift_count+1,total_cents=total_cents+excluded.total_cents;
+     END`,
+    'CREATE INDEX IF NOT EXISTS idx_giving_person_date ON giving_entries(person_id, contribution_date)',
+    `CREATE TABLE IF NOT EXISTS giving_year_stats (
+      year INTEGER PRIMARY KEY,
+      giving_households INTEGER NOT NULL DEFAULT 0,
+      giver_count INTEGER NOT NULL DEFAULT 0,
+      band_high INTEGER NOT NULL DEFAULT 0,
+      band_mid INTEGER NOT NULL DEFAULT 0,
+      band_low INTEGER NOT NULL DEFAULT 0,
+      refreshed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS giving_year_household_totals (
+      year INTEGER NOT NULL,
+      household_key TEXT NOT NULL,
+      total_cents INTEGER NOT NULL DEFAULT 0,
+      giver_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (year,household_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS giving_year_person_totals (
+      year INTEGER NOT NULL,
+      person_id INTEGER NOT NULL,
+      total_cents INTEGER NOT NULL DEFAULT 0,
+      gift_count INTEGER NOT NULL DEFAULT 0,
+      last_gift_date TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (year,person_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS giving_year_person_rollup_ready (
+      year INTEGER PRIMARY KEY,
+      refreshed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS giving_batch_totals (
+      batch_id INTEGER PRIMARY KEY,
+      entry_count INTEGER NOT NULL DEFAULT 0,
+      total_cents INTEGER NOT NULL DEFAULT 0
+    )`,
+    `INSERT INTO giving_batch_totals(batch_id,entry_count,total_cents)
+     SELECT batch_id,COUNT(*),COALESCE(SUM(amount),0) FROM giving_entries
+      WHERE NOT EXISTS (SELECT 1 FROM giving_batch_totals LIMIT 1)
+      GROUP BY batch_id`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_batch_totals_insert
+     AFTER INSERT ON giving_entries BEGIN
+       INSERT INTO giving_batch_totals(batch_id,entry_count,total_cents) VALUES(NEW.batch_id,1,NEW.amount)
+       ON CONFLICT(batch_id) DO UPDATE SET entry_count=entry_count+1,total_cents=total_cents+excluded.total_cents;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_batch_totals_delete
+     AFTER DELETE ON giving_entries BEGIN
+       UPDATE giving_batch_totals SET entry_count=entry_count-1,total_cents=total_cents-OLD.amount WHERE batch_id=OLD.batch_id;
+       DELETE FROM giving_batch_totals WHERE batch_id=OLD.batch_id AND entry_count<=0;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_batch_totals_update
+     AFTER UPDATE OF batch_id,amount ON giving_entries BEGIN
+       UPDATE giving_batch_totals SET entry_count=entry_count-1,total_cents=total_cents-OLD.amount WHERE batch_id=OLD.batch_id;
+       DELETE FROM giving_batch_totals WHERE batch_id=OLD.batch_id AND entry_count<=0;
+       INSERT INTO giving_batch_totals(batch_id,entry_count,total_cents) VALUES(NEW.batch_id,1,NEW.amount)
+       ON CONFLICT(batch_id) DO UPDATE SET entry_count=entry_count+1,total_cents=total_cents+excluded.total_cents;
+     END`,
+    `CREATE TABLE IF NOT EXISTS giving_rollup_dirty (
+      year INTEGER PRIMARY KEY,
+      dirtied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS giving_year_rollup_claims (
+      year INTEGER PRIMARY KEY,
+      token TEXT NOT NULL,
+      claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_year_rollup_claim_begin
+     AFTER INSERT ON giving_year_rollup_claims BEGIN
+       DELETE FROM giving_rollup_dirty WHERE year=NEW.year;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_year_dirty_insert
+     AFTER INSERT ON giving_entries WHEN NEW.contribution_date!=''
+     BEGIN
+       INSERT INTO giving_rollup_dirty(year,dirtied_at)
+       VALUES(CAST(substr(NEW.contribution_date,1,4) AS INTEGER),datetime('now'))
+       ON CONFLICT(year) DO UPDATE SET dirtied_at=excluded.dirtied_at;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_year_dirty_delete
+     AFTER DELETE ON giving_entries WHEN OLD.contribution_date!=''
+     BEGIN
+       INSERT INTO giving_rollup_dirty(year,dirtied_at)
+       VALUES(CAST(substr(OLD.contribution_date,1,4) AS INTEGER),datetime('now'))
+       ON CONFLICT(year) DO UPDATE SET dirtied_at=excluded.dirtied_at;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_year_dirty_update
+     AFTER UPDATE OF contribution_date,person_id,amount ON giving_entries
+     BEGIN
+       INSERT INTO giving_rollup_dirty(year,dirtied_at)
+       SELECT CAST(substr(OLD.contribution_date,1,4) AS INTEGER),datetime('now') WHERE OLD.contribution_date!=''
+       ON CONFLICT(year) DO UPDATE SET dirtied_at=excluded.dirtied_at;
+       INSERT INTO giving_rollup_dirty(year,dirtied_at)
+       SELECT CAST(substr(NEW.contribution_date,1,4) AS INTEGER),datetime('now') WHERE NEW.contribution_date!=''
+       ON CONFLICT(year) DO UPDATE SET dirtied_at=excluded.dirtied_at;
+     END`,
+    `CREATE TRIGGER IF NOT EXISTS trg_giving_year_dirty_person_update
+     AFTER UPDATE OF household_id,member_type ON people
+     BEGIN
+       INSERT INTO giving_rollup_dirty(year,dirtied_at)
+       SELECT DISTINCT CAST(substr(contribution_date,1,4) AS INTEGER),datetime('now')
+         FROM giving_entries WHERE person_id=NEW.id AND contribution_date!=''
+       ON CONFLICT(year) DO UPDATE SET dirtied_at=excluded.dirtied_at;
+     END`,
     // ChMS tags: breeze_id to match Breeze tags on re-sync
     'ALTER TABLE tags ADD COLUMN breeze_id TEXT NOT NULL DEFAULT ""',
     // ChMS households: breeze_id to match Breeze family_id on re-sync
@@ -1437,6 +1596,19 @@ async function _doInitDb(db) {
     )`,
     // Speed up giving sync dedup, orphan cleanup, and reconcile-diagnose lookups.
     'CREATE INDEX IF NOT EXISTS idx_giving_breeze ON giving_entries(breeze_id)',
+    // The sync once performed this lifetime de-duplication on every run. Do it once for existing
+    // data; subsequent imports use an idx_giving_breeze-backed NOT EXISTS insertion guard. The
+    // marker prevents later schema-fingerprint changes from repeating the lifetime scan.
+    `DELETE FROM giving_entries
+      WHERE breeze_id != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM chms_config WHERE key = 'giving_breeze_dedupe_v1'
+        )
+        AND id NOT IN (
+          SELECT MIN(id) FROM giving_entries WHERE breeze_id != '' GROUP BY breeze_id,fund_id
+        )`,
+    `INSERT OR IGNORE INTO chms_config (key, value)
+      VALUES ('giving_breeze_dedupe_v1', datetime('now'))`,
     // AU1: email column on app_users for password reset flow.
     'ALTER TABLE app_users ADD COLUMN email TEXT NOT NULL DEFAULT ""',
     // Ministry Roles: standing volunteer roles per ministry category
@@ -1582,6 +1754,10 @@ async function _doInitDb(db) {
     `CREATE INDEX IF NOT EXISTS idx_church_entries_year       ON finance_church_entries(fiscal_year)`,
     `CREATE INDEX IF NOT EXISTS idx_church_entries_year_class ON finance_church_entries(fiscal_year, classification)`,
     `CREATE INDEX IF NOT EXISTS idx_church_entries_path        ON finance_church_entries(category_path)`,
+    // The Data & Imports legacy fallback asks for MAX(synced_at) within one source. This covering
+    // index changes that from a scan of every imported account/year row into an index lookup.
+    // See migrations/0043_finance_import_status_index.sql for the production measurement.
+    `CREATE INDEX IF NOT EXISTS idx_church_entries_source_synced ON finance_church_entries(source, synced_at)`,
     // Point-in-time Balance Sheet snapshots (see migrations/0019_finance_church_balances.sql).
     `CREATE TABLE IF NOT EXISTS finance_church_balances (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1599,6 +1775,7 @@ async function _doInitDb(db) {
       UNIQUE(fiscal_year, category_path, source)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_church_balances_year ON finance_church_balances(fiscal_year)`,
+    `CREATE INDEX IF NOT EXISTS idx_church_balances_source_synced ON finance_church_balances(source, synced_at)`,
     // SC6 Phase 1: relationalize Scheduler volunteers onto real people rows (see
     // migrations/0020_scheduler_volunteers.sql for the full rationale).
     `CREATE TABLE IF NOT EXISTS scheduler_volunteers (
@@ -1821,6 +1998,11 @@ async function _doInitDb(db) {
        fields_json TEXT    NOT NULL DEFAULT '[]',
        updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
      )`,
+    // (see migrations/0049_scheduler_volunteer_second_email.sql): a second notification
+    // address per Scheduler volunteer -- a parent's email alongside a child volunteer's
+    // own, or vice versa. When set, every email the Scheduler sends this person also
+    // goes here; reminder_email is untouched.
+    "ALTER TABLE scheduler_volunteers ADD COLUMN second_email TEXT NOT NULL DEFAULT ''",
   ];
   // Every statement here is either an idempotent CREATE ... IF NOT EXISTS, or an ALTER TABLE
   // ADD COLUMN — SQLite has no "ADD COLUMN IF NOT EXISTS", so a re-run always throws "duplicate
@@ -1914,4 +2096,3 @@ async function _doInitDb(db) {
      ON CONFLICT(key) DO UPDATE SET value=excluded.value`
   ).bind(fingerprint).run().catch(() => {});
 }
-

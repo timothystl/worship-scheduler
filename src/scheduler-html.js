@@ -569,8 +569,8 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
 .fw-gstat-open { color:var(--danger-btn); }
 .fw-gstat-ok { color:var(--sage); }
 .fw-grid-scroll { background:var(--white); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
-.fw-grid-pane { min-width:940px; padding:14px 16px 18px; }
-.gr-row { display:grid; gap:6px; margin-bottom:6px; align-items:stretch; }
+.fw-grid-pane { min-width:860px; padding:14px 16px 18px; }
+.gr-row { display:grid; gap:10px; margin-bottom:10px; align-items:stretch; }
 .gr-head { padding-bottom:8px; margin-bottom:4px; border-bottom:1px solid var(--border); align-items:end; }
 .gr-corner, .gr-rowlbl, .gr-footlbl { position:sticky; left:0; z-index:2; background:var(--white); }
 .gr-corner, .gr-footlbl { font-size:.68rem; font-weight:700; color:var(--warm-gray); text-transform:uppercase; letter-spacing:.05em; align-self:center; font-family: var(--font-body); }
@@ -582,12 +582,29 @@ thead th.per-header { background: var(--mid-steel); font-size: 0.75rem; text-tra
 .gr-pill-open { background:var(--pale-gold); color:var(--on-pale-gold); border:1px solid var(--honey); }
 .gr-pill-full { background:var(--pale-sage); color:var(--on-pale-sage); border:1px solid var(--soft-sage); }
 .gr-band { font-size:.75rem; font-weight:700; color:var(--warm-gray); text-transform:uppercase; letter-spacing:.05em; margin:16px 0 8px; font-family: var(--font-body); }
-.gr-rowlbl { background:var(--linen); border:1px solid var(--border); border-radius:10px; padding:9px 12px; display:flex; flex-direction:column; justify-content:center; gap:2px; }
+.gr-rowlbl { background:var(--linen); border:1px solid var(--border); border-radius:10px; padding:10px 11px; display:flex; flex-direction:column; justify-content:center; gap:3px; }
 .gr-rowlbl-name { font-size:.88rem; font-weight:700; color:var(--steel-anchor); font-family: var(--font-body); }
 .gr-rowlbl-cov { font-size:.7rem; color:var(--warm-gray); }
 /* Overrides the base .role-row flex bar — same class, so the click delegation,
-   the filled/empty colors and the hover all still come from there. */
-.role-row.gr-cell { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; min-height:58px; padding:8px 10px; margin-bottom:0; min-width:0; }
+   the filled/empty colors and the hover all still come from there. !important on
+   the sizing properties because a .gr-cell button is a CSS Grid item and must
+   stay inside its own column track; .role-row's width:100%/margin-bottom:8px/
+   min-height:56px otherwise still apply here (equal specificity, later in the
+   cascade) and an empty cell's longer "— assign — / OPEN" content is exactly
+   what exposes it — a filled cell's short name never shows the gap. */
+.role-row.gr-cell { display:flex !important; flex-direction:column !important; align-items:flex-start !important; justify-content:center !important; gap:4px; min-height:64px !important; padding:10px 13px !important; margin:0 !important; min-width:0 !important; width:100% !important; max-width:100%; box-sizing:border-box; }
+.role-row.gr-cell.empty { grid-column: auto !important; text-align: left !important; padding: 10px 13px !important; }
+/* ⚠ The real cause of the empty cells spanning the whole grid: ChMS's own
+   global stylesheet (html-head.js) has an UNSCOPED ".empty" rule for its own
+   "no results" empty-states, which sets grid-column:1/-1. That class name
+   collides with our own "role-row gr-cell empty" — CSS class matching has no
+   concept of component boundaries, so the outer app's rule reaches straight
+   into the scheduler's DOM. .role-row.gr-cell never set grid-column at all,
+   so that outer rule was the only declaration for it and won outright — every
+   open slot spanned every column and the grid auto-placed each one onto its
+   own row. Do not remove this even if the outer rule is later renamed; a
+   grid item should never be silently placed by a class it doesn't own. */
+
 .gr-cell-top { display:flex; align-items:center; gap:5px; min-width:0; max-width:100%; }
 .gr-cell .rr-name { font-size:.88rem; }
 .gr-open { font-size:.68rem; font-weight:700; color:var(--danger-btn); text-transform:uppercase; letter-spacing:.04em; font-family: var(--font-body); }
@@ -836,6 +853,7 @@ body.embedded #app-content { display:block!important; }
       <button class="btn btn-outline btn-sm" id="btn-prev-month">&#8592;</button>
       <span class="month-nav-label" id="current-month-label">Loading…</span>
       <button class="btn btn-outline btn-sm" id="btn-next-month">&#8594;</button>
+      <button class="btn btn-outline btn-sm" id="btn-new-month" title="Create empty Sundays for this month with no assignments — fill some in by hand, then Auto-Fill the rest">+ New Month (Blank)</button>
       <button class="btn btn-primary btn-sm" id="btn-generate">Generate Month</button>
       <button class="btn btn-outline btn-sm" id="btn-autofill" title="Auto-fill empty slots based on each volunteer's set availability">&#9889; Auto-Fill</button>
       <button class="btn btn-outline btn-sm" id="btn-add-special">+ Special Service</button>
@@ -922,6 +940,9 @@ body.embedded #app-content { display:block!important; }
 
     <label for="person-email" style="margin-top:12px;">Email Address <span style="font-weight:normal;color:var(--warm-gray);">(for reminder emails)</span></label>
     <input type="email" id="person-email" placeholder="volunteer@example.com" style="max-width:320px;">
+
+    <label for="person-second-email" style="margin-top:12px;">Second Email <span style="font-weight:normal;color:var(--warm-gray);">(optional \\u2014 a parent's email for a child who serves, or a second address of their own. Every reminder goes to both.)</span></label>
+    <input type="email" id="person-second-email" placeholder="parent@example.com" style="max-width:320px;">
 
     <div class="form-row">
       <div>
@@ -1413,6 +1434,29 @@ function avatarHtml(person, size) {
 function getPeople()  { try { return JSON.parse(localStorage.getItem('ws_people')  || '[]'); } catch(e) { return []; } }
 function savePeople(a){ localStorage.setItem('ws_people', JSON.stringify(a)); }
 
+// A volunteer can carry a second notification address (a parent's email for a child
+// who serves, or a second address of their own) alongside their primary email/
+// reminder_email override. Every send site routes through these two helpers so
+// "does this person get emailed" and "who does the email actually go to" can never
+// drift from each other — one place decides both.
+function personEmailRecipients(p) {
+  if (!p) return [];
+  var out = [];
+  [p.email, p.secondEmail].forEach(function(e) {
+    var v = (e || '').trim();
+    if (v && out.indexOf(v) === -1) out.push(v);
+  });
+  return out;
+}
+function personHasEmail(p) { return personEmailRecipients(p).length > 0; }
+// The value to hand the /email/send 'to' field: a plain string for the
+// ordinary one-address case (so every existing send is byte-identical to
+// before this existed), an array only when a second address is actually set.
+function personEmailTo(p) {
+  var list = personEmailRecipients(p);
+  return list.length <= 1 ? (list[0] || '') : list;
+}
+
 // ── SC6: relational scheduler_volunteers bridge ─────────────────────
 // getPeople()/savePeople() stay a plain synchronous localStorage array — every existing
 // call site (schedule generation, Focus Week, stats, reminders, ...) keeps working
@@ -1424,6 +1468,7 @@ function relationalVolunteerToWsPerson(row) {
     personId: row.person_id,
     name: ((row.first_name || '') + ' ' + (row.last_name || '')).trim(),
     email: row.reminder_email || row.email || '',
+    secondEmail: row.second_email || '',
     preferredSundays: row.preferred_sundays || [],
     servicePreference: row.service_preference || 'both',
     roles: row.roles || [],
@@ -2055,6 +2100,7 @@ function clearForm() {
   document.getElementById('person-name').value = '';
   document.getElementById('person-name').removeAttribute('readonly');
   document.getElementById('person-email').value = '';
+  document.getElementById('person-second-email').value = '';
   document.getElementById('pref-sundays').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
   document.getElementById('pref-service').querySelector('input[value="both"]').checked = true;
   document.getElementById('pref-roles').querySelectorAll('input').forEach(function(cb){ cb.checked = false; });
@@ -2081,6 +2127,7 @@ function savePerson() {
   var name = document.getElementById('person-name').value.trim();
   if (!name) { alert('Please enter a name.'); return; }
   var email = document.getElementById('person-email').value.trim();
+  var secondEmail = document.getElementById('person-second-email').value.trim();
 
   var preferredSundays = [];
   document.getElementById('pref-sundays').querySelectorAll('input:checked').forEach(function(cb){
@@ -2129,6 +2176,7 @@ function savePerson() {
     var fields = {
       person_id: effectivePersonId,
       reminder_email: email,
+      second_email: secondEmail,
       roles: roles,
       primary_for: primaryFor,
       preferred_sundays: preferredSundays,
@@ -2145,7 +2193,7 @@ function savePerson() {
       if (d.error) { alert('Error saving: ' + d.error); return; }
       var derivedId = (existing && existing.id) || ('p' + effectivePersonId);
       var entry = {
-        id: derivedId, personId: effectivePersonId, name: name, email: email,
+        id: derivedId, personId: effectivePersonId, name: name, email: email, secondEmail: secondEmail,
         preferredSundays: preferredSundays, servicePreference: servicePreference,
         roles: roles, primaryFor: primaryFor, roleSundayOverrides: roleSundayOverrides,
         breezePersonId: existing ? (existing.breezePersonId || null) : null,
@@ -2166,7 +2214,7 @@ function savePerson() {
   // Unchanged from before SC6: still writes straight to the localStorage/blob array.
   for (var i = 0; i < people.length; i++) {
     if (people[i].id === editId) {
-      people[i] = { id: editId, name: name, email: email, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, primaryFor: primaryFor, roleSundayOverrides: roleSundayOverrides, breezePersonId: people[i].breezePersonId || null, blackoutDates: currentBlackouts.slice(), absenceStart: absenceStart, absenceUntil: absenceUntil };
+      people[i] = { id: editId, name: name, email: email, secondEmail: secondEmail, preferredSundays: preferredSundays, servicePreference: servicePreference, roles: roles, primaryFor: primaryFor, roleSundayOverrides: roleSundayOverrides, breezePersonId: people[i].breezePersonId || null, blackoutDates: currentBlackouts.slice(), absenceStart: absenceStart, absenceUntil: absenceUntil };
       break;
     }
   }
@@ -2269,6 +2317,7 @@ function renderPeopleList() {
     var haystack = [
       p.name,
       p.email || '',
+      p.secondEmail || '',
       p.roles.map(roleLabel).join(' '),
       svcLabels[p.servicePreference] || p.servicePreference
     ].join(' ').toLowerCase();
@@ -2333,6 +2382,7 @@ function renderPeopleList() {
       +'<td><div class="pt-name">'+esc(p.name)+primary+breeze+'</div>'
       +(absenceBadge ? '<div style="margin-top:2px;">'+absenceBadge+'</div>' : '')
       +(p.email ? '<div class="pt-email">'+esc(p.email)+'</div>' : '')
+      +(p.secondEmail ? '<div class="pt-email">+ '+esc(p.secondEmail)+'</div>' : '')
       +'<div class="pt-avail">'+esc(personAvailabilityLine(p))+'</div>'
       +'</td>'
       +'<td><div class="pt-roles">'+roleTags+'</div></td>'
@@ -2593,6 +2643,7 @@ function volunteerApiFields(p) {
   return {
     person_id: p.personId,
     reminder_email: p.email || '',
+    second_email: p.secondEmail || '',
     roles: p.roles || [],
     primary_for: p.primaryFor || [],
     preferred_sundays: p.preferredSundays || [],
@@ -2650,6 +2701,7 @@ function editPerson(id) {
   document.getElementById('person-name').value = person.name;
   document.getElementById('person-name').toggleAttribute('readonly', !!person.personId);
   document.getElementById('person-email').value = person.email || '';
+  document.getElementById('person-second-email').value = person.secondEmail || '';
   document.getElementById('person-search-query').value = '';
   document.getElementById('person-search-results').innerHTML = '';
   // Already linked to a real person — the search box is only for re-linking, so tuck it
@@ -2767,11 +2819,86 @@ function eligibleForRequest(person, svc, dateISO) {
   if (isOnAbsence(person, dateISO)) return false;
   return true;
 }
-function pickBest(pool, counts) {
+// Fisher–Yates shuffle, in place. pickBest()'s Array.sort is stable, so without
+// this every tie (most commonly two-or-more people both sitting at count 0) is
+// resolved the same way every time: whoever appears earliest in the People list
+// wins. That person then accumulates a higher count than everyone else tied
+// behind them, over and over, month after month — the actual mechanism behind
+// "some people aren't falling into rotation as much as others." Shuffling the
+// pool before the count sort makes tie-breaks random instead of roster-order,
+// so which of several equally-served people gets picked varies run to run.
+function shuffleInPlace(arr) {
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  return arr;
+}
+// How restricted is this person's availability for this role — the size of the
+// preferred-Sundays list actually in effect (a role-specific override, else the
+// global preference), or Infinity for "Any Sunday" (unrestricted). Smaller is
+// MORE constrained, and pickBest sorts constrained people first: someone who
+// can only ever serve the 2nd Sunday should win that slot over an "Any Sunday"
+// person who has every other Sunday open to fall back to instead. Without this,
+// pickBest only ever compared load (counts), so a flexible person tied on count
+// won just as often as the one person this Sunday is their only chance for —
+// which read as "preferred Sundays aren't respected" and, since the flexible
+// winner keeps winning ties across the Sundays they ARE free for, also as
+// "the same person keeps getting picked multiple times a month."
+function personConstraintScore(person, role) {
+  var sundays = (role && person.roleSundayOverrides && person.roleSundayOverrides[role] && person.roleSundayOverrides[role].length > 0)
+    ? person.roleSundayOverrides[role]
+    : (person.preferredSundays || []);
+  return sundays.length > 0 ? sundays.length : Infinity;
+}
+function pickBest(pool, counts, role) {
   if (!pool.length) return null;
-  pool.sort(function(a,b){ return (counts[a.id]||0)-(counts[b.id]||0); });
+  shuffleInPlace(pool);
+  pool.sort(function(a,b){
+    var byCount = (counts[a.id]||0)-(counts[b.id]||0);
+    if (byCount !== 0) return byCount;
+    return personConstraintScore(a,role) - personConstraintScore(b,role);
+  });
   return pool[0];
 }
+
+function blankAssignmentsForRow() {
+  var assignments = {};
+  SHARED_ROLES.forEach(function(role) { assignments[role] = { shared: null }; });
+  PER_ROLES.forEach(function(role) { assignments[role] = { '8am': null, '10:45am': null }; });
+  return assignments;
+}
+
+// Creates this month's Sundays with every slot left open — no pickBest calls at
+// all — so a month can be opened, filled in by hand, and only then handed to
+// Auto-Fill for whatever's left. Distinct from "Generate Month", which builds
+// the same Sundays but immediately assigns every slot.
+function newBlankMonth() {
+  showAlert('schedule-alert','','');
+  var sundayDates = getSundaysForMonth(currentMonthKey);
+  if (!sundayDates.length) { showAlert('schedule-alert','No Sundays found for this month.','warning'); return; }
+
+  var existingSpecials = currentSchedule.filter(function(r){ return r.type === 'special'; });
+
+  if (currentSchedule.filter(function(r){return r.type==='sunday';}).length) {
+    if (!confirm('This will replace the current schedule for ' + monthKeyLabel(currentMonthKey) + ' with empty Sundays. Any existing assignments will be archived to History. Continue?')) return;
+    archiveCurrentSchedule();
+  }
+
+  var sundayRows = sundayDates.map(function(s) {
+    return { type:'sunday', date:s.date, ordinal:s.ordinal, label:'', assignments: blankAssignmentsForRow() };
+  });
+
+  currentSchedule = sundayRows.concat(existingSpecials);
+  currentSchedule.sort(function(a,b){ return a.date-b.date; });
+
+  renderTable(getPeople(), null);
+  document.getElementById('schedule-output').style.display = 'block';
+  setDirty(true);
+  showAlert('schedule-alert', monthKeyLabel(currentMonthKey) + '\\u2019s Sundays are ready with every slot open. Fill in what you know by hand, then use Auto-Fill for the rest.', 'success');
+}
+
+document.getElementById('btn-new-month').addEventListener('click', newBlankMonth);
 
 function generateSchedule() {
   showAlert('schedule-alert','','');
@@ -2827,7 +2954,7 @@ function generateSchedule() {
         picked = ((primary.blackoutDates||[]).indexOf(dateISO)!==-1 || isOnAbsence(primary,dateISO)) ? null : primary;
       } else {
         var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO,role); });
-        picked = pickBest(pool, counts);
+        picked = pickBest(pool, counts, role);
       }
       assignments[role] = {shared: picked ? picked.id : null};
       if (picked) {
@@ -2854,7 +2981,7 @@ function generateSchedule() {
           var pool = people.filter(function(p){
             return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO,role) && !usedIds[p.id] && !usedThisService[svc][p.id];
           });
-          picked = pickBest(pool, counts);
+          picked = pickBest(pool, counts, role);
         }
         assignments[role][svc] = picked ? picked.id : null;
         if (picked) { counts[picked.id]++; usedIds[picked.id]=true; usedThisService[svc][picked.id]=true; }
@@ -3558,7 +3685,7 @@ function focusWeekGridHtml(pMap) {
   }
 
   var confs = getConfirmations();
-  var tmpl = 'grid-template-columns:184px repeat(' + cols.length + ', minmax(150px, 1fr));';
+  var tmpl = 'grid-template-columns:126px repeat(' + cols.length + ', minmax(144px, 1fr));';
 
   // Per-column tallies, and the month totals derived from the same walk so the
   // chips can never claim a total the columns beneath them do not add up to.
@@ -5303,7 +5430,7 @@ function sendReminderEmails() {
 
   var total = 0, sent = 0, skipped = 0, errors = 0;
   pids.forEach(function(pid) {
-    if (pMap[pid] && pMap[pid].email) total++;
+    if (pMap[pid] && personHasEmail(pMap[pid])) total++;
     else skipped++;
   });
   if (!total) {
@@ -5315,7 +5442,7 @@ function sendReminderEmails() {
   // Generate / persist RSVP tokens (one per person, stable across re-sends)
   var rsvpTokens = getRsvpTokens();
   pids.forEach(function(pid) {
-    if (pMap[pid] && pMap[pid].email && !rsvpTokens[pid]) {
+    if (pMap[pid] && personHasEmail(pMap[pid]) && !rsvpTokens[pid]) {
       rsvpTokens[pid] = genRsvpToken();
     }
   });
@@ -5325,7 +5452,7 @@ function sendReminderEmails() {
   // never per recipient. esvFetchPassages always resolves, so a missing key or
   // a failed lookup leaves _esvText empty and every reading stays a link.
   var _esvText = {};
-  var _esvTasks = pids.filter(function(pid){ return pMap[pid] && pMap[pid].email; })
+  var _esvTasks = pids.filter(function(pid){ return pMap[pid] && personHasEmail(pMap[pid]); })
                       .map(function(pid){ return { assignments: personAssignments[pid] }; });
   var readingsMode = readingsModeNow();
   var chain = esvWantedNow()
@@ -5334,7 +5461,7 @@ function sendReminderEmails() {
 
   pids.forEach(function(pid) {
     var person = pMap[pid];
-    if (!person || !person.email) return;
+    if (!person || !personHasEmail(person)) return;
     var assignments = personAssignments[pid];
     var token = rsvpTokens[pid] || '';
 
@@ -5408,7 +5535,7 @@ function sendReminderEmails() {
             'Content-Type':  'application/json',
           }, s.workerSecret ? { 'X-Worker-Secret': s.workerSecret } : {}),
           body: JSON.stringify({
-            to:       person.email,
+            to:       personEmailTo(person),
             subject:  'Your Upcoming Worship Service Assignments \\u2014 Timothy Lutheran',
             text:     textBody,
             html:     buildHtmlEmail(person, assignments, s.replyTo || '', token, _rsvpBase,
@@ -5610,7 +5737,7 @@ function renderReminderList(weekFilter) {
     var person = pMap[pid];
     if (!person) return;
     var weekA  = _reminderAssignmentsCache[pid].filter(function(a){ return a.dateISO === weekFilter; });
-    var hasEmail = !!(person.email);
+    var hasEmail = personHasEmail(person);
     var rowBg    = rowIdx % 2 === 0 ? '' : 'background:#fafaf8;';
     var roleText = weekA.map(function(a) {
       return roleLabel(a.role) + ' (' + (a.svc === 'both services' ? 'Both' : a.svc) + ')';
@@ -5766,7 +5893,7 @@ function _sendWeekReminders() {
     var pid  = cb.getAttribute('data-pid');
     var week = cb.getAttribute('data-week');
     var person = pMap[pid];
-    if (!person || !person.email) return;
+    if (!person || !personHasEmail(person)) return;
     var weekA = (_reminderAssignmentsCache[pid] || []).filter(function(a){ return a.dateISO === week; });
     if (!weekA.length) return;
     tasks.push({ person: person, assignments: weekA });
@@ -5854,7 +5981,7 @@ function _sendWeekReminders() {
             'Content-Type': 'application/json',
           }, s.workerSecret ? { 'X-Worker-Secret': s.workerSecret } : {}),
           body: JSON.stringify({
-            to:          person.email,
+            to:          personEmailTo(person),
             subject:     'Worship Service Reminder \\u2014 ' + assignments[0].date + ' \\u2014 Timothy Lutheran',
             text:        textBody,
             html:        buildHtmlEmail(person, assignments, s.replyTo || '', token, _rsvpBase,
@@ -6206,8 +6333,8 @@ function renderNotifySlots(weekFilter) {
   displaySlots.forEach(function(d, rowIdx) {
     var slot = d.slot;
     var cacheIdx = d.idx;
-    var withEmail = slot.pool.filter(function(p) { return p.email; });
-    var withoutEmail = slot.pool.filter(function(p) { return !p.email; });
+    var withEmail = slot.pool.filter(function(p) { return personHasEmail(p); });
+    var withoutEmail = slot.pool.filter(function(p) { return !personHasEmail(p); });
     var eligibleHtml = '';
     if (!slot.pool.length) {
       eligibleHtml = '<span style="color:var(--warm-gray);font-style:italic;">None available</span>';
@@ -6316,7 +6443,7 @@ function sendVolunteerNotifications() {
   var seen = {};
   checkedIdxs.forEach(function(idx) {
     var slot = slots[idx];
-    slot.pool.filter(function(p) { return p.email; }).forEach(function(p) {
+    slot.pool.filter(function(p) { return personHasEmail(p); }).forEach(function(p) {
       var key = p.id + '|' + slot.dateISO + '|' + slot.svc + '|' + slot.role;
       if (!seen[key]) { seen[key] = true; tasks.push({ person: p, slot: slot }); }
     });
@@ -6356,7 +6483,7 @@ function sendVolunteerNotifications() {
           'Content-Type':  'application/json',
         }, s.workerSecret ? { 'X-Worker-Secret': s.workerSecret } : {}),
         body: JSON.stringify({
-          to:       p.email,
+          to:       personEmailTo(p),
           subject:  subject,
           text:     textBody,
           html:     buildVolunteerRequestHtml(p, slot, s.replyTo || ''),
@@ -6501,6 +6628,19 @@ document.getElementById('btn-test-breeze').addEventListener('click', function() 
 // ══════════════════════════════════════════════════════════════════
 // BREEZE API HELPER
 // ══════════════════════════════════════════════════════════════════
+// A 401 from either of these means the ChMS session cookie the scheduler's own backend
+// routes require (SEC11/SEC12 — /api/*, /breeze/* need an admin/staff cookie) has expired or
+// was never sent — not a Breeze problem. Every other part of the app already redirects to the
+// login page on a 401 (see api() in js-core.js); these two raw fetch() calls predate that
+// convention, so a scheduler tab left open past the idle-session window surfaced a bare
+// "Connection failed: HTTP 401" that reads like a Breeze outage instead of what it actually is.
+// frontendAppRootPath() is defined in the app-shell bundle (js-core.js), which is always loaded
+// before this one in production (the scheduler is only ever loaded embedded — the standalone
+// /scheduler route now just redirects into the embedded tab); the plain '/' fallback covers any
+// other context.
+function schedRedirectToLogin() {
+  location.href = (typeof frontendAppRootPath === 'function') ? frontendAppRootPath() : '/';
+}
 function breezeGet(path, params) {
   var s = getBreezeSettings();
   // The API key is the Worker's (env.BREEZE_API_KEY) and is no longer held here at all, so the
@@ -6521,6 +6661,7 @@ function breezeGet(path, params) {
     },
   })
     .then(function(r) {
+      if (r.status === 401) { schedRedirectToLogin(); throw 'Your session has expired. Redirecting to login\\u2026'; }
       if (!r.ok) throw 'HTTP '+r.status+' ('+url+')';
       return r.json();
     });
@@ -6548,6 +6689,7 @@ function breezePost(path, fields) {
     body: body,
   })
     .then(function(r) {
+      if (r.status === 401) { schedRedirectToLogin(); throw 'Your session has expired. Redirecting to login\\u2026'; }
       if (!r.ok) throw 'HTTP '+r.status;
       return r.json();
     });
@@ -7194,8 +7336,14 @@ function autoFillSchedule() {
 
     SHARED_ROLES.forEach(function(role) {
       if (row.assignments[role].shared) return;
-      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO); });
-      var picked = pickBest(pool, counts);
+      // ⚠ Must pass role to eligible() — the 5th arg is what selects a
+      // role-specific preferred-Sunday override over the person's global
+      // preference. Without it, a per-role restriction was silently ignored
+      // during Auto-Fill (generateSchedule's own calls already passed it),
+      // which is exactly how someone ends up on a Sunday they'd restricted
+      // themselves off of for THIS role specifically.
+      var pool = people.filter(function(p){ return p.roles.indexOf(role)>-1 && eligible(p,ordinal,'shared',dateISO,role); });
+      var picked = pickBest(pool, counts, role);
       if (picked) {
         row.assignments[role].shared = picked.id; counts[picked.id]++; filled++;
         usedThisService['8am'][picked.id] = true; usedThisService['10:45am'][picked.id] = true;
@@ -7206,9 +7354,9 @@ function autoFillSchedule() {
       ['8am','10:45am'].forEach(function(svc) {
         if (row.assignments[role][svc]) { usedForRole[row.assignments[role][svc]] = true; return; }
         var pool = people.filter(function(p){
-          return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO) && !usedForRole[p.id] && !usedThisService[svc][p.id];
+          return p.roles.indexOf(role)>-1 && eligible(p,ordinal,svc,dateISO,role) && !usedForRole[p.id] && !usedThisService[svc][p.id];
         });
-        var picked = pickBest(pool, counts);
+        var picked = pickBest(pool, counts, role);
         if (picked) {
           row.assignments[role][svc] = picked.id; counts[picked.id]++; filled++;
           usedForRole[picked.id] = true; usedThisService[svc][picked.id] = true;

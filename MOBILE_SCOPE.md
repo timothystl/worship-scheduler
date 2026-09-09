@@ -1,5 +1,10 @@
 # Mobile Readiness — Scope
 
+> **Task-specific reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 **Status:** scoping only, nothing implemented.
 **Date:** 2026-08-03. **Measured against:** `main` @ `049c0a6` (v1.118.0, post-CR1).
 

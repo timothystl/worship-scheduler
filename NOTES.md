@@ -1,5 +1,10 @@
 # Dev Notes — Volunteer / ChMS App
 
+> **Historical planning/reference — not AI startup instructions.** `AGENTS.md` is the sole current
+> agent instruction file. Do not preload this document; open it only for a task that needs it,
+> and verify dated claims against current code, tests, configuration, and live behavior.
+
+
 This file is checked at the start of every debugging or improvement session.
 Update it as issues are found, fixed, or queued.
 
@@ -23,6 +28,659 @@ Update it as issues are found, fixed, or queued.
 ---
 
 ## Recent Changes
+
+### v1.231.0 — Scheduler volunteers can carry a second email address (2026-09-06)
+
+Asked for directly: a kid who serves may have their own email and a parent's, and the Scheduler
+should be able to notify both. New optional **Second Email** field on every Scheduler volunteer
+(Add/Edit Person panel, right under the existing Email Address field) — additive, not a
+replacement: when set, every email the Scheduler sends that person (assignment emails, weekly
+reminders, open-slot requests) goes to both addresses; when blank, nothing changes from before.
+
+- New `scheduler_volunteers.second_email` column (migration `0049`), threaded through the
+  relational volunteer API (`GET`/`POST`/`PATCH /admin/api/scheduler/volunteers`) alongside the
+  existing `reminder_email`.
+- New shared helpers `personEmailRecipients()`/`personHasEmail()`/`personEmailTo()` in
+  `src/scheduler-html.js` — every send site (`sendReminderEmails`, `_sendWeekReminders`,
+  `sendVolunteerNotifications`) and every "does this person have an email" check (the reminder
+  panel, the open-slot notify panel) routes through these instead of reading `person.email`
+  directly, so a future new send site can't reintroduce a single-address assumption.
+- `personEmailTo()` deliberately returns a **plain string** when only one address is set (byte-
+  identical to every existing send) and an **array** only once a second address exists — Resend's
+  `to` field accepts either, so the backend `/email/send` proxy needed no change at all.
+- `npm test` (2270/2270, 20 new: 6 in `test/scheduler-volunteers.test.js` for the backend field,
+  14 in the new `test/scheduler-second-email.test.js`, which drives the real served script through
+  the same `vm` harness the rest of this test suite uses). **Every new test verified non-vacuous**
+  by reverting the fix and confirming the dependent tests fail (4 for the send-path change, 1 for
+  the backend field). `node --check` on the standalone and embedded served scripts and all four
+  assembled app-JS bundles; div-balance on the assembled shell (1123/1123, unchanged — nothing
+  static was added). `scheduler/index.html` resynced by evaluating the module. **Not verified**: a
+  live browser or a real sent email. (`migrations/0049_scheduler_volunteer_second_email.sql`,
+  `src/db.js`, `src/api-scheduler.js`, `src/scheduler-html.js`, `scheduler/index.html`,
+  `src/frontend/js-core.js`, `test/scheduler-volunteers.test.js`, `test/scheduler-second-email.test.js`)
+
+### v1.229.8 — Finance/Giving routine reads use compact summaries (2026-09-05)
+
+The last routine lifetime gift scans have been removed. Fund statistics, duplicate-fund review,
+Breeze's fund list, and yearly board-packet totals now read trigger-maintained monthly fund totals.
+The Breeze sync fetches only candidate payment IDs and uses an indexed insertion guard instead of
+loading and de-duplicating the complete gift ledger on every import.
+
+- Existing Breeze payment/fund duplicates are cleaned once; a config marker prevents later schema
+  deployments from repeating that historical scan.
+- Balance-sheet import activity now has the same covering source/date index as income statements.
+- Gift-detail screens and arbitrary-range reports still read individual gifts intentionally because
+  those views require transaction, household, payment-method, or partial-month detail.
+- Regression tests pin the compact-read architecture and the import-date query plan.
+
+### v1.226.1 — Budget tab print was completely blank (2026-09-05)
+Reported live: printing the Budget tab produced a fully empty page. Root cause: `#fin-plan-root`
+(which `finRenderPlanning()` rebuilds and which actually holds `#fin-plan-print-card` inside it)
+sits between `#fin-panel-planning` and the print card, but the `body.printing-plan` CSS rule only
+carved the print card out of `#fin-panel-planning`'s DIRECT children — so `#fin-plan-root` itself
+got `display:none!important`'d, taking the print card down with it as a descendant. Fixed by
+naming both nesting levels in the CSS. Full detail, including the non-vacuous test verification,
+is in CLAUDE.md under FIN73. `npm test` (2158/2158, 3 new). **Not verified**: a live browser or a
+real print dialog. (`src/frontend/html-head.js`, `src/frontend/js-core.js`,
+`test/finance-planning-print-empty.test.js`)
+
+### v1.229.7 — Budget annualization uses calendar-day arithmetic (2026-09-05)
+
+Elapsed weeks no longer lose a day after the spring daylight-saving transition. Backend and
+frontend now compare UTC-normalized calendar dates, so Aug. 5 correctly represents 217 elapsed
+days (31 weeks) in every local timezone while preserving the Jan. 1 floor and 52-week cap.
+
+### v1.229.6 — Yearly giving rebuilds have an atomic lease (2026-09-05)
+
+Ten requests arriving together after a deployment each observed the same dirty year and repeated
+its gift-ledger rebuild, producing about 57,000 unnecessary reads. A D1-backed per-year claim now
+allows exactly one Worker isolate to rebuild while concurrent requests use the last complete
+summary or briefly await a first-time materialization.
+
+- Claim acquisition and clearing the pre-existing dirty marker are one atomic SQLite statement.
+- Gifts changed after acquisition create a fresh dirty marker that the active rebuild cannot erase.
+- Failed or abandoned rebuilds are retryable through explicit failure marking and a two-minute
+  stale-claim lease.
+- Ten-request concurrency coverage verifies one ledger scan and an empty claim table afterward.
+
+### v1.229.5 — Deposit coverage is aggregated once per request (2026-09-05)
+
+Production D1 metrics showed the optimized 100-row batch list still billing about 6,300 rows per
+request. Its three correlated deposit-line subqueries each repeated an indexed lookup for every
+batch. The batch list now summarizes the small deposit-line table once and joins that result; the
+Offerings awaiting-deposit calculation uses the same bounded pattern.
+
+- Preserves split deposits, multi-batch deposits, missing deposit records, and unreconciled status.
+- Requires no new stored rollup or synchronization triggers; deposit lines are already the compact
+  summary of individual gifts.
+- Regression coverage pins one deposit-line aggregate per endpoint so correlated scans cannot
+  silently return.
+
+### v1.229.4 — Offerings reads maintained batch totals (2026-09-05)
+
+The Finance batch list and Offerings queue previously recomputed each batch by joining and grouping
+every individual gift. They now read one trigger-maintained total row per batch, keeping routine reads
+proportional to the number of batches rather than the number of gifts.
+
+- Added `giving_batch_totals` with exact entry-count and cent-total maintenance on gift inserts,
+  amount edits, moves between batches, and deletions.
+- Existing gifts are summarized once when the migration initializes; ordinary page loads never
+  repeat that historical scan.
+- Batch detail and household/person views still read individual gifts where their detail is needed.
+- Added a 20,000-gift regression guard plus mutation tests for edits, moves, and deletions.
+
+### v1.229.3 — Giving Insights reads yearly person summaries (2026-09-05)
+
+The remaining measured Finance hotspot (`COUNT(*)`, `COUNT(DISTINCT person_id)`, and `SUM(amount)`
+over individual gifts) read roughly 271,000 rows across eight executions in one ordinary session.
+Giving Insights, inflation-adjusted multi-year giving, and the month-by-month Giving Trend tile now
+read materialized monthly/yearly summaries instead.
+
+- Added one yearly row per giver containing their total, gift count, and last gift date. Top givers,
+  lapsed givers, frequency buckets, and giver counts now use this compact read model.
+- A dirty year scans its gifts once to rebuild person summaries; household summaries are then
+  derived from those person rows instead of independently scanning the gift ledger. Normal reads
+  perform zero `giving_entries` queries.
+- A separate readiness marker distinguishes a genuinely empty year from a year that has not been
+  materialized, preventing empty historical years from being rescanned on every request.
+- Annual gift counts and dollar totals continue to come from the trigger-maintained monthly table,
+  preserving anonymous gifts; distinct-giver counts preserve the prior non-null-person semantics.
+- Regression coverage includes named/lapsed/frequency correctness, organizations, anonymous gifts,
+  empty years, and a 20,000-gift ledger. Focused tests: 60/60. Full suite: 2,218 passed with the same
+  unrelated existing Aug. 5 elapsed-week assertion failing.
+
+Backend/schema only; `DEPLOY_VERSION` is deliberately unchanged.
+(`migrations/0045_giving_year_person_totals.sql`, `src/giving-rollups.js`, `src/api-reports.js`,
+`src/db.js`, `test/giving-insights-rollups.test.js`)
+
+### v1.229.0 — Balance Sheet: assets split into Current/Fixed/Other, and an asset growth table (2026-09-05)
+
+**Asked for as a push-back on the Cash & Bank Accounts trend, and it was right**: "is this going to
+check total assets over time? not just checking account. wouldn't the thing be to see how much total
+assets grow, checking accounts on December each year isn't the only tracker." The chart drew one
+flat Assets bar per year, and total assets are the wrong number to read growth off for this church.
+
+- **Why the total hides it, measured against production D1, not assumed**: fixed assets are the
+  building at book value and have not moved since 2021 ($500,315 every year, $590,315 before that).
+  Current assets fell $942,696 → $646,204 across the same eight years — a **31% drawdown** — while
+  total assets fell only 25%, because a third of the total is a constant. On a bar chart at that
+  scale the slope reads as gentle.
+- **The Assets column is now stacked into its balance-sheet groups.** New `assetGroupOf()` and three
+  new fields on `computeBalanceSummary()` (`currentAssetsCents`, `fixedAssetsCents`,
+  `otherAssetsCents`), matched on the **group heading directly under "Assets"** — the line a human
+  reads on the report — not on account names, so a bank account nested under Current Assets lands
+  where it belongs regardless of what it is called.
+- **⚠ "Other" is DERIVED BY SUBTRACTION (total − current − fixed), never matched by a third
+  pattern.** That is what makes the three segments add back to the Assets total by construction, so
+  a stacked bar can never come up short of the figure printed beside it. This church really does
+  have a third group (Assets:Other Assets — an Employee Retention Credit, 2020-2022) and a future
+  export could invent a fourth. Hiding a dollar a total on the same screen still counts is the
+  FIN58b defect. Verified against all eight years of real production data: the three segments
+  reconcile to the Assets total exactly, every year.
+- **`renderGroupedBarChart()` gained stacking** — the shared helper in `js-attendance.js` that
+  Attendance, Church Report and Daycare also use. A series may carry a `stack` key; series sharing
+  one are drawn as a single column, and the axis is scaled against **column totals** rather than
+  the tallest single segment, or a stack would run off the top. **Every existing caller passes no
+  stack key and is untouched** — proven by rendering old and new side by side across four cases and
+  diffing: byte-identical.
+- **New "Asset Growth by Year" table**, alongside the existing Net Worth Growth one and
+  deliberately not folded into it: equity nets out debt, so a year that paid down a mortgage out of
+  savings reads as growth in the net-worth table while the church holds less. Total assets AND
+  current assets, each with a signed $ and %. The two tables now share one `finGrowthCellsHtml()` —
+  the refactor was verified byte-identical on the net-worth table's own output first, so the shared
+  cell is provably the cell that was already shipping.
+- **The CSV export carries the same split**, so a spreadsheet follow-up can never disagree with the
+  screen.
+- `npm test` (2210/2210, 18 new). **Verified non-vacuous** by stashing all three source files and
+  confirming 16 of the 18 fail against the pre-change code; the two that pass either way are
+  deliberate regression guards that the unstacked path is unchanged — **one of those was written as
+  a real assertion and was rewritten** after it turned out to pass against the pre-stacking
+  renderer, and now fails correctly. One pre-existing CSV test needed its expected column list
+  widened (the export really did gain three columns). **A backtick in one of my own new comments
+  closed the outer `String.raw` literal** — the SC3-BUG1/FIN15 class again, caught by running the
+  assembled bundle, not by reading. `node --check` on `api-finance.js` and all four assembled
+  bundles; div balance on `CHMS_HTML` (1123/1123); CSS braces (1373/1373); spelling clean.
+  DEPLOY_VERSION 1.229.0. **Not verified**: a live browser.
+  (`src/api-finance.js`, `src/frontend/js-finance.js`, `src/frontend/js-attendance.js`,
+  `src/frontend/js-core.js`, `test/finance-balance-pnl-recon.test.js`,
+  `test/finance-balance-recon-ui.test.js`)
+### v1.229.1 — Giving aggregate reads use materialized month and household totals (2026-09-05)
+
+The common Dashboard, Giving overview, and Finance “This Year” paths no longer repeatedly sum
+roughly 20,000 individual gifts. Migration 0044 backfills and maintains one row per fund/month,
+plus one total per household/year and one final annual-stat row. Normal Finance reads now touch
+only the compact summaries (typically around 100 month/fund rows and one annual row).
+
+- Gift insert/update/delete triggers keep month/fund totals exact and mark only affected years
+  dirty. Moving a person between households or changing organization status also dirties the
+  relevant years.
+- The first read after a relevant write performs one indexed yearly household aggregation;
+  subsequent reads perform zero `giving_entries` scans until another change.
+- Individual gifts remain the source only for transaction detail, recent-week totals, exact
+  partial-month comparisons, and reports explicitly analyzing individual giving behavior.
+- Added migration, mutation, household-reclassification, and scan-count regression coverage.
+- Because the deployment workflow does not invoke D1 migrations, runtime initialization includes
+  an empty-table-guarded monthly backfill: one historical scan on rollout, then a one-row sentinel
+  check on subsequent Worker cold starts.
+- Backend/schema only; `DEPLOY_VERSION` is deliberately unchanged.
+
+### v1.228.2 — Finance import-status lookup no longer scans imported account rows (2026-09-05)
+
+After PERF8 deployed, a measured 30-minute Finance session showed the old lifetime fund scan was
+gone. The remaining top read was the Data & Imports legacy fallback query:
+`MAX(synced_at)` for `source='import_activity'`. Four calls read 47,520 rows (11,880 per call),
+over half the window's read cost, to return one timestamp.
+
+- Added covering index `finance_church_entries(source, synced_at)` in migration 0043 and the
+  runtime schema initializer, so existing production databases and fresh databases both get it.
+- Added an `EXPLAIN QUERY PLAN` regression test requiring SQLite to answer the exact production
+  query with that covering index.
+- Backend/schema only; no frontend files changed, so `DEPLOY_VERSION` is deliberately unchanged.
+
+**Not yet verified:** production D1 metrics after deployment.
+
+### v1.228.1 — Ordinary fund reads no longer scan all giving history (2026-09-05)
+
+Cloudflare D1 metrics after a short Finance session showed 436,000 rows read; one
+`SELECT fund_id, COUNT(*), SUM(amount) FROM giving_entries GROUP BY fund_id` request accounted
+for 406,440 of them. The shared `GET /admin/api/funds` endpoint ran that lifetime-history
+aggregation for every caller even though ordinary fund pickers use only the fund rows.
+
+- The endpoint now performs the history aggregation only when `include_stats=1` is explicit and
+  the caller is an administrator; lower-trust fund-picker users cannot manufacture the scan.
+- Settings → Import/Export → Manage Funds, the one ordinary caller that displays gift count and
+  lifetime total, now opts in. People, Giving, Finance, and fund-category pickers use the cheap
+  default response and never touch `giving_entries` merely to populate a fund list.
+- Added `test/funds-stats-opt-in.test.js`, guarding the cheap default, the administrator-only
+  opt-in, and the Manage Funds caller.
+- Focused change and access tests: 20/20 passing. Full local suite: 2,128 passed, 5 skipped, with
+  one unrelated timezone-sensitive failure in `finance-budget-plan.test.js` (`Aug 5` expects
+  exactly 31 weeks; local Central-time execution returns 30.857142857). GitHub's release suite
+  passed before each automated merge.
+- DEPLOY_VERSION advanced from the concurrent `1.228.0` release to 1.228.1.
+
+### v1.228.0 — Balance Sheet trend defaults to every year with data, not a rolling window (2026-09-05)
+
+Reported from the Balance Sheet tab's Multi-Year Trend: 2022-2025 drew as flat lines with only
+2026 carrying bars. Checked production D1 before changing anything —
+`finance_church_balances` holds exactly one year (2026, 52 rows, imported 2026-09-04), while
+`finance_church_entries` holds 2019-2026. So the multi-year upload the user remembered doing was
+the **Statement of Activity** (income statement), not the **Statement of Financial Position**
+(balance sheet); the latter only ever got a single-year file into production. The flat lines were
+real missing data, not a rendering bug.
+
+The range default was a second, independent problem sitting underneath it, and it would have
+hidden the history even once uploaded. `GET finance/church/balances/multi-year` defaulted to
+`[currentYear-4 … currentYear]` when no `?years=` was given — which is every entry point to this
+tab, since `finLoadBalanceSheetTab()` sends no range on first load. A 2019 balance sheet would
+have imported cleanly and still been invisible until someone widened the From/To picker by hand.
+The chart's own header comment already claimed it drew "every year with an imported balance
+sheet"; the default just never delivered that.
+
+- **The default is now the distinct years actually present** (`SELECT DISTINCT fiscal_year …`),
+  falling back to the rolling window only when the table is empty, so the range picker rendered
+  above the empty state still shows a sensible From/To rather than a blank or NaN pair.
+- **Deliberately the years PRESENT, not the contiguous span between earliest and latest.** A year
+  with no rows still gets a fully zeroed summary from `computeBalanceSummary()`, which the chart
+  draws as a real $0 Assets/Liabilities/Equity bar — reading as "the church had nothing" rather
+  than "nothing was uploaded here". That is exactly the confusion in the original report.
+- **The tie-out loses nothing by their absence**: `computeBalanceVsPnlReconciliation` already
+  skips a year with no rows outright (its own `if (!hasBalance(year)) continue`), so a gap year
+  never produced a row either way. Verified by reading, then pinned by test.
+- **An explicit `?years=` range is still honored verbatim, gaps included** — that is how you go
+  looking for which year is still missing.
+- **Both balance-sheet import handlers now clear `_finBalanceYears`.** A range pinned by hand
+  (Load Range) persists for the session and is sent as `?years=`, overriding the new default — so
+  without this, the year just uploaded would stay off the chart until a full page reload. Same
+  staleness class as FIN59-BUG2's import-status cache; the two handlers already cleared
+  `_finBalanceData`/`_finBalanceMultiYearData` but not the pinned range.
+
+`npm test` (2178/2178, 9 new — 6 backend against real in-memory SQLite via the existing
+`makeTestDb` harness, 3 structural against the real built `CHMS_APP_FINANCE_JS`). **Verified
+non-vacuous** by reverting each source file in turn: 4 of the 6 backend tests and both wiring
+tests fail against the pre-change code. The remaining 3 are deliberate regression guards on paths
+this change preserves (the empty-table fallback, an explicit range, and that Load Range still pins
+a range at all — without which the two invalidation assertions would guard nothing). One of my own
+tests initially passed either way because its fixture years happened to fall inside the old rolling
+window; rewritten around 2019/2020 so it actually exercises the new default. `node --check` on
+`api-finance.js` and all five assembled bundles; div balance on the assembled `CHMS_HTML`
+(1123/1123); spelling clean. DEPLOY_VERSION bumped to 1.228.0.
+
+**Not verified**: a live browser. **Not changed, flagged instead**: `GET
+finance/church/multi-year` — the *income statement* Multi-Year view — carries the identical
+rolling-five-year default, and that table genuinely has 2019-2021 data behind it today. Same
+one-line shape of fix, but it changes what the Church Report shows by default on a different
+screen, so it is the user's call rather than a silent widening.
+
+### v1.227.0 — Finance tab query amplification: 12 giving scans per click down to 2 per year (2026-09-05)
+
+Reported after a Cloudflare investigation: `tlc-volunteer-db` passed the D1 free-tier row-read
+ceiling on 2026-09-04 and unrelated church APIs started returning errors. The trailing-window
+top-four queries were all one year of `giving_entries`, roughly 6.2M row reads between them:
+household giving bands (106 executions / 2.15M rows), fund totals (75 / 1.53M), monthly giving by
+fund (74 / 1.39M), distinct giving households (60 / 1.12M). Verified against this repo before
+changing anything — every one of those four is a query in `finance/church/this-year`, and the
+execution counts are the product of three multipliers stacked on each other:
+
+1. **Every section click reloaded every section.** Switching Finance sub-nav goes through
+   `showTab('finance', …)`, which called `loadFinance()`, which called all seven section loaders
+   unconditionally — Balance Sheet, Daycare, Property, Budget and the rest, whether or not the
+   reader could see them.
+2. **Three of those loaders each fetched `finance/church/this-year` independently** — Financial
+   Health, Church Report and Budget — so one click was three requests for the same year.
+3. **That one payload scanned `giving_entries` four times**, and `giving_entries` had no index on
+   `contribution_date` at all (only `batch_id`, `person_id`, `breeze_id`, `deposit_id`), so each
+   scan read every year of giving ever recorded in order to report one.
+
+3 × 4 = twelve full-table giving aggregations per sub-nav click. All three multipliers are fixed:
+
+- **Only the visible section loads** (`finEnsureSection` / `FIN_SECTION_LOADERS`,
+  `src/frontend/js-finance.js`). `loadFinance()` now does one cheap bootstrap (status, QuickBooks
+  snapshot, daycare entries — none touch giving) and hands off to the active section; re-entering
+  the tab reuses it. Budget, Compensation and Chart of Accounts share one entry because they share
+  one fetch. **Three real cross-screen data dependencies had to be untangled first**, or lazy
+  loading would have silently emptied screens that used to be filled as a side effect of a tab the
+  reader never opened: Financial Health reads the Ivanhoe property payload (entity/lever/decision
+  cards) and the daycare year aggregate, and Budget's Ivanhoe forecast card reads the same property
+  payload. Property is now a shared promise-cached prerequisite (`finEnsurePropertyData`), and the
+  daycare aggregate is a computation (`finEnsureDaycareAgg`) rather than a side effect of the
+  Daycare panel having rendered.
+- **One request per year across screens** (`finFetchChurchYear`). Deliberately a per-year memo and
+  not a session cache with a TTL — `finRenderChurchReport()`, which is the after-an-import refresh
+  path, clears it and marks Health and Budget for reload, so no screen shows a figure a completed
+  import has already superseded.
+- **Two giving scans per request, not four** (`buildChurchThisYear`, `src/api-finance.js`). The
+  per-fund annual totals are summed in JS from the month-by-fund rows already read (skipping a
+  `fund_id` with no row in `funds`, which preserves the INNER JOIN the separate query did), and the
+  giving-household count is the row count of the same per-household aggregate the donor bands are
+  bucketed from.
+- **Concurrent identical requests share one computation** (`coalesceChurchYear`). The map holds
+  only genuinely in-flight promises — each entry is deleted the moment its computation settles —
+  so this is request coalescing, never a cache: a read starting after a write has finished always
+  recomputes. A test pins that distinction.
+- **Two covering indexes on `contribution_date`** (migration `0042`, plus the runtime migrations
+  array in `src/db.js`). ⚠ These belong in that array and **not** in `DB_INIT`: `contribution_date`
+  is itself added by an `ALTER` in the migrations array, so `DB_INIT` runs before the column exists
+  and index creation fails with "no such column: contribution_date" on a fresh database. Caught by
+  `test/migration-error-visibility.test.js`, not by reading.
+
+**Measured, not assumed.** `EXPLAIN QUERY PLAN` against a realistic 8-year, ~42k-row fixture, on
+the exact SQL as shipped: both remaining queries went from `SCAN ge` to
+`SEARCH ge USING COVERING INDEX` — the index range, not the table, and no table lookup at all. On
+that shape one year is an eighth of the table, so per report that is roughly an 8× cut on top of
+the 4→2 scan reduction and the 3→1 request reduction.
+
+`npm test` (2169/2169, 14 new in `test/finance-query-amplification.test.js` — the real route
+against real in-memory SQLite with a query-counting DB stub, and the real assembled bundles run in
+a `vm` with `fetch` stubbed, since `api()` is defined inside `js-core.js` and cannot be stubbed
+from the sandbox). **Every new test verified non-vacuous** by injecting the exact regression it
+guards — 6 injections, 6 correct failure sets. Two of my own assertions were wrong and were
+corrected rather than forced: the expected per-fund ordering, and an assertion that reopening
+Financial Health after an import must issue a new request (it must not — the import's own refresh
+already fetched that year, and Health correctly rebuilds from it). `node --check` on all touched
+files and all three assembled bundles; div balance on `CHMS_HTML` (1123/1123) and brace balance on
+the CSS bundle (1373/1373); spelling check clean. DEPLOY_VERSION bumped to 1.227.0.
+**Not verified**: a live browser, or the live D1 row-read counters after deploy — the acceptance
+check is Cloudflare's own trailing-window numbers for `tlc-volunteer-db` once this ships.
+(`src/api-finance.js`, `src/db.js`, `src/frontend/js-finance.js`, `src/frontend/js-core.js`,
+`migrations/0042_giving_contribution_date_indexes.sql`, `test/finance-query-amplification.test.js`)
+
+### v1.226.0 — Purpose tags: a second, optional lens over Compensation workers and accounts (2026-09-05)
+
+Asked as an exploratory question, not a build request: "What about having tagging budget lines in
+a secondary way? So that we could also view it based on youth, mission, internal. So I could tag
+the DCE for youth and music director for music and it would show how much resources are going each
+way not just categories." Scoped it first (a recommendation + the main tradeoff, per this session's
+own convention), confirmed with the user: single-tag-only for now, split by percentage deferred.
+
+- **Two tag surfaces, because "the DCE"/"the music director" names a person, not a GL line.**
+  Compensation Planner roster workers get a `purposeTag` field stored directly on the roster row
+  (saved through the existing salary-planner endpoint — no new backend plumbing for that half);
+  Chart of Accounts leaf accounts get an entry in a new `categories` map. Deliberately NOT a
+  server-side map keyed by a worker's `accountCode` — a worker can have no budget line entered at
+  all, and keying by account code either leaves them untaggable or tags every blank-code worker
+  identically.
+- **New `finance_planning_purpose_tags` chms_config store** (`GET`/`PUT
+  /admin/api/finance/planning/purpose-tags`) holding the shared, admin-managed tag list (add/
+  rename/delete, ids minted from the label) plus the Chart of Accounts assignments — independent
+  of `finance_planning_board_categories`, whose category set is a fixed 7-key allowlist rather than
+  an open-ended managed list.
+- **Deleting a tag cleans up both stores**: the backend drops any stale `categories` entry, and the
+  frontend separately clears the field off any roster worker still carrying it, then schedules the
+  existing roster autosave.
+- **New UI**: a "Purpose Tags" card + a per-leaf picker on Chart of Accounts (shown only once a
+  tag exists), a matching picker on the Compensation drawer, and a "Resources by Purpose" report
+  card summing each tag's tagged workers' full church cost plus tagged accounts' actual dollars —
+  with a double-count guard so tagging both a worker and the exact GL line their salary posts to
+  never counts the same dollars twice.
+- `npm test` (2155/2155, 28 new); every new test verified non-vacuous (27 of 28 fail against the
+  pre-change code). A backtick in a new comment closed the outer `String.raw` literal — caught by
+  the test suite's parse failure. `node --check` on all five bundles; div-balance unchanged
+  (1123/1123 — no new static markup). DEPLOY_VERSION → 1.226.0. **Not verified**: a live browser.
+  (`src/api-finance.js`, `src/frontend/js-finance.js`, `src/frontend/js-core.js`,
+  `test/finance-planning-purpose-tags.test.js`)
+
+### v1.225.0 — Balance Sheet & Financial Position is its own tab (2026-09-04)
+
+Two asks in one message: "give me a tab for Balance Sheet & Financial Position... graphs of
+data... show the change over the years of growth or loss of money, like compared to our bank
+accounts over the years," followed shortly by "i need a report that can compare last years to
+this year." Balance Sheet already existed — as a third mode inside Church Report's This
+year/Multi-year toggle, with a multi-year Assets/Liabilities/Equity chart and a tie-out against
+the income statement (FIN60) — but had no dedicated tab, no cash-specific trend, no CSV export,
+and no account-level year-over-year comparison.
+
+- **Moved out of Church Report into its own top-level Finance sub-nav tab** (`FIN_TOPNAV_ITEMS`,
+  right after Church Report). Church Report's mode pills drop from three to two (This year /
+  Multi-year); the balance-sheet DOM mount, state, and functions relocate from
+  `#fin-church-balances-view` (nested inside Church Report's panel) to a single `#fin-balance-root`
+  mount in its own `#fin-panel-balance` panel, matching the Property/Planning tabs' one-root-mount
+  pattern. Every reading-side identifier renamed accordingly (`finLoadChurchBalances` →
+  `finLoadBalanceSheetTab`, `finRenderChurchBalances` → `finRenderBalanceSheetTab`, etc.) — the
+  Data & Imports upload-flow state (`_finChurchBalanceImportPreview`, etc.) is untouched and stays
+  on Data & Imports, per FIN57's own reasoning that a file-upload control has no business on a
+  reading page.
+- **"Cash & Bank Accounts Over Time" trend chart** (new). Two series: the one pinned operating
+  checking account (Data & Imports → Classification & policy → Operating cash account code — the
+  same figure the Financial Health runway card reads, via the shared
+  `operatingCashFromBalanceSheet()`, so the two can never quote different numbers for the same
+  year) and a broader "All Cash & Bank Accounts" figure sweeping in every other
+  checking/savings/money-market/petty-cash-named account, since a church with more than one bank
+  account (a daycare's own checking, say) would otherwise have that second account invisible.
+  Backend: new `computeYearCashSummary()` in `api-finance.js`, wired into the existing
+  `GET /admin/api/finance/church/balances/multi-year` response as `cashByYear`/`cashAccountCode` —
+  no new route.
+- **"Net Worth Growth by Year" table** (new) — a plain signed $ and % change table between every
+  consecutive pair of years already in the multi-year Equity series, so "did we grow or lose
+  ground" reads as a number with a sign on it, not just a bar chart to eyeball.
+- **"This Year vs. Last Year" account-by-account comparison** (new) — directly answers "i need a
+  report that can compare last years to this year." Every account on the current year's balance
+  sheet, walked against the same account's prior-year total (`finBalanceTotalsByPath()`), with $
+  and % change per line; an account with nothing on the books last year reads "new this year"
+  rather than a misleading $0.00 prior figure. Needed a third fetch (`finLoadBalanceSheetTab` now
+  also requests `year - 1`'s single-year snapshot) alongside the existing current-year and
+  multi-year-trend calls.
+- **CSV export** (new) — `finExportBalanceCsv()`, the full loaded multi-year Assets/Liabilities/
+  Equity/Cash series, not just the on-screen snapshot year.
+- `npm test` (2127/2127, 30 new/updated across `test/finance-balance-pnl-recon.test.js` — the real
+  backend route against real in-memory SQLite, including a new `computeYearCashSummary` unit-test
+  block — and `test/finance-balance-recon-ui.test.js` — the real render functions driven out of
+  the real assembled bundles via the established vm-behind-a-stub-DOM technique). **Every new/
+  dependent test verified non-vacuous** by stashing all four touched source files and confirming
+  28 of 40 tests in the two files fail against the pre-change code (the other 12 correctly still
+  pass, since they don't depend on this change). One pre-existing test file
+  (`finance-balance-pnl-recon.test.js`) needed a `chms_config` table added to its minimal
+  in-memory schema, since the multi-year route now also calls `readCashPolicy()`. `node --check`
+  on `api-finance.js` and all three assembled bundles; div-balance on the assembled `CHMS_HTML`
+  (1123/1123). DEPLOY_VERSION bumped to 1.225.0. **Not verified**: a live browser.
+  (`src/api-finance.js`, `src/frontend/js-finance.js`, `src/frontend/js-core.js`,
+  `src/frontend/html-tabs.js`, `test/finance-balance-pnl-recon.test.js`,
+  `test/finance-balance-recon-ui.test.js`)
+
+### v1.224.0 — Budget tab: Worship & Music and District & Synod Support are now their own board categories (2026-09-04)
+
+Reported live: "we lost the categories of 'Worship & Music' and 'District & Synod Support'." Real,
+predictable consequence of v1.222.0's Board view becoming the Budget tab's default — before that,
+the tab only ever showed the raw QuickBooks-order tree, which preserves whatever group headings
+the real chart of accounts carries; Board view's fixed 5-category system (MDO / Salaries &
+Benefits / Property & Operations / Lutheran Education / Programs) has no room for a category that
+isn't one of those five, so any expense account matching neither MDO nor Salaries nor Property nor
+Education fell into one undifferentiated "Programs" bucket — the dollar figure was still there,
+just with no heading of its own calling it out. Asked the user how they wanted it resolved
+(`AskUserQuestion`, since this is a real board-taxonomy decision, not a display nicety) rather than
+guess between "add sub-headings within Programs" and "give them their own top-level category" —
+**user chose the latter.**
+
+- **Two new board expense categories**, worship (`Worship & Music`) and district_synod
+  (`District & Synod Support`), inserted into `FIN_BOARD_EXP_ORDER`
+  (`mdo, salaries, worship, property, education, district_synod, programs`) alongside new default
+  regexes in `FIN_BOARD_EXP_RULES` (`worship|music|choir|organist|liturg|hymn` and
+  `district|synod`, both tested before the now-narrower `programs` catch-all, which no longer
+  matches `worship|music` itself). Chart of Accounts and the Budget tab's Board view both read
+  `FIN_BOARD_EXP_ORDER` generically, so no other frontend rendering code needed to change — the
+  two new categories just appear as two more cards/headings, same as the existing five.
+- **⚠ The backend validation for this store used to reuse `FLOW_EXPENSE_KEYS`** — the money-flow
+  Sankey diagram's OWN, separate 5-category allowlist (Financial Health page, FIN58) — purely
+  because the two systems happened to share the same 5 keys since FIN70 shipped. Growing Board's
+  categories to 7 while still validating against `FLOW_EXPENSE_KEYS` would have either rejected
+  every attempt to assign an account to `worship`/`district_synod` (400 Invalid expense category),
+  or, if `FLOW_EXPENSE_KEYS` had been extended instead, silently grown the Sankey diagram from 5
+  categories to 7 too — a heavily-tested, board-facing chart nobody asked to change, with no live
+  browser here to re-verify a shape change against. Fixed by giving the Board Category system its
+  own independent allowlist, `BOARD_EXPENSE_CATEGORIES`/`BOARD_EXPENSE_KEYS` (`src/api-finance.js`)
+  — `FLOW_EXPENSE_CATEGORIES`/`FLOW_EXPENSE_KEYS`/`classifyFlowExpense()` (the Sankey's own system)
+  are completely untouched, confirmed by grep still gating only its own routes.
+  `BOARD_EXPENSE_KEYS`/`FIN_BOARD_EXP_ORDER` are two independent lists (backend/frontend) kept in
+  sync by hand, same as `FIN_BOARD_REV_ORDER`/`REVENUE_STREAMS` already were.
+- Fixed one piece of now-inaccurate copy on the Chart of Accounts page — its Expenses card
+  subtitle used to say "the same ones the money-flow chart is drawn from," which stops being true
+  the moment the two systems' category counts diverge.
+- `npm test` (2104/2104, 4 new: a board-only-categories acceptance test in
+  `test/finance-planning-board-categories.test.js`, and a dedicated `finBuildBoardTree` test in
+  `test/finance-planning-chart-of-accounts.test.js` confirming both new categories render as their
+  own top-level heading and Programs no longer catches either). **Every new test verified
+  non-vacuous** by stashing the two source files and confirming all 3 dependent tests fail against
+  the pre-change code, then restoring. `node --check` on `api-finance.js` and all three assembled
+  bundles (`app-core.js`/`app-ext.js`/`app-finance.js`). DEPLOY_VERSION bumped to 1.224.0.
+  **Not verified**: a live browser. (`src/api-finance.js`, `src/frontend/js-finance.js`,
+  `test/finance-planning-board-categories.test.js`, `test/finance-planning-chart-of-accounts.test.js`)
+
+### v1.220.0 — Chart of Accounts page; Board view / QuickBooks order toggle on Planning (2026-09-04)
+
+Built from a Claude Design canvas handoff (`design_handoff_budget_planning_categorization`,
+mockups for `Chart of Accounts.dc.html` and `Budget Planning.dc.html`, recreated from this repo's
+own shipped source) — the ask was to add per-account category assignment and a new Chart of
+Accounts page to the Planning tab. A new independent classification system, deliberately NOT the
+existing group-label-only `finance_revenue_streams`/`finance_flow_expense_map` stores that
+Financial Health's revenue mix bar and the money-flow Sankey diagram already read (those are
+heavily tested and board-facing with no live browser to re-verify a shared-store regression
+against) — new `finance_planning_board_categories` chms_config blob, keyed by each real leaf
+account's own `category_path` rather than a QuickBooks GROUP label, so two funds sharing a group
+can land in different board categories.
+
+- **New `GET`/`PUT /admin/api/finance/planning/board-categories`** (`src/api-finance.js`). GET
+  returns `{revenue, expense, revenueLabels, expenseLabels}` (all four default to `{}` on a fresh
+  install, so every reader tolerates an unset map as "everything is on its regex default"). PUT
+  (admin-only, read is open to any finance-gated caller) MERGES whatever's sent into what's already
+  saved, so a per-leaf pick made from Planning's own inline picker and a bulk "Move to" made from
+  Chart of Accounts land in the same store without one clobbering the other's unrelated entries.
+  Every revenue value is checked against `REVENUE_STREAMS`, every expense value against
+  `FLOW_EXPENSE_KEYS` — an unrecognized key 400s rather than silently storing garbage a renderer
+  would then guess at. An empty-string value clears that one entry back to the computed default,
+  and a blank rename clears a custom category label the same way.
+- **New Chart of Accounts page** (`src/frontend/js-finance.js` `finRenderChartOfAccounts()`, new
+  sub-nav item between Planning and Compensation, mounted at `#fin-panel-accounts`/`#fin-coa-root`
+  in `html-tabs.js`) — two cards (Revenue / Expenses), each account grouped under its current
+  category with a per-account checkbox + picker, a group-level "select all in this category"
+  checkbox, a renameable (contenteditable) category heading, and a bulk "Move to" bar that appears
+  once anything is selected on that card. Every write saves immediately (a checkbox tick, a picker
+  change, a bulk move, a rename) — deliberately not a batched "Save changes" button; every other
+  admin-editable control already on this tab (Planning's own per-leaf picker, Settings' Fund
+  Categories card) already saves on change with no separate commit step, and a page whose entire
+  job is "reassign a few accounts" gains nothing from a save queue someone could navigate away from
+  and lose. Footer states plainly that nothing here touches `category_path`, fund numbers, or
+  QuickBooks itself — the next sync/import lands in exactly the same accounts regardless.
+- **Board view / QuickBooks order toggle on Planning's "Category by category" table.** New
+  `finBuildBoardTree(_finPlanBaseTree)` flattens the real QuickBooks tree to leaves
+  (`finFlattenLeaves`) and re-buckets them fresh by the Chart of Accounts categories — a genuinely
+  new capability for EXPENSES, which had zero categorization before this; revenue already had a
+  partial version of this via `finReorganizeChurchTree`'s Earned/Restricted extraction, now folded
+  into the same mechanism. Restricted giving nests under one "Donor Income" wrapper alongside
+  Unrestricted, matching `displayStreamOf()`'s convention everywhere else in this app that restricted
+  reads as the second half of donor income, not a fourth stream beside it — that wrapper title is a
+  fixed organizational header, never one of the four renameable category keys. **Board view is the
+  new default**; "QuickBooks order" is the tree exactly as it rendered before this shipped
+  (`finReorganizeChurchTree`'s own grouping over the raw QuickBooks hierarchy), unchanged, so
+  flipping the toggle back always shows what the page looked like before Chart of Accounts existed.
+  An unmatched account defaults to Earned Income (revenue) or Programs (expense) — never
+  Unrestricted Gifts — same reasoning as `REVENUE_STREAM_RULES` in `api-finance.js`: overstating
+  donor revenue overstates how much of the budget the board can actually redirect, which is the one
+  thing this page exists to get right.
+- **Column show/hide chips** (FY Bud / FY Actual / FY Projected / FY Plan / Δ%) — a hidden column's
+  chip stays visible, struck through, so it can be turned back on; only its `<th>`/`<td>`s actually
+  leave the table.
+- **"Choose rows"** — an admin can exclude individual lines from the table; **a total (group,
+  section, or Net) always reads the exclusion-filtered tree whether or not picking is currently
+  open**, so a printed sheet or export built from the same state can never disagree with what's on
+  screen. While picking is open, an excluded leaf still renders (dimmed, checkbox unchecked, so it
+  can be put back) — showing its own real value, never zeroed — but is never counted in a total.
+  Not persisted server-side: a print/export exclusion is a "leave this off THIS sheet" choice, not a
+  standing Chart of Accounts decision, so it resets on reload rather than following the church into
+  next year's plan.
+- **Export CSV** — `finPlanExportCsv()` downloads `_finPlanCsvRows`, a table built alongside the
+  HTML on every render (not a second computation) so the export can never drift from what's on
+  screen — respects the current column visibility and row exclusion exactly.
+- **Print** — `finPlanPrint()` sets `body.printing-plan` (same `body.printing-<feature>` contract as
+  `.printing-comp`/`.printing-board`), showing only `#fin-plan-print-card` (the table itself) — the
+  navy summary strip, the year-input/commit header actions, and the five-year outlook chart below
+  the table are working-session controls, not part of a sheet handed to a board member. No separate
+  print-only layout to build, unlike the Council report — the table already lives on the page.
+- **Per-leaf category picker directly on Planning** (Board view, admin only) — reassigns one
+  account's category from the row it's actually sitting in, via the same
+  `finPlanSetBoardCategory()`/`finCoaSaveCategories()` save path Chart of Accounts uses, so the two
+  surfaces can never disagree about which store wins.
+- **Deliberately not built this pass** (scope kept to what the handoff's core ask needed): a
+  "moved" indicator badge on a reassigned account, inline category-header renaming on Planning
+  itself (kept on Chart of Accounts only), and a batched "Save changes" step on Chart of Accounts
+  (immediate-save-per-action instead, per the reasoning above).
+- **A real bug in my own draft, caught by the build, not by reading**: a backtick inside a comment
+  ("… category_path is in `excluded`") closed the outer `String.raw` literal and broke the entire
+  served script — the SC3-BUG1/FIN15/TAP2-BUG class this file has hit repeatedly. Caught by running
+  the actual assembled bundle through Node, not by `node --check` on the module file alone (which
+  only validates the outer template literal's own delimiters, not the served text inside it).
+- `npm test` (2056/2056, 43 new across `test/finance-planning-board-categories.test.js` — the real
+  backend route against real in-memory SQLite — and `test/finance-planning-chart-of-accounts.test.js`
+  — the real assembled `CHMS_APP_CORE_JS`+`CHMS_APP_EXT_JS`+`CHMS_APP_FINANCE_JS` bundles run in a
+  `vm`, driving `finBuildBoardTree`, the Board-view/QuickBooks-order toggle, column visibility, row
+  exclusion/totals-consistency, CSV export, every Chart of Accounts handler including the real
+  fetch-backed saves, and `finPlanPrint`). **Every new test verified non-vacuous** by injecting the
+  exact regression it guards directly into the production code and confirming the right test (and
+  only that test) failed — 8 injections across both files, 8 correct failure sets. One injection
+  (removing `finRecomputeTreeTotals()` from `finPlanFilterExcluded`) caused **no** test failure —
+  traced to `finPlanComputeMaps()` never actually reading a group node's own stale
+  `totalActualCents`/`totalBudgetCents` fields, only ever summing from its own bottom-up maps; left
+  the call in place as harmless defensive code (matches the surrounding comment's stated intent) but
+  didn't write a test claiming to cover it, since nothing currently observable depends on it. Two of
+  my own test assertions were wrong on the first pass and were corrected against the real rendered
+  output rather than forced: a toolbar CHIP for a hidden column stays in the DOM (struck through, so
+  it can toggle the column back on) rather than disappearing, which I'd initially asserted backwards;
+  and an admin's Actual cell renders as an editable `value="50000"` input, not the comma-formatted
+  text a non-admin sees. Three pre-existing tests in `test/finance-qb-order.test.js` needed updating,
+  not the production code — they render the Planning table directly and never set
+  `_finPlanViewMode`, so once Board view became the default they were silently exercising the wrong
+  tree; fixed by having those two helpers explicitly force `_finPlanViewMode = 'qb'`, matching what
+  their own describe block ("Planning budget builder — QuickBooks order") already says they're
+  testing. Plus `node --check` on all four touched source files and both extracted bundle scripts,
+  and a div/tag-balance scan of the fully assembled `CHMS_HTML` (1122/1122) and its extracted CSS
+  bundle (1373/1373 braces). One pre-existing, unrelated test failure
+  (`test/finance-property-funds-itself.test.js`'s "deducts mortgage principal") was confirmed present
+  on the branch before this session's changes too (a date-sensitive amortization fixture, not
+  touched by anything here) — not fixed, out of scope. **Not verified**: a live browser.
+  (`src/api-finance.js`, `src/frontend/js-finance.js`, `src/frontend/js-core.js`,
+  `src/frontend/html-tabs.js`, `src/frontend/html-head.js`,
+  `test/finance-planning-board-categories.test.js`, `test/finance-planning-chart-of-accounts.test.js`,
+  `test/finance-qb-order.test.js`)
+
+### v1.223.0 — Budget tab follow-ups: renamed from Planning, headings editable in place, per-leaf picker removed (2026-09-04)
+
+Three live-screenshot follow-ups on FIN70 (Chart of Accounts / Board view, PR #813, just merged).
+
+1. **"Planning" renamed to "Budget"** everywhere it's shown to a user — the sidebar sub-nav
+   label, the page header ("Budget FY2027"), and every user-facing sentence that named the tab
+   (the Data & Imports danger-zone copy, Chart of Accounts' own empty-state and footer note, the
+   Compensation tab's "sent to the Budget" message, the base-year proration tooltip). The `id`/
+   `finSection`/route (`planning`), every function name (`finRenderPlanning`, `finLoadPlanning`,
+   `_finPlanViewMode`, etc.) and the endpoint paths are all untouched — this is a display-string
+   rename only, so nothing that persists or gets looked up by name had to migrate.
+2. **The category headings on the Budget tab's own Board view are now editable in place** —
+   "Unrestricted Gifts," "Donor Income," "Salaries & Benefits," etc. — the same rename control
+   Chart of Accounts already offered, reachable from either screen, writing to the same
+   `finance_planning_board_categories` store either way. **The "Donor Income" wrapper needed a
+   new field to be renameable at all**: it isn't one of the four category keys
+   (`REVENUE_STREAMS`) the store already validates against — it's the purely organizational node
+   that nests Unrestricted + Restricted together (see `finBuildBoardTree`) — so it gets its own
+   plain-string `donorWrapperLabel` field, trimmed server-side, blank clears back to the default
+   "Donor Income." `finTreeLabelCell()` gained an `opts.html` escape hatch (an editable span the
+   caller already `esc()`'d, used verbatim instead of double-escaping) — every existing caller
+   that doesn't pass it keeps the old plain-`esc(label)` behavior unchanged.
+3. **The per-leaf category `<select>` on the Budget table itself is gone.** It was a second copy
+   of the exact same control Chart of Accounts already offers — the user's own framing was that
+   reassigning an account is Chart of Accounts' job, and having the same dropdown appear a second
+   time on the Budget table (which is what the screenshot showed) was confusing, not a second
+   convenience. `finPlanSetBoardCategory()` itself is untouched and still backs Chart of
+   Accounts' own per-leaf `<select>` — only the Budget table's copy of the call site is gone.
+
+`npm test` (2102/2102, 12 new/updated across `test/finance-planning-board-categories.test.js` and
+`test/finance-planning-chart-of-accounts.test.js`); **every changed/new assertion verified
+non-vacuous** by stashing the `js-finance.js` change and confirming all 5 dependent frontend tests
+fail against the pre-change code (the two board-categories default-shape tests were already
+directly falsified by the new `donorWrapperLabel` field, confirmed the same way). `node --check`
+on all three touched files and the fully assembled served bundle (`CHMS_APP_CORE_JS`+
+`CHMS_APP_EXT_JS`+`CHMS_APP_FINANCE_JS`), div-balance on the assembled `CHMS_HTML` shell
+(1122/1122), and the repo's own American-English spelling check (clean). DEPLOY_VERSION bumped to
+1.223.0. **Not verified**: a live browser. (`src/api-finance.js`, `src/frontend/js-finance.js`,
+`src/frontend/js-core.js`, `test/finance-planning-board-categories.test.js`,
+`test/finance-planning-chart-of-accounts.test.js`)
 
 ### MKT2 — Christmas Market signup open/close, from the website admin (2026-08-31)
 
@@ -59,6 +717,122 @@ reasoning as MKT1: no frontend change, `DEPLOY_VERSION` not bumped.
   routes agree). **Not verified**: a live call from the website Worker — see
   that repo's own CLAUDE.md for the caller side of this.
   (`src/api-scheduler.js`, `tlc-volunteer-worker.js`, `test/market-signup-summary.test.js`)
+
+### v1.222.0 — Chart of Accounts page; Board view / QuickBooks order toggle on Planning (2026-09-04)
+
+Built from a Claude Design canvas handoff (`design_handoff_budget_planning_categorization`,
+mockups for `Chart of Accounts.dc.html` and `Budget Planning.dc.html`, recreated from this repo's
+own shipped source) — the ask was to add per-account category assignment and a new Chart of
+Accounts page to the Planning tab. A new independent classification system, deliberately NOT the
+existing group-label-only `finance_revenue_streams`/`finance_flow_expense_map` stores that
+Financial Health's revenue mix bar and the money-flow Sankey diagram already read (those are
+heavily tested and board-facing with no live browser to re-verify a shared-store regression
+against) — new `finance_planning_board_categories` chms_config blob, keyed by each real leaf
+account's own `category_path` rather than a QuickBooks GROUP label, so two funds sharing a group
+can land in different board categories.
+
+- **New `GET`/`PUT /admin/api/finance/planning/board-categories`** (`src/api-finance.js`). GET
+  returns `{revenue, expense, revenueLabels, expenseLabels}` (all four default to `{}` on a fresh
+  install, so every reader tolerates an unset map as "everything is on its regex default"). PUT
+  (admin-only, read is open to any finance-gated caller) MERGES whatever's sent into what's already
+  saved, so a per-leaf pick made from Planning's own inline picker and a bulk "Move to" made from
+  Chart of Accounts land in the same store without one clobbering the other's unrelated entries.
+  Every revenue value is checked against `REVENUE_STREAMS`, every expense value against
+  `FLOW_EXPENSE_KEYS` — an unrecognized key 400s rather than silently storing garbage a renderer
+  would then guess at. An empty-string value clears that one entry back to the computed default,
+  and a blank rename clears a custom category label the same way.
+- **New Chart of Accounts page** (`src/frontend/js-finance.js` `finRenderChartOfAccounts()`, new
+  sub-nav item between Planning and Compensation, mounted at `#fin-panel-accounts`/`#fin-coa-root`
+  in `html-tabs.js`) — two cards (Revenue / Expenses), each account grouped under its current
+  category with a per-account checkbox + picker, a group-level "select all in this category"
+  checkbox, a renameable (contenteditable) category heading, and a bulk "Move to" bar that appears
+  once anything is selected on that card. Every write saves immediately (a checkbox tick, a picker
+  change, a bulk move, a rename) — deliberately not a batched "Save changes" button; every other
+  admin-editable control already on this tab (Planning's own per-leaf picker, Settings' Fund
+  Categories card) already saves on change with no separate commit step, and a page whose entire
+  job is "reassign a few accounts" gains nothing from a save queue someone could navigate away from
+  and lose. Footer states plainly that nothing here touches `category_path`, fund numbers, or
+  QuickBooks itself — the next sync/import lands in exactly the same accounts regardless.
+- **Board view / QuickBooks order toggle on Planning's "Category by category" table.** New
+  `finBuildBoardTree(_finPlanBaseTree)` flattens the real QuickBooks tree to leaves
+  (`finFlattenLeaves`) and re-buckets them fresh by the Chart of Accounts categories — a genuinely
+  new capability for EXPENSES, which had zero categorization before this; revenue already had a
+  partial version of this via `finReorganizeChurchTree`'s Earned/Restricted extraction, now folded
+  into the same mechanism. Restricted giving nests under one "Donor Income" wrapper alongside
+  Unrestricted, matching `displayStreamOf()`'s convention everywhere else in this app that restricted
+  reads as the second half of donor income, not a fourth stream beside it — that wrapper title is a
+  fixed organizational header, never one of the four renameable category keys. **Board view is the
+  new default**; "QuickBooks order" is the tree exactly as it rendered before this shipped
+  (`finReorganizeChurchTree`'s own grouping over the raw QuickBooks hierarchy), unchanged, so
+  flipping the toggle back always shows what the page looked like before Chart of Accounts existed.
+  An unmatched account defaults to Earned Income (revenue) or Programs (expense) — never
+  Unrestricted Gifts — same reasoning as `REVENUE_STREAM_RULES` in `api-finance.js`: overstating
+  donor revenue overstates how much of the budget the board can actually redirect, which is the one
+  thing this page exists to get right.
+- **Column show/hide chips** (FY Bud / FY Actual / FY Projected / FY Plan / Δ%) — a hidden column's
+  chip stays visible, struck through, so it can be turned back on; only its `<th>`/`<td>`s actually
+  leave the table.
+- **"Choose rows"** — an admin can exclude individual lines from the table; **a total (group,
+  section, or Net) always reads the exclusion-filtered tree whether or not picking is currently
+  open**, so a printed sheet or export built from the same state can never disagree with what's on
+  screen. While picking is open, an excluded leaf still renders (dimmed, checkbox unchecked, so it
+  can be put back) — showing its own real value, never zeroed — but is never counted in a total.
+  Not persisted server-side: a print/export exclusion is a "leave this off THIS sheet" choice, not a
+  standing Chart of Accounts decision, so it resets on reload rather than following the church into
+  next year's plan.
+- **Export CSV** — `finPlanExportCsv()` downloads `_finPlanCsvRows`, a table built alongside the
+  HTML on every render (not a second computation) so the export can never drift from what's on
+  screen — respects the current column visibility and row exclusion exactly.
+- **Print** — `finPlanPrint()` sets `body.printing-plan` (same `body.printing-<feature>` contract as
+  `.printing-comp`/`.printing-board`), showing only `#fin-plan-print-card` (the table itself) — the
+  navy summary strip, the year-input/commit header actions, and the five-year outlook chart below
+  the table are working-session controls, not part of a sheet handed to a board member. No separate
+  print-only layout to build, unlike the Council report — the table already lives on the page.
+- **Per-leaf category picker directly on Planning** (Board view, admin only) — reassigns one
+  account's category from the row it's actually sitting in, via the same
+  `finPlanSetBoardCategory()`/`finCoaSaveCategories()` save path Chart of Accounts uses, so the two
+  surfaces can never disagree about which store wins.
+- **Deliberately not built this pass** (scope kept to what the handoff's core ask needed): a
+  "moved" indicator badge on a reassigned account, inline category-header renaming on Planning
+  itself (kept on Chart of Accounts only), and a batched "Save changes" step on Chart of Accounts
+  (immediate-save-per-action instead, per the reasoning above).
+- **A real bug in my own draft, caught by the build, not by reading**: a backtick inside a comment
+  ("… category_path is in `excluded`") closed the outer `String.raw` literal and broke the entire
+  served script — the SC3-BUG1/FIN15/TAP2-BUG class this file has hit repeatedly. Caught by running
+  the actual assembled bundle through Node, not by `node --check` on the module file alone (which
+  only validates the outer template literal's own delimiters, not the served text inside it).
+- `npm test` (2056/2056, 43 new across `test/finance-planning-board-categories.test.js` — the real
+  backend route against real in-memory SQLite — and `test/finance-planning-chart-of-accounts.test.js`
+  — the real assembled `CHMS_APP_CORE_JS`+`CHMS_APP_EXT_JS`+`CHMS_APP_FINANCE_JS` bundles run in a
+  `vm`, driving `finBuildBoardTree`, the Board-view/QuickBooks-order toggle, column visibility, row
+  exclusion/totals-consistency, CSV export, every Chart of Accounts handler including the real
+  fetch-backed saves, and `finPlanPrint`). **Every new test verified non-vacuous** by injecting the
+  exact regression it guards directly into the production code and confirming the right test (and
+  only that test) failed — 8 injections across both files, 8 correct failure sets. One injection
+  (removing `finRecomputeTreeTotals()` from `finPlanFilterExcluded`) caused **no** test failure —
+  traced to `finPlanComputeMaps()` never actually reading a group node's own stale
+  `totalActualCents`/`totalBudgetCents` fields, only ever summing from its own bottom-up maps; left
+  the call in place as harmless defensive code (matches the surrounding comment's stated intent) but
+  didn't write a test claiming to cover it, since nothing currently observable depends on it. Two of
+  my own test assertions were wrong on the first pass and were corrected against the real rendered
+  output rather than forced: a toolbar CHIP for a hidden column stays in the DOM (struck through, so
+  it can toggle the column back on) rather than disappearing, which I'd initially asserted backwards;
+  and an admin's Actual cell renders as an editable `value="50000"` input, not the comma-formatted
+  text a non-admin sees. Three pre-existing tests in `test/finance-qb-order.test.js` needed updating,
+  not the production code — they render the Planning table directly and never set
+  `_finPlanViewMode`, so once Board view became the default they were silently exercising the wrong
+  tree; fixed by having those two helpers explicitly force `_finPlanViewMode = 'qb'`, matching what
+  their own describe block ("Planning budget builder — QuickBooks order") already says they're
+  testing. Plus `node --check` on all four touched source files and both extracted bundle scripts,
+  and a div/tag-balance scan of the fully assembled `CHMS_HTML` (1122/1122) and its extracted CSS
+  bundle (1373/1373 braces). One pre-existing, unrelated test failure
+  (`test/finance-property-funds-itself.test.js`'s "deducts mortgage principal") was confirmed present
+  on the branch before this session's changes too (a date-sensitive amortization fixture, not
+  touched by anything here) — not fixed, out of scope. **Not verified**: a live browser.
+  (`src/api-finance.js`, `src/frontend/js-finance.js`, `src/frontend/js-core.js`,
+  `src/frontend/html-tabs.js`, `src/frontend/html-head.js`,
+  `test/finance-planning-board-categories.test.js`, `test/finance-planning-chart-of-accounts.test.js`,
+  `test/finance-qb-order.test.js`)
 
 ### v1.219.0 — Planning: FY{base} Actual is editable per line; dead $0.00/$0.00 accounts hidden (2026-08-30)
 

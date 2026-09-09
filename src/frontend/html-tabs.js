@@ -1720,7 +1720,13 @@ export const HTML_TABS_2 = String.raw`
         <div id="fin-church-header"></div>
         <div id="fin-church-year-view"></div>
         <div id="fin-church-multiyear-view" style="display:none;"></div>
-        <div id="fin-church-balances-view" style="display:none;"></div>
+      </div>
+
+      <!-- Balance Sheet & Financial Position — assets/liabilities/equity, its own tab (was a
+           third mode inside Church Report until 2026-09-04). Rendered by finRenderBalanceSheetTab()
+           into one root mount, same as Property/Planning above. -->
+      <div id="fin-panel-balance" class="fin-printable" style="display:none;">
+        <div id="fin-balance-root">Loading&hellip;</div>
       </div>
 
       <div id="fin-panel-daycare" class="fin-printable" style="display:none;">
@@ -1734,6 +1740,16 @@ export const HTML_TABS_2 = String.raw`
 
       <div id="fin-panel-planning" class="fin-printable" style="display:none;">
         <div id="fin-plan-root"></div>
+      </div>
+
+      <!-- Chart of Accounts — which board category each account reads under and what each
+           category is called, purely a display-time regrouping (finance_planning_board_categories,
+           see api-finance.js). Rendered by finRenderChartOfAccounts(), called once
+           finLoadPlanning() has the fiscal year's account tree loaded — no separate fetch of its
+           own. Distinct from #fin-accounts above, which is a Data & Imports mount for an
+           unrelated import tool. -->
+      <div id="fin-panel-accounts" style="display:none;">
+        <div id="fin-coa-root"><p style="font-size:.85rem;color:var(--warm-gray);">Loading&hellip;</p></div>
       </div>
 
       <!-- Data & Imports — every connection, importer, hand-entered adjustment and destructive

@@ -1,6 +1,7 @@
 // ── Giving Entries, Batches, Quick Entry API handlers ──────────────────────
 import { json } from './auth.js';
 import { isoWeekKey, LETTER_TYPES, mergeLetterRecipients, computeReceiptQueue, computeGivingPlateaus, fetchGivingPlateauRows, plateauWeeksElapsed, computeDepositTotals, batchDepositStatus, batchDepositStatusFromCounts } from './api-utils.js';
+import { ensureGivingYearRollups } from './giving-rollups.js';
 
 // Shared by the desktop `giving/quick-entry` route and the mobile Giving quick-entry screen —
 // one insert path so the two can't drift on the find-or-create-batch logic (the SW17 lesson:
@@ -65,19 +66,28 @@ if (seg === 'giving' && method === 'GET') {
 // ── Giving Batches ───────────────────────────────────────────────
 if (seg === 'giving/batches' && method === 'GET') {
   const status = url.searchParams.get('status') || 'all';
-  // Deposit coverage comes in as correlated subqueries rather than a second LEFT JOIN — joining
-  // both giving_entries and giving_deposit_lines in one GROUP BY would multiply the rows and
-  // silently inflate every batch's total (n entries x m deposit lines).
-  let sql = `SELECT gb.*, COUNT(ge.id) as entry_count, COALESCE(SUM(ge.amount),0) as total_cents,
-             (SELECT COALESCE(SUM(dl.amount_cents),0) FROM giving_deposit_lines dl WHERE dl.batch_id=gb.id) as linked_cents,
-             (SELECT COUNT(*) FROM giving_deposit_lines dl WHERE dl.batch_id=gb.id) as deposit_count,
-             (SELECT COUNT(*) FROM giving_deposit_lines dl JOIN giving_deposits d ON d.id=dl.deposit_id
-               WHERE dl.batch_id=gb.id AND d.bank_cents IS NULL) as unreconciled_count
-             FROM giving_batches gb LEFT JOIN giving_entries ge ON ge.batch_id=gb.id`;
+  // Gift count/total is maintained once per batch. Deposit coverage is aggregated once before
+  // joining; three correlated subqueries here made D1 repeatedly seek the line index for every
+  // returned batch (about 6,300 billed row reads for a 100-row page in production).
+  let sql = `SELECT gb.*, COALESCE(bt.entry_count,0) AS entry_count,
+             COALESCE(bt.total_cents,0) AS total_cents,
+             COALESCE(dc.linked_cents,0) AS linked_cents,
+             COALESCE(dc.deposit_count,0) AS deposit_count,
+             COALESCE(dc.unreconciled_count,0) AS unreconciled_count
+             FROM giving_batches gb
+             LEFT JOIN giving_batch_totals bt ON bt.batch_id=gb.id
+             LEFT JOIN (
+               SELECT dl.batch_id, SUM(dl.amount_cents) AS linked_cents,
+                      COUNT(*) AS deposit_count,
+                      SUM(CASE WHEN d.id IS NOT NULL AND d.bank_cents IS NULL THEN 1 ELSE 0 END) AS unreconciled_count
+                 FROM giving_deposit_lines dl
+                 LEFT JOIN giving_deposits d ON d.id=dl.deposit_id
+                GROUP BY dl.batch_id
+             ) dc ON dc.batch_id=gb.id`;
   const binds = [];
   if (status === 'open') { sql += ' WHERE gb.closed=0'; }
   else if (status === 'closed') { sql += ' WHERE gb.closed=1'; }
-  sql += ' GROUP BY gb.id ORDER BY gb.batch_date DESC, gb.id DESC LIMIT 100';
+  sql += ' ORDER BY gb.batch_date DESC, gb.id DESC LIMIT 100';
   const rows = (await db.prepare(sql).bind(...binds).all()).results || [];
   const batches = rows.map(b => ({
     ...b,
@@ -101,18 +111,22 @@ if (seg === 'giving/offerings-summary' && method === 'GET') {
     // Counted but not posted — batches still open.
     db.prepare(
       `SELECT COUNT(*) AS n, COALESCE(SUM(t.cents),0) AS cents FROM (
-         SELECT gb.id, COALESCE(SUM(ge.amount),0) AS cents
-           FROM giving_batches gb LEFT JOIN giving_entries ge ON ge.batch_id=gb.id
-          WHERE gb.closed=0 GROUP BY gb.id) t`
+         SELECT gb.id, COALESCE(bt.total_cents,0) AS cents
+           FROM giving_batches gb LEFT JOIN giving_batch_totals bt ON bt.batch_id=gb.id
+          WHERE gb.closed=0) t`
     ).first(),
     // Counted, but not all of it has reached a deposit yet (no line at all, or lines that don't
     // cover the batch total — a partial bank run leaves the remainder here too).
     db.prepare(
       `SELECT COUNT(*) AS n, COALESCE(SUM(t.gap),0) AS cents FROM (
-         SELECT gb.id,
-                COALESCE((SELECT SUM(ge.amount) FROM giving_entries ge WHERE ge.batch_id=gb.id),0)
-                - COALESCE((SELECT SUM(dl.amount_cents) FROM giving_deposit_lines dl WHERE dl.batch_id=gb.id),0) AS gap
-           FROM giving_batches gb WHERE gb.batch_date >= ?) t
+         SELECT gb.id, COALESCE(bt.total_cents,0) - COALESCE(dc.linked_cents,0) AS gap
+           FROM giving_batches gb
+           LEFT JOIN giving_batch_totals bt ON bt.batch_id=gb.id
+           LEFT JOIN (
+             SELECT batch_id, SUM(amount_cents) AS linked_cents
+               FROM giving_deposit_lines GROUP BY batch_id
+           ) dc ON dc.batch_id=gb.id
+          WHERE gb.batch_date >= ?) t
         WHERE t.gap > 50`
     ).bind(awaitingSince).first(),
     // At the bank, but nobody has entered what the bank actually received. Windowed like
@@ -152,26 +166,21 @@ if (seg === 'giving/offerings-summary' && method === 'GET') {
 // ── Giving tab overview stat tiles (This Week / This Month / YTD / Givers) ──
 if (seg === 'giving/stats' && method === 'GET') {
   const weekStart  = isoWeekKey();
-  const monthStart = new Date().toISOString().slice(0, 7) + '-01';
-  const yearStart  = new Date().toISOString().slice(0, 4) + '-01-01';
+  const month = new Date().toISOString().slice(0, 7);
+  const year = parseInt(month.slice(0, 4));
+  const annual = await ensureGivingYearRollups(db, year);
   const row = await db.prepare(`
     SELECT
-      COALESCE(SUM(CASE WHEN d>=? THEN amount END),0) as week_total,
-      COALESCE(SUM(CASE WHEN d>=? THEN amount END),0) as month_total,
-      COALESCE(SUM(CASE WHEN d>=? THEN amount END),0) as ytd_total,
-      COUNT(DISTINCT CASE WHEN d>=? AND person_id IS NOT NULL THEN person_id END) as givers
-    FROM (
-      SELECT ge.amount as amount, ge.person_id as person_id,
-             COALESCE(NULLIF(ge.contribution_date,''), gb.batch_date) as d
-      FROM giving_entries ge JOIN giving_batches gb ON ge.batch_id=gb.id
-    )
-    WHERE d>=?`
-  ).bind(weekStart, monthStart, yearStart, yearStart, yearStart).first();
+      (SELECT COALESCE(SUM(amount),0) FROM giving_entries WHERE contribution_date>=?) week_total,
+      COALESCE(SUM(CASE WHEN month=? THEN total_cents ELSE 0 END),0) month_total,
+      COALESCE(SUM(total_cents),0) ytd_total
+    FROM giving_monthly_fund_totals WHERE month BETWEEN ? AND ?`
+  ).bind(weekStart, month, `${year}-01`, `${year}-12`).first();
   return json({
     weekTotal: row?.week_total || 0,
     monthTotal: row?.month_total || 0,
     ytdTotal: row?.ytd_total || 0,
-    givers: row?.givers || 0
+    givers: annual.giver_count || 0
   });
 }
 
@@ -291,7 +300,7 @@ if (entriesMatch) {
     return json({ entries });
   }
   if (method === 'POST') {
-    const batch = await db.prepare('SELECT closed FROM giving_batches WHERE id=?').bind(bid).first();
+    const batch = await db.prepare('SELECT closed, batch_date FROM giving_batches WHERE id=?').bind(bid).first();
     if (!batch) return json({ error: 'Batch not found' }, 404);
     if (batch.closed) return json({ error: 'Batch is closed.' }, 409);
     let b; try { b = await req.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
@@ -299,9 +308,9 @@ if (entriesMatch) {
     if (!b.fund_id) return json({ error: 'fund_id required' }, 400);
     if (amtCents <= 0) return json({ error: 'Amount must be positive' }, 400);
     const r = await db.prepare(
-      `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes)
-       VALUES (?,?,?,?,?,?,?)`
-    ).bind(bid,b.person_id||null,parseInt(b.fund_id),amtCents,b.method||'cash',b.check_number||'',b.notes||'').run();
+      `INSERT INTO giving_entries (batch_id,person_id,fund_id,amount,method,check_number,notes,contribution_date)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).bind(bid,b.person_id||null,parseInt(b.fund_id),amtCents,b.method||'cash',b.check_number||'',b.notes||'',batch.batch_date||'').run();
     return json({ ok: true, id: r.meta?.last_row_id });
   }
 }

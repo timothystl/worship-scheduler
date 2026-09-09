@@ -76,15 +76,23 @@ export const ROLE_PERMISSION_LEVELS = ['none', 'anon', 'view', 'edit'];
 export const ANON_CAPABLE_ITEMS = { giving: true };
 // editable:false items (Reports, Audit Log) are inherently read-only — their max level is
 // 'view'; the UI still lets you pick none/view but never edit.
+// finance/compensation/budget are three independently grantable slices of the Finance module —
+// see financeSegItems in api-chms.js for exactly which routes each one covers, and the note
+// there on the handful of bootstrap/shared reads any one of the three can unlock so a role
+// holding only one of them can still load its own tab. 'finance' is the rest of the workspace
+// (Church Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
+// Imports); 'compensation' is the Compensation Planner; 'budget' is the Budget/Planning tab.
 export const ROLE_PERMISSION_ITEMS = [
-  { key: 'giving',     label: 'Giving',            editable: true  },
-  { key: 'tuitionaid', label: 'Tuition Aid',       editable: true  },
-  { key: 'finance',    label: 'Finance Overview',  editable: true  },
-  { key: 'attendance', label: 'Attendance',        editable: true  },
-  { key: 'followups',  label: 'Follow-ups',        editable: true  },
-  { key: 'audit',      label: 'Audit Log',         editable: false },
-  { key: 'register',   label: 'Register',          editable: true  },
-  { key: 'reports',    label: 'Reports tab',       editable: false },
+  { key: 'giving',       label: 'Giving',            editable: true  },
+  { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
+  { key: 'finance',      label: 'Finance Overview',  editable: true  },
+  { key: 'compensation', label: 'Compensation',      editable: true  },
+  { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'attendance',   label: 'Attendance',        editable: true  },
+  { key: 'followups',    label: 'Follow-ups',        editable: true  },
+  { key: 'audit',        label: 'Audit Log',         editable: false },
+  { key: 'register',     label: 'Register',          editable: true  },
+  { key: 'reports',      label: 'Reports tab',       editable: false },
 ];
 export const ROLE_PERMISSION_ITEM_KEYS = ROLE_PERMISSION_ITEMS.map(i => i.key);
 // Per-item ceiling — read-only items cap at 'view'.
@@ -96,16 +104,32 @@ const MEMBER_ALLOWED_ITEMS = { reports: 'view' };
 
 export const DEFAULT_ROLE_PERMISSIONS = {
   // finance → giving/tuition/finance (edit) + reports (view); staff → attendance/follow-ups/
-  // register (edit) + audit/reports (view); member → filtered directory, nothing extra.
+  // register (edit) + reports (view); member → filtered directory, nothing extra.
   //
-  // council (formerly `office`) is the church-governance tier: it keeps the register access
-  // the old office role had, and adds the board-facing financial picture — the Finance
-  // workspace and the Reports tab, but giving at 'anon' only, so a council member sees what
-  // the congregation gave and never who gave it.
-  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
-  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'edit', followups: 'edit', audit: 'view', register: 'edit', reports: 'view' },
-  council: { giving: 'anon', tuitionaid: 'none', finance: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'edit', reports: 'view' },
-  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
+  // council (formerly `office`) is the church-governance tier: it has no register access at
+  // all — its former register-edit access was removed per the Preparation 5 governance
+  // decision (issue #844): Council is a reporting/oversight tier, not an operational one, so
+  // register stays editable (or even viewable) only for whoever actually runs it
+  // (finance/staff/admin) — plus the Reports tab, and giving at 'anon' only, so a council
+  // member sees what the congregation gave and never who gave it. `finance` (the rest of the
+  // Finance workspace — Church Report, Balance Sheet, Daycare Report, Commercial Property,
+  // Chart of Accounts, Data & Imports) defaults to 'none': council's Finance access is meant to
+  // be exactly the Compensation Planner, granted through the `compensation` item instead, not
+  // the whole module. `compensation` defaults to 'edit' so a council member can save their own
+  // raise-plan toggles/percentages there out of the box (see api-finance.js); `budget` defaults
+  // to 'none' — flip it on to give council read access to the Budget/Planning tab too (every
+  // write there is admin-only regardless, so 'view' and 'edit' behave the same for council).
+  //
+  // finance/compensation/budget for finance/staff mirror finance's own historical all-or-
+  // nothing access (finance: all three 'edit'; staff: all three 'none') so splitting the item
+  // three ways changes nothing for either role by default.
+  //
+  // audit: 'view' was removed from staff per the same Preparation 5 decision (#844) — the
+  // Audit Log is now admin-only for every configurable role, not just council/finance/member.
+  finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
+  council: { giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  member:  { giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
 };
 
 function levelRank(l) { const i = ROLE_PERMISSION_LEVELS.indexOf(l); return i < 0 ? 0 : i; }
@@ -128,7 +152,9 @@ function clampMemberRow(row) {
 // A stored role object from before this change used boolean values keyed by the old coarse
 // groups {finance,staff,register,reports}. Detect that shape (any boolean value) and map it
 // forward to the granular tri-state model, preserving the old effective access (everything
-// accessible was also editable, so old true → 'edit'; read-only groups → 'view').
+// accessible was also editable, so old true → 'edit'; read-only groups → 'view') — except
+// audit, which the Preparation 5 governance decision (issue #844) made admin-only outright, so
+// a legacy staff=true no longer resurrects the old audit-view grant either.
 function migrateLegacyRow(row) {
   const isLegacy = Object.values(row).some(v => typeof v === 'boolean');
   if (!isLegacy) return row;
@@ -138,7 +164,7 @@ function migrateLegacyRow(row) {
     finance:    row.finance ? 'edit' : 'none',
     attendance: row.staff ? 'edit' : 'none',
     followups:  row.staff ? 'edit' : 'none',
-    audit:      row.staff ? 'view' : 'none',
+    audit:      'none',
     register:   row.register ? 'edit' : 'none',
     reports:    row.reports ? 'view' : 'none',
   };
@@ -187,6 +213,16 @@ export function permissionsForRole(matrix, role) {
   const out = {};
   if (role === 'admin') {
     for (const item of ROLE_PERMISSION_ITEM_KEYS) out[item] = ITEM_MAX_LEVEL[item];
+    return out;
+  }
+  // compensation — a narrow, hardcoded tier like member/volunteer: not part of the
+  // configurable matrix, so an admin can never widen or narrow it from Settings. It exists
+  // only so the Financial Reports sidebar item (gated on the `finance` item being anything
+  // but 'none') renders for it; its real access is enforced directly in handleChmsApi
+  // (api-chms.js), which allows only the Compensation Planner's own endpoints and denies
+  // everything else regardless of what this map says.
+  if (role === 'compensation') {
+    for (const item of ROLE_PERMISSION_ITEM_KEYS) out[item] = item === 'finance' ? 'view' : 'none';
     return out;
   }
   const row = matrix[role] || {};
