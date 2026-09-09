@@ -333,8 +333,13 @@ describe('§10.10 — a non-admin sees every figure and can change nothing', () 
 });
 
 describe('council — can steer the plan, never the seed data', () => {
-  it('leaves the custom/scale percentage inputs enabled', () => {
+  // finCompCanEditPlanControls() checks permEdit('compensation') (js-core.js), which reads the
+  // real per-item permissions object — not just the role name — so a council member only gets
+  // live percentage/toggle inputs when an admin has actually granted 'compensation':'edit'
+  // (council's own default, per api-utils.js).
+  it('leaves the custom/scale percentage inputs enabled when compensation is edit', () => {
     ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
     const html = render(ctx, 'plan');
     const pct = html.split('<input').slice(1)
       .filter(c => /fin-comp-custom-pct|fin-comp-scale-pct/.test(c.slice(0, c.indexOf('>'))));
@@ -342,8 +347,19 @@ describe('council — can steer the plan, never the seed data', () => {
     expect(pct.every(c => !/disabled/.test(c.slice(0, c.indexOf('>'))))).toBe(true);
   });
 
+  it('disables the percentage inputs too when compensation is only view', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'view' };
+    const html = render(ctx, 'plan');
+    const pct = html.split('<input').slice(1)
+      .filter(c => /fin-comp-custom-pct|fin-comp-scale-pct/.test(c.slice(0, c.indexOf('>'))));
+    expect(pct.length).toBe(2);
+    expect(pct.every(c => /disabled/.test(c.slice(0, c.indexOf('>'))))).toBe(true);
+  });
+
   it('still disables every roster/seed input — name, position, current pay, hand-typed override', () => {
     ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
     const html = render(ctx, 'plan');
     const seedInputs = html.split('<input').slice(1)
       .map(c => c.slice(0, c.indexOf('>')))
@@ -354,14 +370,22 @@ describe('council — can steer the plan, never the seed data', () => {
 
   it('hides admin-only actions the same as any other non-editor', () => {
     ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
     const plan = render(ctx, 'plan');
     expect(plan).not.toContain('finCompAddWorker()');
     expect(plan).not.toContain('finCompSendToBudget()');
   });
 
-  it('shows a note that saving here never touches the real roster', () => {
+  it('shows a note that saving here never touches the real roster, when it can edit', () => {
     ctx._userRole = 'council';
+    ctx._perm = { compensation: 'edit' };
     expect(render(ctx, 'plan')).toContain('never the church&#39;s actual roster');
+  });
+
+  it('shows a read-only note instead when compensation is only view', () => {
+    ctx._userRole = 'council';
+    ctx._perm = { compensation: 'view' };
+    expect(render(ctx, 'plan')).toContain('read-only for your account');
   });
 
   it('an admin gets no such note', () => {

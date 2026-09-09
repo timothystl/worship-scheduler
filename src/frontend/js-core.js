@@ -310,34 +310,55 @@ function typeDotHtml(mt, size) {
 // Giving/Tuition Aid/Financial Reports are each their own top-level sidebar item (not
 // collapsed) — this sub-nav bar only covers the 3 sections *within* the Financial Reports tab.
 // (Giving Reports lives inside the Giving tab itself — see givSetView() in js-giving.js.)
+// Each item's 'perm' names the item from the granular matrix (see api-utils.js/financeSegItems
+// in api-chms.js) that governs whether this role sees it: 'finance' for the rest of the
+// workspace, 'compensation' for the Compensation Planner, 'budget' for Budget — independent
+// toggles, so a role can hold any one without the others.
 var FIN_TOPNAV_ITEMS = [
-  { id: 'health', label: 'Financial Health', finSection: 'health' },
-  { id: 'church', label: 'Church Report', finSection: 'church' },
-  { id: 'balance', label: 'Balance Sheet', finSection: 'balance' },
-  { id: 'daycare', label: 'Daycare Report', finSection: 'daycare' },
-  { id: 'property', label: 'Commercial Property', finSection: 'property' },
-  { id: 'planning', label: 'Budget', finSection: 'planning' },
-  { id: 'accounts', label: 'Chart of Accounts', finSection: 'accounts' },
-  { id: 'compensation', label: 'Compensation', finSection: 'compensation' },
+  { id: 'health', label: 'Financial Health', finSection: 'health', perm: 'finance' },
+  { id: 'church', label: 'Church Report', finSection: 'church', perm: 'finance' },
+  { id: 'balance', label: 'Balance Sheet', finSection: 'balance', perm: 'finance' },
+  { id: 'daycare', label: 'Daycare Report', finSection: 'daycare', perm: 'finance' },
+  { id: 'property', label: 'Commercial Property', finSection: 'property', perm: 'finance' },
+  { id: 'planning', label: 'Budget', finSection: 'planning', perm: 'budget' },
+  { id: 'accounts', label: 'Chart of Accounts', finSection: 'accounts', perm: 'finance' },
+  { id: 'compensation', label: 'Compensation', finSection: 'compensation', perm: 'compensation' },
   { divider: true },
   // Everything that used to be interleaved with the reports — connections, file imports,
   // hand-entered adjustments, the danger zone — lives behind this divider, off the reading pages.
-  { id: 'data', label: 'Data & Imports', finSection: 'data' },
+  { id: 'data', label: 'Data & Imports', finSection: 'data', perm: 'finance' },
 ];
 var _finActiveNavId = 'health';
+// Which FIN_TOPNAV_ITEMS entries (non-divider) this role may actually see, in order — used both
+// to render the sub-nav and by showTab() below to validate/fall back a requested section.
+function finVisibleNavItems() {
+  // The dedicated 'compensation' role's permissions object is a hardcoded placeholder
+  // ('finance':'view', everything else 'none' — see permissionsForRole in api-utils.js) purely
+  // so its sidebar tab renders; it is not real per-item truth, so it can't be filtered by
+  // permView() the way council now is. It only ever gets the Compensation section — see
+  // showTab's finSection override, which matches.
+  if (_userRole === 'compensation') {
+    return FIN_TOPNAV_ITEMS.filter(function(i) { return i.id === 'compensation'; });
+  }
+  return FIN_TOPNAV_ITEMS.filter(function(i) { return !i.divider && permView(i.perm); });
+}
 function renderFinanceSubnav() {
-  // Compensation tier and council both only ever get the Compensation section (see showTab's
-  // finSection override) — offering the rest of the sub-nav would just be dead buttons that
-  // 403 on click (council's 'finance' permission is hardcoded to this one sub-tab server-side,
-  // see isCompensationPlannerRequest in api-chms.js), so it's filtered out of the bar entirely
-  // rather than merely disabled.
-  var items = (_userRole === 'compensation' || _userRole === 'council')
-    ? FIN_TOPNAV_ITEMS.filter(function(i) { return i.id === 'compensation'; })
-    : FIN_TOPNAV_ITEMS;
-  return items.map(function(item) {
-    if (item.divider) return '<span class="fin-subnav-divider"></span>';
-    return '<button class="fin-subnav-btn' + (item.id === _finActiveNavId ? ' active' : '') + '" onclick="finNavGo(\'' + item.id + '\')">' + item.label + '</button>';
-  }).join('');
+  var visible = {};
+  finVisibleNavItems().forEach(function(i) { visible[i.id] = true; });
+  var out = [];
+  FIN_TOPNAV_ITEMS.forEach(function(item, idx) {
+    if (item.divider) {
+      // Only draw a divider if something visible still follows it — permission filtering can
+      // hide everything past it (e.g. Data & Imports), which would otherwise leave a trailing
+      // rule with nothing after it.
+      var anyAfter = FIN_TOPNAV_ITEMS.slice(idx + 1).some(function(i) { return !i.divider && visible[i.id]; });
+      if (anyAfter) out.push('<span class="fin-subnav-divider"></span>');
+      return;
+    }
+    if (!visible[item.id]) return;
+    out.push('<button class="fin-subnav-btn' + (item.id === _finActiveNavId ? ' active' : '') + '" onclick="finNavGo(\'' + item.id + '\')">' + item.label + '</button>');
+  });
+  return out.join('');
 }
 function finRenderSubnavMounts() {
   var el = document.getElementById('fin-subnav-mount-finance');
@@ -422,11 +443,15 @@ function showTab(name, finSection) {
     // browser-history entry from before that change would otherwise land on a section id no
     // panel answers to, leaving the tab blank.
     if (finSection === 'overview') finSection = 'health';
-    // Compensation tier and council can only ever land on the Compensation sub-tab — see
-    // finNavGo/renderFinanceSubnav, which don't offer either role any other section to click
-    // into. Council still keeps its normal navigation everywhere else in the app (People,
-    // Giving totals, Reports); only the Finance tab itself is narrowed.
-    if (_userRole === 'compensation' || _userRole === 'council') finSection = 'compensation';
+    // Land on a section this role can actually see — a stale bookmark/history entry, or simply
+    // never having had access to whichever section was last active, would otherwise show a
+    // blank panel or one that immediately 403s. finVisibleNavItems() reflects the live
+    // finance/compensation/budget permissions (see FIN_TOPNAV_ITEMS), so this naturally covers
+    // a council member granted only Compensation, only Budget, both, or neither, without a
+    // role-name check here.
+    var visible = finVisibleNavItems();
+    var requested = finSection && visible.filter(function(i) { return i.id === finSection; })[0];
+    if (!requested) finSection = visible.length ? visible[0].id : 'health';
     if (finSection) _finActiveNavId = finSection;
     // P25-E: loadFinance()/finShowSection() live in the lazily-loaded finance bundle now — see
     // ensureFinanceModuleLoaded's own comment.

@@ -8619,9 +8619,12 @@ function finCompIsCouncil() { return _userRole === 'council'; }
 // percentages, and the baseline-only comparison toggle — but never a worker's seed facts (name,
 // position, current pay, District Worksheet inputs) or a hand-typed dollar override; those stay
 // under finCompCanEdit()/finCompReadOnly() below, same as any other non-admin/compensation role.
-// Enforced again server-side (api-finance.js only persists the plan fields for this role) since
-// UI hiding here is not authorization.
-function finCompCanEditPlanControls() { return finCompCanEdit() || finCompIsCouncil(); }
+// Gated on the real 'compensation' item level (permEdit, from js-core.js), not just the role
+// name — an admin can dial council's Compensation to 'View only' and expect these controls to
+// actually lock, same as every other per-item edit affordance in the app. Enforced again
+// server-side (api-finance.js only persists the plan fields, and only when the ACCESS_GATE's
+// 'compensation' check passes) since UI hiding here is not authorization.
+function finCompCanEditPlanControls() { return finCompCanEdit() || (finCompIsCouncil() && permEdit('compensation')); }
 // Disables every input in a chunk of markup for a role that can't edit. Same pattern the old tab
 // used: the figures stay visible to anyone who can reach the Compensation tab, only editing is
 // gated (the save endpoint is admin/compensation-gated server-side either way).
@@ -9217,7 +9220,11 @@ function finCompHeaderHtml(totals) {
   }).join('');
   return '<div class="fin-comp-shell">'
     + (finCompIsCouncil()
-        ? '<div class="fin-comp-note" style="margin-bottom:8px;">You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.</div>'
+        ? '<div class="fin-comp-note" style="margin-bottom:8px;">'
+          + (finCompCanEditPlanControls()
+              ? 'You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.'
+              : 'This view is read-only for your account. Every figure here reflects the church&#39;s actual compensation plan.')
+          + '</div>'
         : '')
     + '<div class="fin-comp-titlebar">'
     + '<div><div class="fin-comp-title">Compensation Planner &mdash; FY' + _finPlanTargetYear + '</div>'
