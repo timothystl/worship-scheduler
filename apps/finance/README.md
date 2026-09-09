@@ -40,6 +40,7 @@ the migration does not copy production data or authorize a new writer.
 - `route-manifest.js` — executable route, method, contract, data-source, and query-budget registry.
 - `parity-manifest.js` — source-backed inventory of the existing Finance navigation and capabilities.
 - `health-view-model.js` — pure synthetic operating, position, Giving, and decision framing.
+- `church-report-service.js` — one-query synthetic account detail and report totals boundary.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
 reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
@@ -65,6 +66,11 @@ Alpha.10 replaces the generic Financial Health cards with the existing workspace
 framing: operating result versus budget, financial position, aggregate Giving reconciliation, and
 the board's distinct authority over donor, earned, and passive income. The calculations use only
 the dedicated synthetic D1 aggregates and committed synthetic Giving fixture.
+
+Alpha.11 adds the first functional Church Report slice: fiscal-year income, expenses, net result,
+budget comparison, favorable variance, and account detail. It uses one separately named read budget
+and only rows marked as the deterministic synthetic fixture. Imports, adjustments, drill-downs,
+board packets, production data, and writers remain disconnected.
 
 ## Validate
 

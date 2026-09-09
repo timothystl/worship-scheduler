@@ -1,7 +1,7 @@
 const READ_METHODS = Object.freeze(['GET', 'HEAD']);
 
 const ROUTES = [
-  { id: 'shell', paths: ['/', '/index.html'], dataSource: 'synthetic-d1', queryBudget: 'summary' },
+  { id: 'shell', paths: ['/', '/index.html'], dataSource: 'synthetic-d1', queryBudget: 'summary', optionalQueryBudgets: ['churchReport'] },
   { id: 'health', paths: ['/health'], dataSource: 'none' },
   { id: 'summary-v1', paths: ['/api/v1/summary'], dataSource: 'synthetic-d1', queryBudget: 'summary', contract: 'finance.summary.v1' },
   { id: 'giving-preview-v1', paths: ['/api/v1/connect-giving-preview'], dataSource: 'synthetic-static', contract: 'connect.giving-summary.v1' },
@@ -12,6 +12,7 @@ export const FINANCE_ROUTE_MANIFEST = Object.freeze(ROUTES.map((route) => Object
   ...route,
   methods: READ_METHODS,
   paths: Object.freeze([...route.paths]),
+  ...(route.optionalQueryBudgets ? { optionalQueryBudgets: Object.freeze([...route.optionalQueryBudgets]) } : {}),
 })));
 
 const ROUTE_BY_PATH = new Map(

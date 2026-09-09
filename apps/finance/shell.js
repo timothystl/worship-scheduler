@@ -5,6 +5,7 @@ import { buildSummaryV1, FINANCE_SUMMARY_CONTRACT, readSyntheticSummary } from '
 import { isFinanceMethodAllowed, resolveFinanceRoute } from './route-manifest.js';
 import { FINANCE_PARITY_SECTIONS, resolveFinanceSection } from './parity-manifest.js';
 import { buildFinancialHealthView } from './health-view-model.js';
+import { buildChurchReportView, readSyntheticChurchReport } from './church-report-service.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = FINANCE_SUMMARY_CONTRACT;
@@ -46,13 +47,27 @@ function formatSignedCents(value) {
   return value < 0 ? `−${amount}` : amount;
 }
 
+function escapeHtml(value) {
+  const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return [...String(value)].map((character) => entities[character] || character).join('');
+}
+
 function renderSectionNav(activeSection) {
   return FINANCE_PARITY_SECTIONS.map((section) =>
     `<a href="/?section=${section.id}"${section.id === activeSection.id ? ' aria-current="page"' : ''}>${section.label}</a>`
   ).join('');
 }
 
-function renderSectionBody(section, summary, giving) {
+function renderChurchRows(rows) {
+  return rows.map((row) => {
+    const variance = row.classification === 'Income'
+      ? row.own_actual_cents - row.own_budget_cents
+      : row.own_budget_cents - row.own_actual_cents;
+    return `<tr><td>${escapeHtml(row.classification)}</td><td>${escapeHtml(row.account_name)}</td><td>${formatCents(row.own_actual_cents)}</td><td>${formatCents(row.own_budget_cents)}</td><td>${formatSignedCents(variance)}</td></tr>`;
+  }).join('');
+}
+
+function renderSectionBody(section, summary, giving, churchReport) {
   if (section.id === 'health') {
     const health = buildFinancialHealthView(summary, giving);
     return `<section aria-label="Synthetic financial health">
@@ -65,6 +80,15 @@ function renderSectionBody(section, summary, giving) {
       <div class="decision-grid">${health.decisions.map((decision) => `<div class="decision"><small>${decision.stream}</small><b>${decision.authority}</b><span>${decision.action}</span></div>`).join('')}</div>
     </section>`;
   }
+  if (section.id === 'church') {
+    const report = buildChurchReportView(churchReport);
+    const variance = report.totals.actualNetCents - report.totals.budgetNetCents;
+    return `<section class="report" aria-label="Synthetic Church Report">
+      <div class="section-heading"><div><div class="eyebrow">Church Report</div><h2>Fiscal year ${report.fiscalYear}</h2></div><span class="badge">Synthetic staging</span></div>
+      <div class="grid"><div class="card"><small>Income</small><strong>${formatCents(report.totals.incomeActualCents)}</strong></div><div class="card"><small>Expenses</small><strong>${formatCents(report.totals.expenseActualCents)}</strong></div><div class="card"><small>Net result</small><strong>${formatSignedCents(report.totals.actualNetCents)}</strong><span>Budget ${formatSignedCents(report.totals.budgetNetCents)} · variance ${formatSignedCents(variance)}</span></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Classification</th><th>Account</th><th>Actual</th><th>Budget</th><th>Favorable variance</th></tr></thead><tbody>${renderChurchRows([...report.income, ...report.expenses])}</tbody></table></div>
+    </section>`;
+  }
   return `<section class="parity" aria-label="${section.label} staging scaffold">
     <h2>${section.label}</h2>
     <p>This familiar workspace is retained in the parity plan. Its production workflow and data are not connected to staging.</p>
@@ -72,7 +96,7 @@ function renderSectionBody(section, summary, giving) {
   </section>`;
 }
 
-function renderShell(metadata, summary, giving, section) {
+function renderShell(metadata, summary, giving, section, churchReport) {
   const release = `${metadata.version} · ${metadata.releaseChannel}`;
   return `<!doctype html>
 <html lang="en">
@@ -100,6 +124,11 @@ function renderShell(metadata, summary, giving, section) {
     .decision-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:.75rem; margin-top:.75rem; }
     .decision { padding:1rem; border-left:3px solid #80c7ff; background:#102536; border-radius:.35rem; }
     .decision small, .decision b { display:block; }
+    .table-wrap { overflow-x:auto; margin-top:1rem; border:1px solid #27425a; border-radius:.65rem; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    th, td { padding:.7rem .8rem; border-bottom:1px solid #27425a; text-align:left; }
+    th:nth-child(n+3), td:nth-child(n+3) { text-align:right; font-variant-numeric:tabular-nums; }
+    th { color:#80c7ff; background:#102536; }
     nav { display:flex; gap:.45rem; overflow-x:auto; padding:.4rem 0 1rem; margin-top:1.25rem; border-bottom:1px solid #27425a; }
     nav a { flex:0 0 auto; padding:.55rem .75rem; border-radius:.45rem; color:#b8c8d6; text-decoration:none; font-size:.82rem; }
     nav a[aria-current="page"] { background:#17486a; color:#fff; }
@@ -116,7 +145,7 @@ function renderShell(metadata, summary, giving, section) {
     <p>The rebuilt Finance application boundary is running. Business data and production workflows are not connected in this alpha release.</p>
     <div class="status">Environment ready · no production writers attached</div>
     <nav aria-label="Finance workspace">${renderSectionNav(section)}</nav>
-    ${renderSectionBody(section, summary, giving)}
+    ${renderSectionBody(section, summary, giving, churchReport)}
     <p><small>All values shown here are deterministic synthetic staging fixtures. Giving is the committed Connect contract example, validated locally with no network call.</small></p>
     <footer>${release}</footer>
   </main>
@@ -191,7 +220,11 @@ export default {
       if (request.method === 'HEAD') return response(null, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       try {
         const section = resolveFinanceSection(url.searchParams.get('section'));
-        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB), SYNTHETIC_GIVING, section), {
+        const summary = section.id === 'health' || section.id === 'church'
+          ? await readSyntheticSummary(env.FINANCE_DB) : null;
+        const churchReport = section.id === 'church'
+          ? await readSyntheticChurchReport(env.FINANCE_DB) : null;
+        return response(renderShell(metadata, summary, SYNTHETIC_GIVING, section, churchReport), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
       } catch {
