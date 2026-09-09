@@ -326,10 +326,12 @@ var FIN_TOPNAV_ITEMS = [
 ];
 var _finActiveNavId = 'health';
 function renderFinanceSubnav() {
-  // Compensation tier only ever gets the Compensation section (see showTab's finSection
-  // override) — offering the rest of the sub-nav would just be dead buttons that 403 on
-  // click, so it's filtered out of the bar entirely rather than merely disabled.
-  var items = _userRole === 'compensation'
+  // Compensation tier and council both only ever get the Compensation section (see showTab's
+  // finSection override) — offering the rest of the sub-nav would just be dead buttons that
+  // 403 on click (council's 'finance' permission is hardcoded to this one sub-tab server-side,
+  // see isCompensationPlannerRequest in api-chms.js), so it's filtered out of the bar entirely
+  // rather than merely disabled.
+  var items = (_userRole === 'compensation' || _userRole === 'council')
     ? FIN_TOPNAV_ITEMS.filter(function(i) { return i.id === 'compensation'; })
     : FIN_TOPNAV_ITEMS;
   return items.map(function(item) {
@@ -420,9 +422,11 @@ function showTab(name, finSection) {
     // browser-history entry from before that change would otherwise land on a section id no
     // panel answers to, leaving the tab blank.
     if (finSection === 'overview') finSection = 'health';
-    // Compensation tier can only ever land on the Compensation sub-tab — see finNavGo/
-    // renderFinanceSubnav, which don't offer it any other section to click into either.
-    if (_userRole === 'compensation') finSection = 'compensation';
+    // Compensation tier and council can only ever land on the Compensation sub-tab — see
+    // finNavGo/renderFinanceSubnav, which don't offer either role any other section to click
+    // into. Council still keeps its normal navigation everywhere else in the app (People,
+    // Giving totals, Reports); only the Finance tab itself is narrowed.
+    if (_userRole === 'compensation' || _userRole === 'council') finSection = 'compensation';
     if (finSection) _finActiveNavId = finSection;
     // P25-E: loadFinance()/finShowSection() live in the lazily-loaded finance bundle now — see
     // ensureFinanceModuleLoaded's own comment.

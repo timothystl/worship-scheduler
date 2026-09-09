@@ -102,15 +102,21 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   // all — its former register-edit access was removed per the Preparation 5 governance
   // decision (issue #844): Council is a reporting/oversight tier, not an operational one, so
   // register stays editable (or even viewable) only for whoever actually runs it
-  // (finance/staff/admin) — plus the board-facing financial picture: the Finance workspace and
-  // the Reports tab, but giving at 'anon' only, so a council member sees what the congregation
-  // gave and never who gave it.
+  // (finance/staff/admin) — plus the Reports tab, and giving at 'anon' only, so a council
+  // member sees what the congregation gave and never who gave it.
+  //
+  // finance: 'edit' here does NOT open the whole Finance workspace to council the way it does
+  // for finance/staff — council's `finance` item is hardcoded (see isCompensationPlannerRequest
+  // in api-chms.js) to the Compensation Planner sub-tab only, nothing else in Finance, same
+  // narrowing the dedicated `compensation` role gets. 'edit' is what lets a council member save
+  // their own raise-plan toggles/percentages there (see api-finance.js); dial it to 'view' to
+  // make that tab read-only for council, or 'none' to remove it from their sidebar entirely.
   //
   // audit: 'view' was removed from staff per the same Preparation 5 decision (#844) — the
   // Audit Log is now admin-only for every configurable role, not just council/finance/member.
   finance: { giving: 'edit', tuitionaid: 'edit', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
   staff:   { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'edit', followups: 'edit', audit: 'none', register: 'edit', reports: 'view' },
-  council: { giving: 'anon', tuitionaid: 'none', finance: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
+  council: { giving: 'anon', tuitionaid: 'none', finance: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' },
   member:  { giving: 'none', tuitionaid: 'none', finance: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' },
 };
 

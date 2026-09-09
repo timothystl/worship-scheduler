@@ -332,6 +332,44 @@ describe('§10.10 — a non-admin sees every figure and can change nothing', () 
   });
 });
 
+describe('council — can steer the plan, never the seed data', () => {
+  it('leaves the custom/scale percentage inputs enabled', () => {
+    ctx._userRole = 'council';
+    const html = render(ctx, 'plan');
+    const pct = html.split('<input').slice(1)
+      .filter(c => /fin-comp-custom-pct|fin-comp-scale-pct/.test(c.slice(0, c.indexOf('>'))));
+    expect(pct.length).toBe(2);
+    expect(pct.every(c => !/disabled/.test(c.slice(0, c.indexOf('>'))))).toBe(true);
+  });
+
+  it('still disables every roster/seed input — name, position, current pay, hand-typed override', () => {
+    ctx._userRole = 'council';
+    const html = render(ctx, 'plan');
+    const seedInputs = html.split('<input').slice(1)
+      .map(c => c.slice(0, c.indexOf('>')))
+      .filter(t => /fin-comp-name-|fin-comp-position-|fin-comp-curpay-|fin-comp-salary-|fin-comp-years-/.test(t));
+    expect(seedInputs.length).toBeGreaterThan(0);
+    expect(seedInputs.filter(t => !/disabled/.test(t))).toEqual([]);
+  });
+
+  it('hides admin-only actions the same as any other non-editor', () => {
+    ctx._userRole = 'council';
+    const plan = render(ctx, 'plan');
+    expect(plan).not.toContain('finCompAddWorker()');
+    expect(plan).not.toContain('finCompSendToBudget()');
+  });
+
+  it('shows a note that saving here never touches the real roster', () => {
+    ctx._userRole = 'council';
+    expect(render(ctx, 'plan')).toContain('never the church&#39;s actual roster');
+  });
+
+  it('an admin gets no such note', () => {
+    ctx._userRole = 'admin';
+    expect(render(ctx, 'plan')).not.toContain('never the church&#39;s actual roster');
+  });
+});
+
 describe('the five views', () => {
   it('renders each one, with its own sub-nav pill active', () => {
     for (const [view, marker] of [

@@ -27,10 +27,13 @@ describe('resolveRolePermissions', () => {
     expect(d.staff.audit).toBe('none');
     expect(d.staff.giving).toBe('none');
     // council = no register access at all (its edit access was removed per the same #844
-    // decision: Council is a reporting/oversight tier, not an operational one), plus the
-    // board-facing financial picture: Finance + Reports to read, and giving only in aggregate.
+    // decision: Council is a reporting/oversight tier, not an operational one), plus Reports to
+    // read and giving only in aggregate. `finance` defaults to 'edit' so a council member can
+    // save their own compensation plan out of the box, but — unlike finance/staff — this does
+    // NOT open the whole Finance workspace: it is hardcoded server-side to the Compensation
+    // Planner sub-tab only (see isCompensationPlannerRequest in api-chms.js).
     expect(d.council.register).toBe('none');
-    expect(d.council.finance).toBe('view');
+    expect(d.council.finance).toBe('edit');
     expect(d.council.reports).toBe('view');
     expect(d.council.giving).toBe('anon');
     // member = nothing extra
