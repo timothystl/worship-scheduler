@@ -25,3 +25,7 @@ live authorization, production health, or business-data correctness.
 
 Before a production release, the dispatch workflow repeats the full suite on the exact approved
 `main` SHA. Post-release checks must remain bounded and must not expose sensitive records.
+
+Pull-request CI also packages all three Worker configurations with Wrangler `--dry-run`. This
+checks production, Connect staging, and Finance staging configuration/binding resolution without
+uploading or changing a Worker.
