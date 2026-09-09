@@ -20,7 +20,10 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(config.vars.ENVIRONMENT).toBe('staging');
     expect(config.workers_dev).toBe(false);
     expect(config.preview_urls).toBe(false);
-    for (const forbidden of ['d1_databases', 'kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers', 'routes']) {
+    expect(config.routes).toEqual([
+      { pattern: 'finance-staging.timothystl.org', custom_domain: true },
+    ]);
+    for (const forbidden of ['d1_databases', 'kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers']) {
       expect(config[forbidden], `${forbidden} must not exist in the alpha shell`).toBeUndefined();
     }
   });
