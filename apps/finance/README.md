@@ -36,6 +36,7 @@ the migration does not copy production data or authorize a new writer.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
 - `connect-giving-consumer.js` — fail-closed parser for the proposed aggregate Giving contract.
 - `query-budget.js` — named, fail-closed D1 read budgets for independently observable routes.
+- `summary-service.js` — synthetic D1 read and `finance.summary.v1` contract assembly boundary.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
 reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
