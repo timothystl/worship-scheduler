@@ -76,7 +76,7 @@ The target architecture has four staff products: Church Website, Connect, Financ
 - Preparation 0 is complete.
 - Preparation 1 is closed by Andrew's acceptance of remaining stabilization uncertainty.
 - Preparation 2's seven-day usage baseline is waived and closed.
-- Preparation 3 is in progress. The repeatable `tlc-volunteer-db` exercise passed locally and
+- The CHMS retained-backup packet passed its recorded checks. The repeatable `tlc-volunteer-db` exercise passed locally and
   in GitHub Actions, matching 117 schema objects, 60 table counts, 36 numeric financial controls,
   integrity and foreign keys before deleting plaintext and disposable copies. On September 8, the
   first encrypted source-and-D1 package passed a restricted-SharePoint upload/download checksum
@@ -84,22 +84,25 @@ The target architecture has four staff products: Church Website, Connect, Financ
   (112,920,749 bytes) from R2 `tlc-chms-photos`, and a Cloudflare configuration/secret-name
   inventory. Its local encryption/decryption, Git, D1 and per-object checks passed. A downloaded
   SharePoint copy then matched the original encrypted package by size and SHA-256. A disposable R2
-  restore remains open. The same recovery key is held separately. Issue #846 records a restricted
+  restore was not separately demonstrated. The same recovery key is held separately. Issue #846 records a restricted
   SharePoint folder as the primary independent destination and an encrypted local or external
-  drive as the secondary copy, alongside the approved cadence and retention. It still tracks the
-  exact folder, encryption implementation, alternate operator, and retained-copy evidence.
+  drive as the secondary copy, alongside the approved cadence and retention. Andrew accepted sole
+  operator continuity and directed that no alternate operator or further CHMS backup step block
+  preparation. Do not turn those accepted limitations into passed tests.
 - The approved myMDO authorization migrations are live and synchronized to source through
-  childcare-portal PR #328. Do not reapply them. Cron, advisor and function-drift follow-up remains
-  open. Andrew approved the Preparation 5 role defaults with granular per-user checkboxes: presets
+  childcare-portal PR #328. Do not reapply them. Migration-ledger, cron, advisor, function-drift,
+  and governance follow-ups closed in #837 and #840–844. Andrew approved the Preparation 5 role defaults with granular per-user checkboxes: presets
   seed least-privilege defaults, authorized administrators can narrow or deliberately extend grants,
-  and high-risk permissions remain explicit, server-enforced and audited. Named assignments, live
-  Connect overrides, myMDO enforcement evidence, and report/data ownership remain open in #844.
+  and high-risk permissions remain explicit, server-enforced and audited. Current assignments were
+  retained by owner decision, and #844 closes Preparation 5. The Council compensation workspace is
+  a separate product addition rather than preparation work.
 - The deployment-safety part of Implementation 1 was pulled forward and completed in PR #831.
   On September 9 Andrew authorized beginning the overhaul with non-destructive parallel staging.
-  The first Finance slice is a separately deployable `1.0.0-alpha.1` shell with no data, auth,
-  outbound, cron or production bindings. That authorization does not permit Finance data movement,
+  Finance staging is now `1.0.0-alpha.3`: protected by Worker-level Access, backed by a dedicated
+  synthetic-only D1, export/restore tested, and read-only. That authorization does not permit Finance data movement,
   shared-auth rollout, production routes or competing writers without a separately reviewed slice.
-- Preparation 6 documentation reset is underway. Finance extraction, repository renames,
+- Preparation 6 documentation reset is underway; the current Markdown path dispositions are
+  recorded in the private architecture repository. Finance extraction, repository renames,
   shared-auth rollout, payroll movement, and documentation deletion remain blocked until its
   signoff. Preparation 7 is the formal go/no-go for the broader implementation sequence.
 
