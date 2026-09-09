@@ -89,3 +89,37 @@ describe('applyPermissionUI — Directory (People/Households/Organizations) edit
     editEls().forEach(el => expect(el.style.display).not.toBe('none'));
   });
 });
+
+// The actual reported bug (2026-09-09): the person profile's inline per-field editor
+// (pvfCanEdit -- click-to-edit pencils, notes, tags, photo) checked only _userRole !== 'member',
+// bypassing the 'directory' item entirely -- a council view-only user got a working-looking
+// pencil on every field that always 403'd on save (see role-labels-council.test.js for the
+// server-side pin of the same bug). pvfCanEdit now delegates to permEdit('directory').
+describe('pvfCanEdit() -- the person profile inline-edit engine', () => {
+  it('is false for council at its default (directory: view)', () => {
+    ctx._userRole = 'council';
+    ctx.applyPermissionUI({ giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', directory: 'view', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
+    expect(ctx.pvfCanEdit()).toBe(false);
+  });
+
+  it('is true for council once an admin grants directory: edit', () => {
+    ctx._userRole = 'council';
+    ctx.applyPermissionUI({ giving: 'anon', tuitionaid: 'none', finance: 'none', compensation: 'edit', budget: 'none', directory: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
+    expect(ctx.pvfCanEdit()).toBe(true);
+  });
+
+  it('is true for finance/staff at their defaults, false for member', () => {
+    ctx._userRole = 'finance';
+    ctx.applyPermissionUI({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', directory: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
+    expect(ctx.pvfCanEdit()).toBe(true);
+    ctx._userRole = 'member';
+    ctx.applyPermissionUI({ giving: 'none', tuitionaid: 'none', finance: 'none', compensation: 'none', budget: 'none', directory: 'none', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'none' });
+    expect(ctx.pvfCanEdit()).toBe(false);
+  });
+
+  it('is always true for admin, regardless of the (irrelevant) permissions object', () => {
+    ctx._userRole = 'admin';
+    ctx.applyPermissionUI({ directory: 'none' });
+    expect(ctx.pvfCanEdit()).toBe(true);
+  });
+});

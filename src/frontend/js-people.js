@@ -712,8 +712,9 @@ function showProfile(p) {
       photoEl.style.background = pvTint.bg;
     }
     // Photo editing is now a single discreet edit button + on-click menu
-    // (was four always-on corner buttons). Members never see it.
-    var canEditPhoto = (_userRole !== 'member');
+    // (was four always-on corner buttons). Gated on 'directory' like the rest of the
+    // profile's write affordances, not just membership.
+    var canEditPhoto = permEdit('directory');
     var overlayEl = document.getElementById('pv-photo-overlay');
     if (overlayEl) overlayEl.style.display = canEditPhoto ? 'flex' : 'none';
     var editBtn = document.getElementById('pv-photo-edit-btn');
@@ -740,7 +741,7 @@ function showProfile(p) {
       + (p.email ? '<a class="pv2-hdr-btn solid" href="mailto:'+esc(p.email)+'">&#9993; Email</a>' : '');
   }
   var saEl = document.getElementById('pv-status-actions');
-  if (saEl && _userRole !== 'member') {
+  if (saEl && permEdit('directory')) {
     var pStatus = p.status || 'active';
     var inviteBtn = (mt.toLowerCase() === 'member' && pStatus === 'active' && p.email)
       ? '<button class="btn-secondary role-admin role-staff" style="font-size:.76rem;padding:3px 9px;color:var(--sky-steel);" onclick="sendConnectInvite('+p.id+')">&#128231; Invite to Connect</button>'
@@ -790,9 +791,14 @@ function pvFieldHtml(label, html) {
 // ── PROFILE REDESIGN: inline per-field edit engine ─────────────────────
 // Registry of editable fields on the current person, keyed by field id. Rebuilt on each
 // showProfile() render. Each cfg drives the read-only display, the inline editor, and the
-// single-field PATCH save. members never see editors (canEdit gate below).
+// single-field PATCH save. Gated on the 'directory' permission item, same as the rest of the
+// person/household/organization write affordances (.require-edit in applyPermissionUI) --
+// this bypassed that item entirely until 2026-09-09, checking only _userRole !== 'member',
+// so a role holding directory:'view' (council's own default) still got a working pencil-edit
+// on every profile field even though the server-side PATCH gate in api-chms.js correctly
+// rejected it -- a working-looking control that always failed on save.
 var _pvFields = {};
-function pvfCanEdit() { return _userRole !== 'member'; }
+function pvfCanEdit() { return permEdit('directory'); }
 function pvfYearsAgo(v) {
   if (!v) return '';
   // A month/day-only date parses as a real year 1, which rendered as "2024 years ago"
@@ -1119,12 +1125,15 @@ function pvfTagsBody(p) {
   // listing every unapplied tag inline.
   var chips = (p.tags||[]).map(function(t){
     return '<span class="pv2-chip">' + esc(t.name)
-      + (_userRole !== 'member' ? '<button class="pv2-chip-x" onclick="pvfRemoveTag(' + t.id + ')">✕</button>' : '')
+      + (permEdit('directory') ? '<button class="pv2-chip-x" onclick="pvfRemoveTag(' + t.id + ')">✕</button>' : '')
       + '</span>';
   }).join('');
   var out = '<div style="display:flex;flex-wrap:wrap;gap:8px;' + (chips ? 'margin-bottom:12px;' : '') + '">'
     + (chips || '<span style="color:var(--faint);font-size:13px;font-style:italic;">No tags</span>') + '</div>';
-  if (_userRole !== 'member') {
+  // Tag add/remove PATCHes people/{id} (see pvfAddTag/pvfRemoveTag), the same segment the
+  // 'directory' item gates -- so this affordance follows it, not the coarser member/non-member
+  // split (member is separately excluded since its directory level is forced 'none').
+  if (permEdit('directory')) {
     var curIds = (p.tags||[]).map(function(t){ return t.id; });
     var avail = (typeof allTags !== 'undefined' ? allTags : []).filter(function(t){ return curIds.indexOf(t.id) < 0; });
     if (!avail.length) {
@@ -1255,7 +1264,9 @@ function pvfRenderFollowups(personId) {
 }
 function pvfNotesBody(p) {
   var has = (p.notes||'').trim();
-  if (_userRole === 'member') {
+  // PATCHes people/{id} on save (pvfSaveNotesInline) -- gated on 'directory' like the rest of
+  // the inline profile editor, not just membership.
+  if (!permEdit('directory')) {
     return '<div style="font-size:14px;color:var(--charcoal);white-space:pre-wrap;line-height:1.5;">'
       + (has ? esc(p.notes) : '<span style="color:var(--faint);font-style:italic;">No notes</span>') + '</div>';
   }
@@ -1264,7 +1275,7 @@ function pvfNotesBody(p) {
     + (has ? esc(p.notes) : '<span style="color:var(--faint);font-style:italic;">Click to add a note…</span>') + '</div></div>';
 }
 function pvfEditNotesInline() {
-  if (_userRole === 'member') return;
+  if (!permEdit('directory')) return;
   var body = document.getElementById('pvf-body-notes'); if (!body) return;
   var p = _currentPvPerson;
   body.innerHTML = '<textarea id="pvf-notes-ta" rows="4" class="pv2-inp" style="max-width:100%;resize:vertical;line-height:1.5;">' + esc(p.notes||'') + '</textarea>'
@@ -1318,7 +1329,8 @@ function pvfRenderInfo(p) {
     : '';
   var familyCard = pvfCard('family', 'Family & Household', { headerBtns: addBtn, body: pvfFamilyBody(p) });
 
-  var breezeBtn = _userRole === 'member' ? ''
+  // Posts people/{id}/push-to-breeze -- same segment the 'directory' item gates server-side.
+  var breezeBtn = !permEdit('directory') ? ''
     : '<button class="btn-secondary role-admin role-staff" style="font-size:.72rem;padding:3px 9px;" onclick="pushPersonToBreeze(' + p.id + ')">&#8679; Breeze</button>';
   // Members get name / contact / family / location and nothing else. The server already strips
   // the underlying data (memberSafeView), so these cards rendered as empty shells with real
@@ -1485,7 +1497,7 @@ function triggerPhotoUpload() {
 var _pvPhotoState = { hasPhoto: false, hasHousehold: false };
 function togglePvPhotoMenu(e) {
   if (e) { e.stopPropagation(); if (e.preventDefault) e.preventDefault(); }
-  if (_userRole === 'member') return;
+  if (!permEdit('directory')) return;
   var menu = document.getElementById('pv-photo-menu');
   if (!menu) return;
   if (menu.style.display !== 'none') { closePvPhotoMenu(); return; }

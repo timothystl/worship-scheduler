@@ -4037,8 +4037,47 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
   // QuickBooks import/sync. A plan can be "committed" into a future fiscal year's real budget
   // (finance_church_entries, source='plan_committed') — resolveChurchYearPrecedence() ranks that
   // source lowest, so it's a placeholder only until real synced/imported data exists. ──────────
+  //
+  // council (granted 'budget':'edit' — see api-utils.js, 'none' by default) may hand-correct a
+  // planned amount the same way finance/planning/church/override lets admin do, but never
+  // touches the shared finance_budget_plan table: their edits fork into their own chms_config
+  // key on first save (councilBudgetKey below), the same pattern finance/planning/salary uses
+  // for council's raise plan, so one council member's what-if numbers can never overwrite the
+  // real admin/finance plan or another council member's (Andrew, 2026-09-09). generate/
+  // generate-all/commit/delete stay admin-only — those regenerate or finalize the shared plan
+  // wholesale, unlike a single hand-typed correction, mirroring the same seed-data-vs-steering
+  // split the salary planner's COUNCIL_EDITABLE_FIELDS already draws.
+  function councilBudgetKey(username) {
+    return 'finance_budget_council_' + String(username || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  }
   if (seg === 'finance/planning/church' && method === 'GET') {
     const rows = (await db.prepare('SELECT * FROM finance_budget_plan ORDER BY category ASC, fiscal_year ASC').all()).results || [];
+    if (role === 'council') {
+      let username = '';
+      try { username = ((await getAuthInfo(req, env)) || {}).username || ''; } catch { username = ''; }
+      if (username) {
+        const overlayRow = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(councilBudgetKey(username)).first();
+        if (overlayRow) {
+          let overlay = null;
+          try { overlay = JSON.parse(overlayRow.value); } catch { overlay = null; }
+          if (overlay && typeof overlay === 'object') {
+            const byKey = {};
+            rows.forEach((r, i) => { byKey[r.category + '|' + r.fiscal_year] = i; });
+            for (const [fy, byCategory] of Object.entries(overlay)) {
+              if (!byCategory || typeof byCategory !== 'object') continue;
+              for (const [category, ov] of Object.entries(byCategory)) {
+                const k = category + '|' + fy;
+                if (byKey[k] !== undefined) {
+                  rows[byKey[k]] = Object.assign({}, rows[byKey[k]], ov, { fiscal_year: Number(fy), category, basis: 'manual' });
+                } else {
+                  rows.push(Object.assign({ category, fiscal_year: Number(fy), basis: 'manual', growth_pct: null, base_amount_cents: null }, ov));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     return json({ rows });
   }
 
@@ -4107,11 +4146,11 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
   // (each row keeps its own fiscal_year, e.g. all rows for the same target year), rather than
   // one request per edited line.
   if (seg === 'finance/planning/church/override-bulk' && method === 'POST') {
-    if (!isAdmin) return json({ error: 'Access denied: editing budget plans requires admin access' }, 403);
+    if (!isAdmin && role !== 'council') return json({ error: 'Access denied: editing budget plans requires admin access' }, 403);
     const b = await req.json().catch(() => ({}));
     const rows = Array.isArray(b.rows) ? b.rows : [];
     if (!rows.length) return json({ error: 'No rows to save' }, 400);
-    const ops = [];
+    const parsed = [];
     for (const r of rows) {
       const category = String(r.category || '').trim();
       const fiscalYear = parseInt(r.fiscal_year, 10);
@@ -4120,14 +4159,33 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
       // nearest dollar before converting to cents rather than trusting a fractional client value.
       const amountCents = Math.round(Number(r.planned_amount)) * 100;
       if (!Number.isFinite(amountCents)) return json({ error: `Invalid amount for ${category}` }, 400);
-      ops.push(db.prepare(
-        `INSERT INTO finance_budget_plan (category,classification,fiscal_year,planned_amount_cents,basis,notes,updated_at)
-         VALUES (?,?,?,?,'manual',?,datetime('now'))
-         ON CONFLICT(category,fiscal_year) DO UPDATE SET
-           classification=excluded.classification, planned_amount_cents=excluded.planned_amount_cents, basis='manual',
-           growth_pct=NULL, base_amount_cents=NULL, notes=excluded.notes, updated_at=excluded.updated_at`
-      ).bind(category, r.classification || 'Expenses', fiscalYear, amountCents, r.notes || ''));
+      parsed.push({ category, fiscalYear, classification: r.classification || 'Expenses', amountCents, notes: r.notes || '' });
     }
+    if (role === 'council') {
+      let username = '';
+      try { username = ((await getAuthInfo(req, env)) || {}).username || ''; } catch { username = ''; }
+      if (!username) return json({ error: 'Access denied: this account has no username to save under' }, 403);
+      const key = councilBudgetKey(username);
+      const existingRow = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(key).first();
+      let overlay = {};
+      if (existingRow) { try { overlay = JSON.parse(existingRow.value) || {}; } catch { overlay = {}; } }
+      for (const p of parsed) {
+        const fyKey = String(p.fiscalYear);
+        overlay[fyKey] = Object.assign({}, overlay[fyKey]);
+        overlay[fyKey][p.category] = { planned_amount_cents: p.amountCents, classification: p.classification, notes: p.notes };
+      }
+      await db.prepare(
+        `INSERT INTO chms_config (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+      ).bind(key, JSON.stringify(overlay)).run();
+      return json({ ok: true, saved: parsed.length });
+    }
+    const ops = parsed.map((p) => db.prepare(
+      `INSERT INTO finance_budget_plan (category,classification,fiscal_year,planned_amount_cents,basis,notes,updated_at)
+       VALUES (?,?,?,?,'manual',?,datetime('now'))
+       ON CONFLICT(category,fiscal_year) DO UPDATE SET
+         classification=excluded.classification, planned_amount_cents=excluded.planned_amount_cents, basis='manual',
+         growth_pct=NULL, base_amount_cents=NULL, notes=excluded.notes, updated_at=excluded.updated_at`
+    ).bind(p.category, p.classification, p.fiscalYear, p.amountCents, p.notes));
     await db.batch(ops);
     return json({ ok: true, saved: ops.length });
   }
@@ -4510,13 +4568,29 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
   // Manual override for a single category/year — always wins over whatever finance/planning/
   // church/generate previously computed for that one year.
   if (seg === 'finance/planning/church/override' && method === 'POST') {
-    if (!isAdmin) return json({ error: 'Access denied: editing budget plans requires admin access' }, 403);
+    if (!isAdmin && role !== 'council') return json({ error: 'Access denied: editing budget plans requires admin access' }, 403);
     const b = await req.json().catch(() => ({}));
     const category = String(b.category || '').trim();
     const fiscalYear = parseInt(b.fiscal_year, 10);
     if (!category || !Number.isFinite(fiscalYear)) return json({ error: 'category and fiscal_year are required' }, 400);
     const amountCents = Math.round(Number(b.planned_amount) * 100);
     if (!Number.isFinite(amountCents)) return json({ error: 'Invalid planned_amount' }, 400);
+    if (role === 'council') {
+      let username = '';
+      try { username = ((await getAuthInfo(req, env)) || {}).username || ''; } catch { username = ''; }
+      if (!username) return json({ error: 'Access denied: this account has no username to save under' }, 403);
+      const key = councilBudgetKey(username);
+      const existingRow = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(key).first();
+      let overlay = {};
+      if (existingRow) { try { overlay = JSON.parse(existingRow.value) || {}; } catch { overlay = {}; } }
+      const fyKey = String(fiscalYear);
+      overlay[fyKey] = Object.assign({}, overlay[fyKey]);
+      overlay[fyKey][category] = { planned_amount_cents: amountCents, classification: b.classification || 'Expenses', notes: b.notes || '' };
+      await db.prepare(
+        `INSERT INTO chms_config (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+      ).bind(key, JSON.stringify(overlay)).run();
+      return json({ ok: true });
+    }
     await db.prepare(
       `INSERT INTO finance_budget_plan (category,classification,fiscal_year,planned_amount_cents,basis,notes,updated_at)
        VALUES (?,?,?,?,'manual',?,datetime('now'))

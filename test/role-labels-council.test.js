@@ -70,6 +70,22 @@ describe('the "directory" permission item gates People/Households/Organizations 
     expect(body.error).toMatch(/directory/);
   });
 
+  // The actual reported bug (2026-09-09): the person profile's inline field editor, notes
+  // editor, tag add/remove, photo editor and status actions (archive/deceased/invite) all PATCH
+  // or POST this same route. They only checked _userRole !== 'member' client-side (see
+  // js-people.js/js-households.js), so a view-only 'directory' role saw a working-looking pencil
+  // that always 403'd here on save. This pins the server side of that fix, on the exact method
+  // (PATCH) the profile's inline editor actually uses.
+  it('blocks a council account from PATCHing a person (the profile inline-edit route)', async () => {
+    const url = new URL('https://connect.timothystl.org/admin/api/people/1');
+    const res = await handleChmsApi(
+      new Request(url, { method: 'PATCH', body: '{"notes":"hi"}' }), makeEnv(), url, 'PATCH', 'people/1', 'council'
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/directory/);
+  });
+
   it('does not block a council account from reading people (GET is unconditional)', async () => {
     const url = new URL('https://connect.timothystl.org/admin/api/people/1');
     const res = await handleChmsApi(
