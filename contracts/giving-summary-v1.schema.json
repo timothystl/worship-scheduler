@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:connect:giving-summary:v1",
+  "title": "Connect aggregate Giving summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "dataClassification", "sourceProduct", "consumerProduct", "currency", "period", "generatedAt", "sourceThrough", "funds", "totals", "reconciliation"],
+  "properties": {
+    "contract": { "const": "connect.giving-summary.v1" },
+    "dataClassification": { "const": "aggregate" },
+    "sourceProduct": { "const": "connect" },
+    "consumerProduct": { "const": "finance" },
+    "currency": { "const": "USD" },
+    "period": { "$ref": "#/$defs/period" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceThrough": { "type": "string", "format": "date-time" },
+    "funds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fund" }
+    },
+    "totals": { "$ref": "#/$defs/amounts" },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRecordCount", "fundCount", "totalsMatch"],
+      "properties": {
+        "sourceRecordCount": { "type": "integer", "minimum": 0 },
+        "fundCount": { "type": "integer", "minimum": 0 },
+        "totalsMatch": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "cents": { "type": "integer" },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startDate", "endDate"],
+      "properties": {
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" }
+      }
+    },
+    "amounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grossCents", "refundCents", "netCents"],
+      "properties": {
+        "grossCents": { "$ref": "#/$defs/cents" },
+        "refundCents": { "type": "integer", "minimum": 0 },
+        "netCents": { "$ref": "#/$defs/cents" }
+      }
+    },
+    "fund": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fundRef", "fundLabel", "giftCount", "householdCount", "amounts"],
+      "properties": {
+        "fundRef": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fundLabel": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "giftCount": { "type": "integer", "minimum": 0 },
+        "householdCount": { "type": "integer", "minimum": 0 },
+        "amounts": { "$ref": "#/$defs/amounts" }
+      }
+    }
+  }
+}
