@@ -810,9 +810,13 @@ function permGivingNamed() { return permView('giving') && !permGivingAnon(); }
 function applyPermissionUI(perms) {
   _perm = perms || {};
   // Tab / section visibility by VIEW level. require-finance == the Giving/Financial-Reports
-  // area (giving item); tuitionaid/financeov/attendance/register/reports are their own items.
+  // area (giving item); tuitionaid/attendance/register/reports are their own items.
+  // require-financeov (the "Financial Reports" sidebar link itself) is handled separately right
+  // below rather than through this map — it has to show if ANY of finance/compensation/budget
+  // is granted (see financeSegItems in api-chms.js), not 'finance' alone, or a council member
+  // holding only Compensation (or only Budget) could never even click into the tab to reach it.
   var viewMap = {
-    'require-finance': 'giving', 'require-tuitionaid': 'tuitionaid', 'require-financeov': 'finance',
+    'require-finance': 'giving', 'require-tuitionaid': 'tuitionaid',
     'require-attendance': 'attendance', 'require-register': 'register', 'require-reports': 'reports',
   };
   Object.keys(viewMap).forEach(function(cls) {
@@ -820,6 +824,10 @@ function applyPermissionUI(perms) {
     document.querySelectorAll('.' + cls).forEach(function(el) {
       el.style.display = allowed ? '' : 'none';
     });
+  });
+  var canSeeFinanceTab = permView('finance') || permView('compensation') || permView('budget');
+  document.querySelectorAll('.require-financeov').forEach(function(el) {
+    el.style.display = canSeeFinanceTab ? '' : 'none';
   });
   // Surfaces that name an individual giver — batches, transactions, deposits, letters,
   // statements, per-donor reports, the profile Giving tab. Hidden for an anon-giving role,
@@ -831,12 +839,12 @@ function applyPermissionUI(perms) {
     });
   }
   document.body.classList.toggle('perm-giving-anon', permGivingAnon());
-  // The Finance section header shows if ANY of its three items is visible.
+  // The Finance section header shows if ANY of its FOUR items is visible.
   var finHdr = document.getElementById('s-hdr-finance');
-  if (finHdr) finHdr.style.display = (permView('giving') || permView('tuitionaid') || permView('finance')) ? '' : 'none';
+  if (finHdr) finHdr.style.display = (permView('giving') || permView('tuitionaid') || canSeeFinanceTab) ? '' : 'none';
   // Per-feature edit affordances via body classes (see html-head.js CSS). Robust for
   // controls rendered after this runs, unlike a one-time el.style pass.
-  ['giving', 'tuitionaid', 'finance', 'attendance', 'followups', 'register'].forEach(function(it) {
+  ['giving', 'tuitionaid', 'finance', 'compensation', 'budget', 'attendance', 'followups', 'register'].forEach(function(it) {
     document.body.classList.toggle('perm-edit-' + it, permEdit(it));
   });
 }
