@@ -1,0 +1,31 @@
+name: Validate Finance Boundary
+
+on:
+  pull_request:
+    paths:
+      - 'apps/finance/**'
+      - 'contracts/giving-summary-v1.schema.json'
+      - 'contracts/examples/giving-summary-v1.synthetic.json'
+      - 'test/finance-*.test.js'
+      - 'wrangler.finance.staging.jsonc'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validate-finance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  finance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:finance
+      - run: npx wrangler deploy --dry-run --config wrangler.finance.staging.jsonc

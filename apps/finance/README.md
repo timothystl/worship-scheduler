@@ -64,6 +64,16 @@ npx vitest run test/finance-alpha-shell.test.js
 npx wrangler deploy --dry-run --config wrangler.finance.staging.jsonc
 ```
 
+The dedicated local/CI boundary gate is:
+
+```sh
+npm run validate:finance
+```
+
+`.github/workflows/validate-finance.yml` runs the Finance test family and Finance-only Wrangler
+dry run for Finance boundary changes. It has read-only repository permissions and no deployment
+step or Cloudflare credential.
+
 Run the repository's full required validation before merging:
 
 ```sh
