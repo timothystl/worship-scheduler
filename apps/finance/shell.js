@@ -2,6 +2,7 @@ import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from './version.js';
 import givingFixture from '../../contracts/examples/giving-summary-v1.synthetic.json';
 import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
 import { buildSummaryV1, FINANCE_SUMMARY_CONTRACT, readSyntheticSummary } from './summary-service.js';
+import { isFinanceMethodAllowed, resolveFinanceRoute } from './route-manifest.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = FINANCE_SUMMARY_CONTRACT;
@@ -88,19 +89,24 @@ export default {
     const url = new URL(request.url);
     const metadata = releaseMetadata(env);
 
-    if (!['GET', 'HEAD'].includes(request.method)) {
+    if (!isFinanceMethodAllowed(request.method)) {
       return response(JSON.stringify({ error: 'Method not allowed' }), {
         status: 405,
         headers: { 'Content-Type': 'application/json; charset=utf-8', Allow: 'GET, HEAD' },
       });
     }
 
-    if (url.pathname === '/health') {
+    const route = resolveFinanceRoute(url.pathname);
+    if (!route) {
+      return response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
+
+    if (route.id === 'health') {
       const body = request.method === 'HEAD' ? null : JSON.stringify({ status: 'ok', ...metadata });
       return response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
     }
 
-    if (url.pathname === '/api/v1/summary') {
+    if (route.id === 'summary-v1') {
       try {
         const summary = await readSyntheticSummary(env.FINANCE_DB);
         const body = request.method === 'HEAD' ? null : JSON.stringify(buildSummaryV1(metadata, summary));
@@ -116,7 +122,7 @@ export default {
       }
     }
 
-    if (url.pathname === '/api/v1/connect-giving-preview') {
+    if (route.id === 'giving-preview-v1') {
       const body = request.method === 'HEAD' ? null : JSON.stringify(SYNTHETIC_GIVING);
       return response(body, { headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -124,7 +130,7 @@ export default {
       } });
     }
 
-    if (url.pathname === '/api/summary') {
+    if (route.id === 'summary-legacy') {
       try {
         const summary = await readSyntheticSummary(env.FINANCE_DB);
         const body = request.method === 'HEAD' ? null : JSON.stringify({ ...metadata, dataClassification: 'synthetic', summary });
@@ -141,7 +147,7 @@ export default {
       }
     }
 
-    if (url.pathname === '/' || url.pathname === '/index.html') {
+    if (route.id === 'shell') {
       if (request.method === 'HEAD') return response(null, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       try {
         return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB), SYNTHETIC_GIVING), {
@@ -152,6 +158,6 @@ export default {
       }
     }
 
-    return response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    return response('Route manifest mismatch', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   },
 };
