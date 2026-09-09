@@ -35,12 +35,18 @@ the migration does not copy production data or authorize a new writer.
 - `../../wrangler.finance.staging.jsonc` — isolated staging Worker configuration.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
 - `connect-giving-consumer.js` — fail-closed parser for the proposed aggregate Giving contract.
+- `query-budget.js` — named, fail-closed D1 read budgets for independently observable routes.
 
 The Giving consumer validates the closed `connect.giving-summary.v1` shape and its financial
 reconciliation before returning detached aggregate data. Alpha.5 imports and validates only the
 committed synthetic producer example, displays its aggregate net/count, and serves it at
 `/api/v1/connect-giving-preview`. There is no network fetch, scheduled delivery, service binding,
 or credential. Runtime producer transport remains a separately gated step.
+
+The summary read is capped at one four-statement D1 batch. The budget helper rejects unknown
+budgets, excess statements, non-`SELECT` SQL, and incomplete batch results before a response is
+accepted. This makes query amplification a tested application boundary rather than an informal
+expectation.
 
 ## Validate
 

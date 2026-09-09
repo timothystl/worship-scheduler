@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import worker from '../apps/finance/shell.js';
 import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from '../apps/finance/version.js';
+import { FINANCE_QUERY_BUDGETS, runBudgetedReadBatch } from '../apps/finance/query-budget.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'wrangler.finance.staging.jsonc'), 'utf8'));
@@ -26,7 +27,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.5');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.6');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -58,7 +59,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.5',
+      version: '1.0.0-alpha.6',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -70,7 +71,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.5 · alpha');
+    expect(html).toContain('1.0.0-alpha.6 · alpha');
     expect(html).toContain('$200,000');
     expect(html).toContain('$210,000');
     expect(html).toContain('$600,000');
@@ -91,6 +92,19 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(statements.every((sql) => /^SELECT\b/i.test(sql))).toBe(true);
   });
 
+  it('enforces the named summary query budget and read-only statements', async () => {
+    expect(FINANCE_QUERY_BUDGETS).toEqual({ summary: 4 });
+    await expect(runBudgetedReadBatch(env.FINANCE_DB, 'summary', [
+      'SELECT 1', 'SELECT 2', 'SELECT 3', 'SELECT 4', 'SELECT 5',
+    ])).rejects.toThrow('Finance query budget exceeded: summary');
+    await expect(runBudgetedReadBatch(env.FINANCE_DB, 'summary', [
+      'UPDATE finance_settings SET value=value',
+    ])).rejects.toThrow('Finance query budget permits SELECT statements only: summary');
+    await expect(runBudgetedReadBatch(env.FINANCE_DB, 'missing', [])).rejects.toThrow(
+      'Unknown Finance query budget: missing',
+    );
+  });
+
   it('publishes a stable versioned summary contract', async () => {
     statements.length = 0;
     const res = await worker.fetch(new Request('https://finance.test/api/v1/summary'), env);
@@ -100,7 +114,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       contract: 'finance.summary.v1',
       dataClassification: 'synthetic',
       release: {
-        product: 'finance', environment: 'staging', version: '1.0.0-alpha.5',
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.6',
         releaseChannel: 'alpha', releaseSha: 'test-sha',
       },
       summary: {
