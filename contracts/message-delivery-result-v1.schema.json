@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:delivery-adapter:message-result:v1",
+  "title": "Delivery adapter message result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "dataClassification",
+    "sourceProduct",
+    "consumerProduct",
+    "messageId",
+    "idempotencyKey",
+    "recordedAt",
+    "outcome",
+    "retryDisposition"
+  ],
+  "properties": {
+    "contract": { "const": "delivery-adapter.message-result.v1" },
+    "dataClassification": { "const": "restricted-operational" },
+    "sourceProduct": { "const": "delivery-adapter" },
+    "consumerProduct": { "const": "connect" },
+    "messageId": { "type": "string", "pattern": "^msg_[A-Za-z0-9_-]{16,96}$" },
+    "idempotencyKey": { "type": "string", "minLength": 16, "maxLength": 128 },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "outcome": { "enum": ["accepted", "delivered", "temporary-failure", "permanent-failure"] },
+    "retryDisposition": { "enum": ["none", "retry", "dead-letter"] },
+    "providerRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "reasonCode": {
+      "enum": [
+        "provider-unavailable",
+        "rate-limited",
+        "invalid-destination",
+        "recipient-unsubscribed",
+        "content-rejected",
+        "expired-subscription",
+        "unknown"
+      ]
+    },
+    "retryAfter": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "temporary-failure" } }, "required": ["outcome"] },
+      "then": {
+        "properties": {
+          "retryDisposition": { "const": "retry" },
+          "reasonCode": true,
+          "retryAfter": true
+        },
+        "required": ["reasonCode", "retryAfter"]
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "permanent-failure" } }, "required": ["outcome"] },
+      "then": {
+        "properties": {
+          "retryDisposition": { "const": "dead-letter" },
+          "reasonCode": true
+        },
+        "required": ["reasonCode"]
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "enum": ["accepted", "delivered"] } }, "required": ["outcome"] },
+      "then": { "properties": { "retryDisposition": { "const": "none" } } }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "contract": "delivery-adapter.message-result.v1",
+  "dataClassification": "restricted-operational",
+  "sourceProduct": "delivery-adapter",
+  "consumerProduct": "connect",
+  "messageId": "msg_SYNTHETIC_EMAIL_20260909",
+  "idempotencyKey": "SYNTHETIC-EMAIL-DELIVERY-20260909-001",
+  "recordedAt": "2026-09-09T16:00:01Z",
+  "outcome": "accepted",
+  "retryDisposition": "none",
+  "providerRef": "synthetic-provider-reference"
+}

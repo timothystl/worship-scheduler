@@ -1,0 +1,22 @@
+{
+  "contract": "connect.message-delivery.v1",
+  "dataClassification": "restricted-contact",
+  "sourceProduct": "connect",
+  "consumerProduct": "delivery-adapter",
+  "messageId": "msg_SYNTHETIC_EMAIL_20260909",
+  "idempotencyKey": "SYNTHETIC-EMAIL-DELIVERY-20260909-001",
+  "createdAt": "2026-09-09T16:00:00Z",
+  "correlationRef": "synthetic-workflow-001",
+  "recipientRef": "synthetic-recipient-001",
+  "authorization": {
+    "basis": "transactional",
+    "checkedAt": "2026-09-09T15:59:59Z"
+  },
+  "delivery": {
+    "channel": "email",
+    "destination": "synthetic.recipient@example.invalid",
+    "subject": "Synthetic delivery test",
+    "text": "This is synthetic contract data and was not sent.",
+    "html": "<p>This is synthetic contract data and was not sent.</p>"
+  }
+}
