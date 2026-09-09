@@ -31,3 +31,10 @@ never migrations and must never be mistaken for copied production data.
 Cross-product interfaces must define schema/version, authorization, idempotency, failure behavior,
 reconciliation, deprecation, and rollback. No consumer may turn a projection into an authoritative
 writer accidentally.
+
+The first proposed production-shaped interface is
+`contracts/giving-summary-v1.schema.json`. Connect remains its producer and authoritative Giving
+owner; Finance is the consumer. It exposes fund/period aggregates, counts, integer-cent totals, and
+reconciliation state while excluding donor, person, household identifier, address, and contact
+fields. The schema and synthetic example do not create a runtime endpoint or authorize production
+reads.

@@ -1,0 +1,28 @@
+{
+  "contract": "connect.giving-summary.v1",
+  "dataClassification": "aggregate",
+  "sourceProduct": "connect",
+  "consumerProduct": "finance",
+  "currency": "USD",
+  "period": { "startDate": "2026-01-01", "endDate": "2026-01-31" },
+  "generatedAt": "2026-02-01T00:00:00Z",
+  "sourceThrough": "2026-01-31T23:59:59Z",
+  "funds": [
+    {
+      "fundRef": "synthetic-general",
+      "fundLabel": "Synthetic General Fund",
+      "giftCount": 4,
+      "householdCount": 3,
+      "amounts": { "grossCents": 120000, "refundCents": 5000, "netCents": 115000 }
+    },
+    {
+      "fundRef": "synthetic-outreach",
+      "fundLabel": "Synthetic Outreach",
+      "giftCount": 2,
+      "householdCount": 2,
+      "amounts": { "grossCents": 30000, "refundCents": 0, "netCents": 30000 }
+    }
+  ],
+  "totals": { "grossCents": 150000, "refundCents": 5000, "netCents": 145000 },
+  "reconciliation": { "sourceRecordCount": 6, "fundCount": 2, "totalsMatch": true }
+}
