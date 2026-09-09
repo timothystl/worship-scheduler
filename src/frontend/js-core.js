@@ -842,6 +842,13 @@ function applyPermissionUI(perms) {
   // The Finance section header shows if ANY of its FOUR items is visible.
   var finHdr = document.getElementById('s-hdr-finance');
   if (finHdr) finHdr.style.display = (permView('giving') || permView('tuitionaid') || canSeeFinanceTab) ? '' : 'none';
+  // Adding or editing a Person/Household/Organization — every such control in html-tabs.js is
+  // marked .require-edit (see the class audit note above 'directory' in api-utils.js). Directory
+  // reads are unconditional for every non-member role and are NOT gated here.
+  var canEditDirectory = permEdit('directory');
+  document.querySelectorAll('.require-edit').forEach(function(el) {
+    el.style.display = canEditDirectory ? '' : 'none';
+  });
   // Per-feature edit affordances via body classes (see html-head.js CSS). Robust for
   // controls rendered after this runs, unlike a one-time el.style pass.
   ['giving', 'tuitionaid', 'finance', 'compensation', 'budget', 'attendance', 'followups', 'register'].forEach(function(it) {

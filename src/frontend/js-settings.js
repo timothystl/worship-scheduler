@@ -46,12 +46,15 @@ function saveMemberTypes() {
 // financeSegItems in api-chms.js) — Finance Overview is the rest of the workspace (Church
 // Report, Balance Sheet, Daycare Report, Commercial Property, Chart of Accounts, Data &
 // Imports), Compensation is the Compensation Planner, Budget is the Budget/Planning tab.
+// Directory covers adding/editing a person, household or organization record — reads are always
+// open to every non-member role regardless of this setting; only writes are gated by it.
 var ROLE_PERM_ITEMS = [
   { key: 'giving',       label: 'Giving',            editable: true  },
   { key: 'tuitionaid',   label: 'Tuition Aid',       editable: true  },
   { key: 'finance',      label: 'Finance Overview',  editable: true  },
   { key: 'compensation', label: 'Compensation',      editable: true  },
   { key: 'budget',       label: 'Budget',            editable: true  },
+  { key: 'directory',    label: 'Directory (People/Households/Orgs)', editable: true },
   { key: 'attendance',   label: 'Attendance',        editable: true  },
   { key: 'followups',    label: 'Follow-ups',        editable: true  },
   { key: 'audit',        label: 'Audit Log',         editable: false },

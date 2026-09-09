@@ -21,7 +21,7 @@ describe('resolveRolePermissions', () => {
     // finance = giving/tuition/finance/compensation/budget edit + reports view. Finance is
     // split three ways (finance/compensation/budget — see financeSegItems in api-chms.js) but
     // finance role's default is 'edit' on all three, so its effective access is unchanged.
-    expect(d.finance).toEqual({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
+    expect(d.finance).toEqual({ giving: 'edit', tuitionaid: 'edit', finance: 'edit', compensation: 'edit', budget: 'edit', directory: 'edit', attendance: 'none', followups: 'none', audit: 'none', register: 'none', reports: 'view' });
     // staff = attendance/follow-ups/register edit + reports view. Audit is admin-only (removed
     // from staff per the Preparation 5 governance decision, issue #844). All three Finance
     // items default 'none', same as before the split.
@@ -32,6 +32,11 @@ describe('resolveRolePermissions', () => {
     expect(d.staff.finance).toBe('none');
     expect(d.staff.compensation).toBe('none');
     expect(d.staff.budget).toBe('none');
+    // directory (People/Households/Organizations editing) preserves finance/staff's prior
+    // unconditional edit access; only council is narrowed, per Andrew's 2026-09-09 request that
+    // access be limited to exactly what's explicitly granted for every role.
+    expect(d.finance.directory).toBe('edit');
+    expect(d.staff.directory).toBe('edit');
     // council = no register access at all (its edit access was removed per the same #844
     // decision: Council is a reporting/oversight tier, not an operational one), plus Reports to
     // read and giving only in aggregate. Unlike finance/staff, council's plain `finance` item
@@ -46,10 +51,15 @@ describe('resolveRolePermissions', () => {
     expect(d.council.budget).toBe('none');
     expect(d.council.reports).toBe('view');
     expect(d.council.giving).toBe('anon');
+    // council can still browse the directory but no longer add or edit a person/household/
+    // organization by default — it dropped from the old blanket non-member edit access to
+    // view-only when 'directory' became its own item.
+    expect(d.council.directory).toBe('view');
     // member = nothing extra
     expect(d.member.reports).toBe('none');
     expect(d.member.compensation).toBe('none');
     expect(d.member.budget).toBe('none');
+    expect(d.member.directory).toBe('none');
   });
 
   it('applies a partial override without disturbing other items/roles', () => {
