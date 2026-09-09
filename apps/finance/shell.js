@@ -28,7 +28,11 @@ function releaseMetadata(env) {
   };
 }
 
-function renderShell(metadata) {
+function formatCents(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0) / 100);
+}
+
+function renderShell(metadata, summary) {
   const release = `${metadata.version} · ${metadata.releaseChannel}`;
   return `<!doctype html>
 <html lang="en">
@@ -45,6 +49,10 @@ function renderShell(metadata) {
     h1 { margin: .65rem 0 1rem; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1; }
     p { color: #b8c8d6; line-height: 1.6; }
     .status { margin-top: 1.75rem; padding: 1rem; border-radius: .65rem; background: #102a3d; color: #d9efff; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .75rem; margin-top: 1.25rem; }
+    .card { padding: 1rem; border: 1px solid #27425a; border-radius: .65rem; }
+    .card small { display: block; color: #80c7ff; margin-bottom: .35rem; }
+    .card strong { font-size: 1.3rem; }
     footer { margin-top: 2rem; color: #7890a4; font-size: .8rem; }
   </style>
 </head>
@@ -54,6 +62,13 @@ function renderShell(metadata) {
     <h1>Timothy Finance</h1>
     <p>The rebuilt Finance application boundary is running. Business data and production workflows are not connected in this alpha release.</p>
     <div class="status">Environment ready · no production writers attached</div>
+    <section class="grid" aria-label="Synthetic finance summary">
+      <div class="card"><small>Church actual</small><strong>${formatCents(summary.church.actual_cents)}</strong></div>
+      <div class="card"><small>Church budget</small><strong>${formatCents(summary.church.budget_cents)}</strong></div>
+      <div class="card"><small>Balance sheet</small><strong>${formatCents(summary.balanceSheet.balance_cents)}</strong></div>
+      <div class="card"><small>Childcare rooms</small><strong>${Number(summary.childcare.room_count || 0)}</strong></div>
+    </section>
+    <p><small>All values shown here are deterministic synthetic staging fixtures.</small></p>
     <footer>${release}</footer>
   </main>
 </body>
@@ -104,8 +119,14 @@ export default {
     }
 
     if (url.pathname === '/' || url.pathname === '/index.html') {
-      const body = request.method === 'HEAD' ? null : renderShell(metadata);
-      return response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      if (request.method === 'HEAD') return response(null, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      try {
+        return response(renderShell(metadata, await readSyntheticSummary(env.FINANCE_DB)), {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      } catch {
+        return response('Synthetic staging data unavailable', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      }
     }
 
     return response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
