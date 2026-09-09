@@ -23,7 +23,13 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(config.routes).toEqual([
       { pattern: 'finance-staging.timothystl.org', custom_domain: true },
     ]);
-    for (const forbidden of ['d1_databases', 'kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers']) {
+    expect(config.d1_databases).toEqual([expect.objectContaining({
+      binding: 'FINANCE_DB',
+      database_name: 'timothy-finance-db-staging',
+      migrations_dir: 'apps/finance/migrations',
+    })]);
+    expect(fs.readFileSync(path.join(repoRoot, 'apps/finance/shell.js'), 'utf8')).not.toMatch(/FINANCE_DB|\.prepare\(|\.batch\(/);
+    for (const forbidden of ['kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers']) {
       expect(config[forbidden], `${forbidden} must not exist in the alpha shell`).toBeUndefined();
     }
   });
