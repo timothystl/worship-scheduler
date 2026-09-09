@@ -262,7 +262,7 @@ export async function handleAdminApi(req, env, url, method) {
     const username = info ? info.username : '';
     // council/volunteer were previously missing here (DSN8) — a council or volunteer account
     // with no display_name set showed "Unknown" in the topbar. Fixed alongside adding volunteer.
-    const roleLabels = { admin: 'Administrator', finance: 'Finance', staff: 'Staff', council: 'Council', member: 'Member (read-only)', volunteer: 'Volunteer (read-only)' };
+    const roleLabels = { admin: 'Administrator', finance: 'Finance', staff: 'Staff', council: 'Council', member: 'Member (read-only)', volunteer: 'Volunteer (read-only)', compensation: 'Compensation (Compensation Planner only)' };
     // Try to get display_name from DB if we have a username
     let displayName = roleLabels[role] || 'Unknown';
     if (username && env.DB) {
@@ -322,7 +322,7 @@ export async function handleAdminApi(req, env, url, method) {
     const reqUser = (reqInfo && reqInfo.username || '').toLowerCase();
     // One shared list for both create and update — two copies is how these drift (see the
     // FIN58-class duplicate-source-of-truth notes elsewhere in this codebase's history).
-    const VALID_APP_ROLES = ['admin', 'finance', 'staff', 'council', 'member', 'volunteer'];
+    const VALID_APP_ROLES = ['admin', 'finance', 'staff', 'council', 'member', 'volunteer', 'compensation'];
 
     /** The app_users row a /users/:id call targets, or null. */
     const loadTarget = async (uid) => await env.DB.prepare(

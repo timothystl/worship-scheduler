@@ -4,7 +4,7 @@
 // version bump
 // automatically invalidates the long-lived browser cache on those files, with nowhere else that
 // needs updating in step.
-export const DEPLOY_VERSION = '1.231.0';
+export const DEPLOY_VERSION = '1.232.0';
 
 export const JS_CORE = String.raw`<script>
 // ── DEPLOY VERSION ───────────────────────────────────────────────────
@@ -326,7 +326,13 @@ var FIN_TOPNAV_ITEMS = [
 ];
 var _finActiveNavId = 'health';
 function renderFinanceSubnav() {
-  return FIN_TOPNAV_ITEMS.map(function(item) {
+  // Compensation tier only ever gets the Compensation section (see showTab's finSection
+  // override) — offering the rest of the sub-nav would just be dead buttons that 403 on
+  // click, so it's filtered out of the bar entirely rather than merely disabled.
+  var items = _userRole === 'compensation'
+    ? FIN_TOPNAV_ITEMS.filter(function(i) { return i.id === 'compensation'; })
+    : FIN_TOPNAV_ITEMS;
+  return items.map(function(item) {
     if (item.divider) return '<span class="fin-subnav-divider"></span>';
     return '<button class="fin-subnav-btn' + (item.id === _finActiveNavId ? ' active' : '') + '" onclick="finNavGo(\'' + item.id + '\')">' + item.label + '</button>';
   }).join('');
@@ -363,6 +369,12 @@ function showTab(name, finSection) {
   // rather than land on a blank/403'd tab, same pattern as the member redirect above.
   if (_userRole === 'volunteer' && name !== 'volunteers') {
     name = 'volunteers';
+  }
+  // Compensation tier: view+edit access to the Compensation Planner sub-tab of Finance only
+  // (see the compensation block in api-chms.js) — redirect everything else here, same pattern
+  // as member/volunteer above.
+  if (_userRole === 'compensation' && name !== 'finance') {
+    name = 'finance';
   }
   // Enforce role-based tab access — admin-configurable per role, see _userPermissions above.
   // This is a UX convenience (avoid landing on a blank/403'd tab); the real enforcement is
@@ -408,6 +420,9 @@ function showTab(name, finSection) {
     // browser-history entry from before that change would otherwise land on a section id no
     // panel answers to, leaving the tab blank.
     if (finSection === 'overview') finSection = 'health';
+    // Compensation tier can only ever land on the Compensation sub-tab — see finNavGo/
+    // renderFinanceSubnav, which don't offer it any other section to click into either.
+    if (_userRole === 'compensation') finSection = 'compensation';
     if (finSection) _finActiveNavId = finSection;
     // P25-E: loadFinance()/finShowSection() live in the lazily-loaded finance bundle now — see
     // ensureFinanceModuleLoaded's own comment.
@@ -688,7 +703,7 @@ window.addEventListener('load', function() {
     initPeopleViewMode();
     // Restore tab from URL hash (back/forward or bookmarked link), otherwise default
     var hashTab = location.hash.replace('#', '');
-    var defaultTab = _userRole === 'member' ? 'people' : (_userRole === 'volunteer' ? 'volunteers' : 'home');
+    var defaultTab = _userRole === 'member' ? 'people' : (_userRole === 'volunteer' ? 'volunteers' : (_userRole === 'compensation' ? 'finance' : 'home'));
     // Replace initial state so back button from first tab exits the app cleanly
     history.replaceState({ tab: hashTab || defaultTab }, '', location.href);
     showTab(hashTab || defaultTab);
@@ -716,7 +731,7 @@ function applyRoleUI(role, displayName, permissions) {
   _userPermissions = _userRole === 'admin'
     ? { finance: true, staff: true, register: true, reports: true }
     : (permissions || { finance: false, staff: false, register: false, reports: false });
-  document.body.classList.remove('role-admin','role-finance','role-staff','role-council','role-member','role-volunteer');
+  document.body.classList.remove('role-admin','role-finance','role-staff','role-council','role-member','role-volunteer','role-compensation');
   document.body.classList.add('role-' + _userRole);
   tellServiceWorkerRole(_userRole);
   applyPermissionUI(_userPermissions);

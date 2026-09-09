@@ -2920,7 +2920,7 @@ function coalesceChurchYear(year, compute) {
   return p;
 }
 
-export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, isFinance) {
+export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, isFinance, role = 'admin') {
   if (!isFinance) return json({ error: 'Access denied: finance data requires finance access' }, 403);
 
   // ── Commercial Property (only 'ivanhoe' exists today; propertyKey is threaded through so a
@@ -4138,20 +4138,33 @@ export async function handleFinanceApi(req, env, url, method, seg, db, isAdmin, 
   // small nested-settings blobs elsewhere in this file. Not fiscal-year-scoped (the roster is a
   // standing list of current staff, not a per-year plan), so it's read once and reused across
   // whatever base/target year the admin is currently viewing.
+  // The 'compensation' role (view+edit access to this tab only, nothing else in Finance —
+  // see api-chms.js) never reads or writes the shared admin/finance roster: its edits are
+  // forked into their own config key on first save, so they can never overwrite what
+  // admin/finance/council see. Until it has saved at least once, it reads the same starting
+  // point everyone else does.
+  const SALARY_PLANNER_KEY = 'finance_salary_planner';
+  const SALARY_PLANNER_COMPENSATION_KEY = 'finance_salary_planner_compensation';
   if (seg === 'finance/planning/salary' && method === 'GET') {
-    const row = await db.prepare("SELECT value FROM chms_config WHERE key='finance_salary_planner'").first();
+    let key = SALARY_PLANNER_KEY;
+    if (role === 'compensation') {
+      const forkExists = await db.prepare("SELECT 1 FROM chms_config WHERE key=?").bind(SALARY_PLANNER_COMPENSATION_KEY).first();
+      if (forkExists) key = SALARY_PLANNER_COMPENSATION_KEY;
+    }
+    const row = await db.prepare("SELECT value FROM chms_config WHERE key=?").bind(key).first();
     let data = null;
     if (row) { try { data = JSON.parse(row.value); } catch { data = null; } }
     return json({ data });
   }
   if (seg === 'finance/planning/salary' && method === 'PUT') {
-    if (!isAdmin) return json({ error: 'Access denied: editing the salary planner requires admin access' }, 403);
+    if (!isAdmin && role !== 'compensation') return json({ error: 'Access denied: editing the salary planner requires admin access' }, 403);
     const b = await req.json().catch(() => null);
     if (!b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'Invalid payload' }, 400);
     if (b.roster !== undefined && !Array.isArray(b.roster)) return json({ error: 'roster must be an array' }, 400);
+    const key = role === 'compensation' ? SALARY_PLANNER_COMPENSATION_KEY : SALARY_PLANNER_KEY;
     await db.prepare(
-      `INSERT INTO chms_config (key,value) VALUES ('finance_salary_planner',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
-    ).bind(JSON.stringify(b)).run();
+      `INSERT INTO chms_config (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`
+    ).bind(key, JSON.stringify(b)).run();
     return json({ ok: true });
   }
 

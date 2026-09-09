@@ -189,6 +189,16 @@ export function permissionsForRole(matrix, role) {
     for (const item of ROLE_PERMISSION_ITEM_KEYS) out[item] = ITEM_MAX_LEVEL[item];
     return out;
   }
+  // compensation — a narrow, hardcoded tier like member/volunteer: not part of the
+  // configurable matrix, so an admin can never widen or narrow it from Settings. It exists
+  // only so the Financial Reports sidebar item (gated on the `finance` item being anything
+  // but 'none') renders for it; its real access is enforced directly in handleChmsApi
+  // (api-chms.js), which allows only the Compensation Planner's own endpoints and denies
+  // everything else regardless of what this map says.
+  if (role === 'compensation') {
+    for (const item of ROLE_PERMISSION_ITEM_KEYS) out[item] = item === 'finance' ? 'view' : 'none';
+    return out;
+  }
   const row = matrix[role] || {};
   for (const item of ROLE_PERMISSION_ITEM_KEYS) {
     out[item] = ROLE_PERMISSION_LEVELS.includes(row[item]) ? row[item] : 'none';
