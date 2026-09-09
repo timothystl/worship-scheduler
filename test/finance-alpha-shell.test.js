@@ -14,7 +14,11 @@ const env = {
   ENVIRONMENT: 'staging', RELEASE_SHA: 'test-sha',
   FINANCE_DB: {
     prepare(sql) { statements.push(sql); return { sql }; },
-    async batch() {
+    async batch(batchStatements) {
+      if (batchStatements.length === 1) return [{ results: [
+        { fiscal_year: 2026, classification: 'Expenses', account_name: 'Synthetic Programs', own_actual_cents: 8000000, own_budget_cents: 8500000 },
+        { fiscal_year: 2026, classification: 'Income', account_name: 'Synthetic Contributions', own_actual_cents: 12000000, own_budget_cents: 12500000 },
+      ] }];
       return [
         { results: [{ value: 'SYNTHETIC-NO-PRODUCTION-DATA' }] },
         { results: [{ actual_cents: 20000000, budget_cents: 21000000, income_actual_cents: 12000000, expense_actual_cents: 8000000, income_budget_cents: 12500000, expense_budget_cents: 8500000 }] },
@@ -27,7 +31,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.10');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.11');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -59,7 +63,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.10',
+      version: '1.0.0-alpha.11',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -71,7 +75,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.10 · alpha');
+    expect(html).toContain('1.0.0-alpha.11 · alpha');
     expect(html).toContain('How are we doing, and what should we decide?');
     expect(html).toContain('Operating result');
     expect(html).toContain('$40,000');
@@ -99,6 +103,22 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(html).not.toContain('$1,450');
   });
 
+  it('renders a synthetic Church Report with account detail and a separate read budget', async () => {
+    statements.length = 0;
+    const res = await worker.fetch(new Request('https://finance.test/?section=church'), env);
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain('Synthetic Church Report');
+    expect(html).toContain('Fiscal year 2026');
+    expect(html).toContain('Synthetic Contributions');
+    expect(html).toContain('Synthetic Programs');
+    expect(html).toContain('Favorable variance');
+    expect(html).toContain('$120,000');
+    expect(html).toContain('$80,000');
+    expect(statements).toHaveLength(5);
+    expect(statements.every((sql) => /^SELECT\b/i.test(sql))).toBe(true);
+  });
+
   it('serves only synthetic read-only summary data', async () => {
     statements.length = 0;
     const res = await worker.fetch(new Request('https://finance.test/api/summary'), env);
@@ -111,7 +131,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
   });
 
   it('enforces the named summary query budget and read-only statements', async () => {
-    expect(FINANCE_QUERY_BUDGETS).toEqual({ summary: 4 });
+    expect(FINANCE_QUERY_BUDGETS).toEqual({ summary: 4, churchReport: 1 });
     await expect(runBudgetedReadBatch(env.FINANCE_DB, 'summary', [
       'SELECT 1', 'SELECT 2', 'SELECT 3', 'SELECT 4', 'SELECT 5',
     ])).rejects.toThrow('Finance query budget exceeded: summary');
@@ -132,7 +152,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       contract: 'finance.summary.v1',
       dataClassification: 'synthetic',
       release: {
-        product: 'finance', environment: 'staging', version: '1.0.0-alpha.10',
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.11',
         releaseChannel: 'alpha', releaseSha: 'test-sha',
       },
       summary: {
