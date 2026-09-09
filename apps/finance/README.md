@@ -10,6 +10,11 @@ The alpha serves a branded staging shell and `/health`. It intentionally has no 
 service binding, queue, cron, email, payment, authentication, production route, or production data
 connection. A successful shell deployment proves packaging and release isolation only.
 
+The initial deployment is intentionally unrouted: both `workers_dev` and preview URLs are disabled.
+Do not add a reachable hostname until Cloudflare Access is enabled for the account and protection is
+attached to the whole Worker. This prevents a second, unprotected URL from bypassing the staging
+sign-in gate.
+
 Existing Finance remains operational in the current Connect Worker. Moving a reader, writer,
 route, identity flow, or database table requires a later reviewed slice with contract,
 reconciliation, and rollback evidence.
