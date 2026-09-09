@@ -18,7 +18,8 @@ describe('Finance 1.0.0 alpha staging shell', () => {
   it('has a staging-only Worker name and no stateful or outbound bindings', () => {
     expect(config.name).toBe('timothy-finance-app-staging');
     expect(config.vars.ENVIRONMENT).toBe('staging');
-    expect(config.workers_dev).toBe(true);
+    expect(config.workers_dev).toBe(false);
+    expect(config.preview_urls).toBe(false);
     for (const forbidden of ['d1_databases', 'kv_namespaces', 'r2_buckets', 'queues', 'services', 'triggers', 'routes']) {
       expect(config[forbidden], `${forbidden} must not exist in the alpha shell`).toBeUndefined();
     }
