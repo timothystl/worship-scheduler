@@ -7,6 +7,7 @@ import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from '../apps/finance/versio
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'wrangler.finance.staging.jsonc'), 'utf8'));
+const summarySchema = JSON.parse(fs.readFileSync(path.join(repoRoot, 'apps/finance/contracts/summary-v1.schema.json'), 'utf8'));
 const statements = [];
 const env = {
   ENVIRONMENT: 'staging', RELEASE_SHA: 'test-sha',
@@ -25,7 +26,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.3');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.4');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -57,7 +58,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.3',
+      version: '1.0.0-alpha.4',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -69,7 +70,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.3 · alpha');
+    expect(html).toContain('1.0.0-alpha.4 · alpha');
     expect(html).toContain('$200,000');
     expect(html).toContain('$210,000');
     expect(html).toContain('$600,000');
@@ -85,6 +86,38 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(body.summary.church.actual_cents).toBe(20000000);
     expect(statements).toHaveLength(4);
     expect(statements.every((sql) => /^SELECT\b/i.test(sql))).toBe(true);
+  });
+
+  it('publishes a stable versioned summary contract', async () => {
+    statements.length = 0;
+    const res = await worker.fetch(new Request('https://finance.test/api/v1/summary'), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-finance-contract')).toBe('finance.summary.v1');
+    expect(await res.json()).toEqual({
+      contract: 'finance.summary.v1',
+      dataClassification: 'synthetic',
+      release: {
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.4',
+        releaseChannel: 'alpha', releaseSha: 'test-sha',
+      },
+      summary: {
+        church: { actualCents: 20000000, budgetCents: 21000000 },
+        balanceSheet: { balanceCents: 60000000 },
+        childcare: { roomCount: 1, billedCents: 4000000 },
+      },
+    });
+    expect(statements).toHaveLength(4);
+    expect(statements.every((sql) => /^SELECT\b/i.test(sql))).toBe(true);
+    expect(summarySchema.$id).toBe('urn:timothy:finance:summary:v1');
+    expect(summarySchema.properties.contract.const).toBe('finance.summary.v1');
+    expect(summarySchema.additionalProperties).toBe(false);
+  });
+
+  it('keeps the alpha compatibility alias visibly deprecated', async () => {
+    const res = await worker.fetch(new Request('https://finance.test/api/summary'), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('deprecation')).toBe('true');
+    expect(res.headers.get('link')).toBe('</api/v1/summary>; rel="successor-version"');
   });
 
   it('ships restrictive response headers and rejects writes', async () => {

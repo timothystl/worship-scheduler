@@ -6,7 +6,8 @@ preserved separately.
 
 ## Current scope
 
-The alpha serves a branded staging shell, `/health`, and a read-only `/api/summary` over explicitly
+The alpha serves a branded staging shell, `/health`, and a versioned read-only
+`/api/v1/summary` contract over explicitly
 synthetic fixture data. It has no database mutation path, KV, R2, service binding, queue,
 cron, email, payment, application authentication, production route, or production data connection.
 A successful shell deployment proves packaging and release isolation only.
@@ -30,6 +31,7 @@ the migration does not copy production data or authorize a new writer.
 - `version.js` — intentional semantic prerelease version.
 - `migrations/` — Finance-only D1 migration ledger; never targets the shared Connect database.
 - `fixtures/` — deterministic synthetic staging data, applied explicitly and never as a migration.
+- `contracts/` — versioned JSON Schemas for staging APIs.
 - `../../wrangler.finance.staging.jsonc` — isolated staging Worker configuration.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
 
@@ -58,3 +60,6 @@ Use intentional versions only:
 
 Every staging deployment records the exact main commit in `RELEASE_SHA`. Do not deploy this Worker
 to a production route, attach production resources, or treat an alpha version as authoritative.
+
+`/api/summary` remains a deprecated compatibility alias during alpha and points clients to
+`/api/v1/summary`. New consumers must use the versioned path and validate its contract.
