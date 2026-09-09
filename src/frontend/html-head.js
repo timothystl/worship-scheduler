@@ -1532,6 +1532,13 @@ body.perm-giving-anon .require-giving-named{display:none!important;}
 .role-volunteer .s-item{display:none!important;}
 .role-volunteer .s-section-hdr{display:none!important;}
 .role-volunteer .s-item[data-tab="volunteers"]{display:flex!important;}
+/* Compensation tier: view+edit access to the Compensation Planner sub-tab of Finance only —
+   same fail-closed shape as role-volunteer above. Within Finance, the sub-nav itself is
+   filtered down to just the Compensation button by renderFinanceSubnav() (js-core.js), not
+   CSS, since those buttons are rendered by JS rather than present in this static markup. */
+.role-compensation .s-item{display:none!important;}
+.role-compensation .s-section-hdr{display:none!important;}
+.role-compensation .s-item[data-tab="finance"]{display:flex!important;}
 /* ── PRINT ── */
 @media print{
   .sidebar,.topbar,.toolbar,.modal-overlay,#offline-banner{display:none!important;}

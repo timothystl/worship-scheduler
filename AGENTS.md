@@ -43,8 +43,10 @@ The target architecture has four staff products: Church Website, Connect, Financ
 
 ## Access and data safety
 
-- Roles are `admin`, `finance`, `staff`, `council`, `member`, and `volunteer`; feature access is
-  resolved by the server-side permission matrix. UI hiding is never authorization.
+- Roles are `admin`, `finance`, `staff`, `council`, `member`, `volunteer`, and `compensation`
+  (view+edit access to the Compensation Planner sub-tab of Finance only, saved separately from
+  the shared admin/finance roster); feature access is resolved by the server-side permission
+  matrix. UI hiding is never authorization.
 - Council Giving access is aggregate/anonymous only. New anonymous endpoints are denied until
   explicitly allowlisted.
 - Never expose credentials or personal, giving, payroll, HR, child/family, or payment data.
