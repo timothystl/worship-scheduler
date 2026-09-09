@@ -26,7 +26,7 @@ const env = {
 
 describe('Finance 1.0.0 alpha staging shell', () => {
   it('uses intentional prerelease versioning', () => {
-    expect(FINANCE_VERSION).toBe('1.0.0-alpha.4');
+    expect(FINANCE_VERSION).toBe('1.0.0-alpha.5');
     expect(FINANCE_RELEASE_CHANNEL).toBe('alpha');
   });
 
@@ -58,7 +58,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       status: 'ok',
       product: 'finance',
       environment: 'staging',
-      version: '1.0.0-alpha.4',
+      version: '1.0.0-alpha.5',
       releaseChannel: 'alpha',
       releaseSha: 'test-sha',
     });
@@ -70,10 +70,13 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Timothy Finance');
     expect(html).toContain('no production writers attached');
-    expect(html).toContain('1.0.0-alpha.4 · alpha');
+    expect(html).toContain('1.0.0-alpha.5 · alpha');
     expect(html).toContain('$200,000');
     expect(html).toContain('$210,000');
     expect(html).toContain('$600,000');
+    expect(html).toContain('$1,450');
+    expect(html).toContain('Giving records</small><strong>6');
+    expect(html).toContain('validated locally with no network call');
     expect(html).toContain('deterministic synthetic staging fixtures');
   });
 
@@ -97,7 +100,7 @@ describe('Finance 1.0.0 alpha staging shell', () => {
       contract: 'finance.summary.v1',
       dataClassification: 'synthetic',
       release: {
-        product: 'finance', environment: 'staging', version: '1.0.0-alpha.4',
+        product: 'finance', environment: 'staging', version: '1.0.0-alpha.5',
         releaseChannel: 'alpha', releaseSha: 'test-sha',
       },
       summary: {
@@ -118,6 +121,22 @@ describe('Finance 1.0.0 alpha staging shell', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('deprecation')).toBe('true');
     expect(res.headers.get('link')).toBe('</api/v1/summary>; rel="successor-version"');
+  });
+
+  it('serves the validated static Connect Giving fixture without querying D1 or calling outbound', async () => {
+    statements.length = 0;
+    const res = await worker.fetch(new Request('https://finance.test/api/v1/connect-giving-preview'), env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-finance-contract')).toBe('connect.giving-summary.v1');
+    const body = await res.json();
+    expect(body.contract).toBe('connect.giving-summary.v1');
+    expect(body.dataClassification).toBe('aggregate');
+    expect(body.totals).toEqual({ grossCents: 150000, refundCents: 5000, netCents: 145000 });
+    expect(body.reconciliation).toEqual({ sourceRecordCount: 6, fundCount: 2, totalsMatch: true });
+    expect(statements).toHaveLength(0);
+
+    const shell = fs.readFileSync(path.join(repoRoot, 'apps/finance/shell.js'), 'utf8');
+    expect(shell).not.toMatch(/await\s+fetch\s*\(|globalThis\.fetch|env\.[A-Za-z0-9_]+\.fetch\s*\(/);
   });
 
   it('ships restrictive response headers and rejects writes', async () => {
