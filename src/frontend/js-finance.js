@@ -8614,13 +8614,22 @@ function finCompIsAdmin() { return _userRole === 'admin'; }
 // which still gates the one action that writes into the SHARED church budget/ledger — "Send to
 // FY budget" — since that one must stay admin-only regardless of who can edit their own roster.
 function finCompCanEdit() { return _userRole === 'admin' || _userRole === 'compensation'; }
+function finCompIsCouncil() { return _userRole === 'council'; }
+// Council may steer the raise PLAN — the roster-wide/per-worker raise method, the custom/scale
+// percentages, and the baseline-only comparison toggle — but never a worker's seed facts (name,
+// position, current pay, District Worksheet inputs) or a hand-typed dollar override; those stay
+// under finCompCanEdit()/finCompReadOnly() below, same as any other non-admin/compensation role.
+// Enforced again server-side (api-finance.js only persists the plan fields for this role) since
+// UI hiding here is not authorization.
+function finCompCanEditPlanControls() { return finCompCanEdit() || finCompIsCouncil(); }
 // Disables every input in a chunk of markup for a role that can't edit. Same pattern the old tab
 // used: the figures stay visible to anyone who can reach the Compensation tab, only editing is
 // gated (the save endpoint is admin/compensation-gated server-side either way).
-function finCompReadOnly(html) {
-  if (finCompCanEdit()) return html;
+function finCompReadOnlyUnless(html, allowed) {
+  if (allowed) return html;
   return html.replace(/<input /g, '<input disabled ').replace(/<select /g, '<select disabled ');
 }
+function finCompReadOnly(html) { return finCompReadOnlyUnless(html, finCompCanEdit()); }
 
 // ── Reference figures (§5.7): entered-for-the-year, else the most recent earlier entered year,
 // else the code constant. Never silently substitutes — every resolution carries the year it came
@@ -9207,6 +9216,9 @@ function finCompHeaderHtml(totals) {
     return '<span class="fin-comp-pill' + (active ? ' active' : '') + '" onclick="finCompSetView(' + jsAttr(v.key) + ')">' + v.label + '</span>';
   }).join('');
   return '<div class="fin-comp-shell">'
+    + (finCompIsCouncil()
+        ? '<div class="fin-comp-note" style="margin-bottom:8px;">You can choose a raise method and adjust the custom/scale percentages below &mdash; saved to your own council plan, never the church&#39;s actual roster or another council member&#39;s plan. Names, positions, current pay and every other figure here are read-only.</div>'
+        : '')
     + '<div class="fin-comp-titlebar">'
     + '<div><div class="fin-comp-title">Compensation Planner &mdash; FY' + _finPlanTargetYear + '</div>'
     + '<div class="fin-comp-subtitle">' + finCompMethodSummary() + '</div></div>'
@@ -9288,7 +9300,7 @@ function finCompRenderPlan(computed, totals) {
     + '<div class="fin-comp-chiprow">'
     + '<span class="fin-comp-chiprow-lbl">Applied to everyone</span>'
     + '<span style="display:flex;gap:6px;flex-wrap:wrap;">' + chips + '</span>'
-    + finCompReadOnly(customBox)
+    + finCompReadOnlyUnless(customBox, finCompCanEditPlanControls())
     + '<span style="font-size:.74rem;color:var(--warm-gray);">Click a column for everyone, a cell for one person, or type an exact figure in the panel.</span>'
     + (finCompOverrideCount() ? '<span class="fin-comp-link" onclick="finCompClearOverrides()">&#8634; clear ' + finCompOverrideCount() + ' hand-set figure(s)</span>' : '')
     + '</div>'
@@ -9440,7 +9452,7 @@ function finCompRenderBaselineNote(totals) {
       + '. That is a departed or vacant post, a worker missing from the roster, or someone excluded as paid from another budget'
       + ' &mdash; and while it is counted, the base year covers more people than the plan does, so the plan reads cheaper than it is.</div>'
       + list(b.unmatchedRows)
-      + (finCompCanEdit()
+      + (finCompCanEditPlanControls()
           ? '<div><span class="fin-comp-link" onclick="finCompToggleBaselineRosterOnly()">'
             + (b.rosterOnly ? '&#8634; count these accounts again' : 'Leave these out and compare like for like &rarr;') + '</span></div>'
           : '');

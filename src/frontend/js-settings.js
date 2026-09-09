@@ -91,7 +91,13 @@ function renderRolePermTable(perms) {
       + '<td style="padding:8px;">' + esc(item.label) + '</td>'
       + ROLE_PERM_ROLES.map(function(role) {
         var cur = (perms[role] && perms[role][item.key]) || 'none';
-        return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + '</td>';
+        // Council's Finance permission is hardcoded server-side (see
+        // isCompensationPlannerRequest in api-chms.js) to the Compensation Planner sub-tab
+        // only, never the rest of Finance that finance/staff get at the same level — called
+        // out here so this dropdown doesn't read as opening the whole workspace to council.
+        var note = (item.key === 'finance' && role === 'council')
+          ? '<div style="font-size:.68rem;color:var(--warm-gray);margin-top:2px;">Compensation Planner only</div>' : '';
+        return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + note + '</td>';
       }).join('')
       + '</tr>';
   }).join('');
