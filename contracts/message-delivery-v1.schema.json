@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:timothy:connect:message-delivery:v1",
+  "title": "Connect message delivery request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "dataClassification",
+    "sourceProduct",
+    "consumerProduct",
+    "messageId",
+    "idempotencyKey",
+    "createdAt",
+    "authorization",
+    "delivery"
+  ],
+  "properties": {
+    "contract": { "const": "connect.message-delivery.v1" },
+    "dataClassification": { "const": "restricted-contact" },
+    "sourceProduct": { "const": "connect" },
+    "consumerProduct": { "const": "delivery-adapter" },
+    "messageId": { "type": "string", "pattern": "^msg_[A-Za-z0-9_-]{16,96}$" },
+    "idempotencyKey": { "type": "string", "minLength": 16, "maxLength": 128 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "correlationRef": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "recipientRef": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "authorization": { "$ref": "#/$defs/authorization" },
+    "delivery": {
+      "oneOf": [
+        { "$ref": "#/$defs/email" },
+        { "$ref": "#/$defs/sms" },
+        { "$ref": "#/$defs/push" }
+      ]
+    }
+  },
+  "$defs": {
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "checkedAt"],
+      "properties": {
+        "basis": { "enum": ["transactional", "consented"] },
+        "checkedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "email": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "destination", "subject", "text"],
+      "properties": {
+        "channel": { "const": "email" },
+        "destination": { "type": "string", "format": "email", "maxLength": 254 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 10000 },
+        "html": { "type": "string", "minLength": 1, "maxLength": 50000 }
+      }
+    },
+    "sms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "destination", "text"],
+      "properties": {
+        "channel": { "const": "sms" },
+        "destination": { "type": "string", "pattern": "^\\+[1-9][0-9]{7,14}$" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1600 }
+      }
+    },
+    "push": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "destination", "title", "text"],
+      "properties": {
+        "channel": { "const": "push" },
+        "destination": { "type": "string", "minLength": 16, "maxLength": 256 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "url": { "type": "string", "pattern": "^/[A-Za-z0-9_./?=&%-]*$", "maxLength": 500 }
+      }
+    }
+  }
+}

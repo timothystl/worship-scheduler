@@ -1,0 +1,21 @@
+{
+  "contract": "connect.message-delivery.v1",
+  "dataClassification": "restricted-contact",
+  "sourceProduct": "connect",
+  "consumerProduct": "delivery-adapter",
+  "messageId": "msg_SYNTHETIC_PUSH_20260909",
+  "idempotencyKey": "SYNTHETIC-PUSH-DELIVERY-20260909-001",
+  "createdAt": "2026-09-09T16:00:00Z",
+  "recipientRef": "synthetic-recipient-003",
+  "authorization": {
+    "basis": "transactional",
+    "checkedAt": "2026-09-09T15:59:59Z"
+  },
+  "delivery": {
+    "channel": "push",
+    "destination": "synthetic-push-subscription-ref-003",
+    "title": "Synthetic notification",
+    "text": "No push notification was sent.",
+    "url": "/synthetic-only"
+  }
+}

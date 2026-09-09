@@ -38,3 +38,14 @@ owner; Finance is the consumer. It exposes fund/period aggregates, counts, integ
 reconciliation state while excluding donor, person, household identifier, address, and contact
 fields. The schema and synthetic example do not create a runtime endpoint or authorize production
 reads.
+
+`contracts/message-delivery-v1.schema.json` defines a proposed Connect-to-delivery-adapter request
+for email, SMS, and Web Push. It carries bounded channel-specific contact/content fields,
+idempotency, correlation, and an explicit transactional-or-consented authorization check. It does
+not contain provider credentials or authorize a runtime provider call, queue, scheduled delivery,
+or production traffic. Connect remains responsible for the message purpose, recipient eligibility,
+and audit record; an adapter may report delivery outcome but does not become the source of truth for
+people, consent, or message history.
+The paired `message-delivery-result-v1.schema.json` limits adapter outcomes to accepted, delivered,
+temporary failure, or permanent failure with explicit retry, dead-letter, or no-retry disposition.
+It forbids unbounded raw provider responses.

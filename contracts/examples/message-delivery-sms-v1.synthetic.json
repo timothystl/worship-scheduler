@@ -1,0 +1,19 @@
+{
+  "contract": "connect.message-delivery.v1",
+  "dataClassification": "restricted-contact",
+  "sourceProduct": "connect",
+  "consumerProduct": "delivery-adapter",
+  "messageId": "msg_SYNTHETIC_SMS_20260909",
+  "idempotencyKey": "SYNTHETIC-SMS-DELIVERY-20260909-001",
+  "createdAt": "2026-09-09T16:00:00Z",
+  "recipientRef": "synthetic-recipient-002",
+  "authorization": {
+    "basis": "consented",
+    "checkedAt": "2026-09-09T15:59:59Z"
+  },
+  "delivery": {
+    "channel": "sms",
+    "destination": "+15550100200",
+    "text": "Synthetic SMS contract data; no message was sent."
+  }
+}
