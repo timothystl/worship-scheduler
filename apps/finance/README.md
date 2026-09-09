@@ -29,6 +29,7 @@ the migration does not copy production data or authorize a new writer.
 - `shell.js` — Cloudflare Worker entry point and safe health endpoint.
 - `version.js` — intentional semantic prerelease version.
 - `migrations/` — Finance-only D1 migration ledger; never targets the shared Connect database.
+- `fixtures/` — deterministic synthetic staging data, applied explicitly and never as a migration.
 - `../../wrangler.finance.staging.jsonc` — isolated staging Worker configuration.
 - `../../test/finance-alpha-shell.test.js` — boundary, response, and security regression tests.
 

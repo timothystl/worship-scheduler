@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const sql = readFileSync(new URL('../apps/finance/migrations/0001_finance_foundation.sql', import.meta.url), 'utf8');
+const fixtures = readFileSync(new URL('../apps/finance/fixtures/0001_synthetic_staging.sql', import.meta.url), 'utf8');
 const expected = [
   'finance_budget_plan', 'finance_church_balances', 'finance_church_entries',
   'finance_daycare_entries', 'finance_daycare_rooms', 'finance_import_log',
@@ -23,5 +24,16 @@ describe('Finance isolated D1 foundation', () => {
   it('does not recreate shared or retired credential stores', () => {
     expect(sql).not.toMatch(/CREATE TABLE\s+(chms_config|funds|giving_|finance_qb_connection|finance_qb_snapshot)/i);
     expect(sql).not.toMatch(/access_token|refresh_token|realm_id/i);
+  });
+
+  it('loads deterministic synthetic controls without personal or production markers', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(sql);
+    db.exec(fixtures);
+    expect(db.prepare('SELECT SUM(own_actual_cents) AS n FROM finance_church_entries').get().n).toBe(20000000);
+    expect(db.prepare('SELECT SUM(own_balance_cents) AS n FROM finance_church_balances').get().n).toBe(60000000);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM finance_daycare_rooms').get().n).toBe(1);
+    expect(db.prepare("SELECT value FROM finance_settings WHERE key='fixture_label'").get().value).toBe('SYNTHETIC-NO-PRODUCTION-DATA');
+    expect(fixtures).not.toMatch(/@|access_token|refresh_token|realm_id/i);
   });
 });
