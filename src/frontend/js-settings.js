@@ -100,10 +100,10 @@ function renderRolePermTable(perms) {
       + '<td style="padding:8px;">' + esc(item.label) + '</td>'
       + ROLE_PERM_ROLES.map(function(role) {
         var cur = (perms[role] && perms[role][item.key]) || 'none';
-        // Council's Compensation saves are per-username (api-finance.js) rather than the
-        // shared admin/finance plan — called out here so "Edit" doesn't read as full control
-        // over the real plan.
-        var note = (item.key === 'compensation' && role === 'council')
+        // Council's Compensation AND Budget saves are per-username (api-finance.js) rather
+        // than the shared admin/finance plan/roster — called out here so "Edit" doesn't read
+        // as full control over the real numbers.
+        var note = ((item.key === 'compensation' || item.key === 'budget') && role === 'council')
           ? '<div style="font-size:.68rem;color:var(--warm-gray);margin-top:2px;">Each council member saves their own plan</div>' : '';
         return '<td style="padding:8px;text-align:center;">' + rolePermLevelOptions(item, role, cur) + note + '</td>';
       }).join('')
