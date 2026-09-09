@@ -44,3 +44,11 @@ jobs:
 
       - name: Verify built HTML scripts parse
         run: node .github/scripts/check-built-scripts.js
+
+      - name: Validate Worker configurations without deploying
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          npx wrangler deploy --dry-run --config wrangler.toml
+          npx wrangler deploy --dry-run --config wrangler.staging.toml
+          npx wrangler deploy --dry-run --config wrangler.finance.staging.jsonc
