@@ -1,6 +1,7 @@
 import { FINANCE_RELEASE_CHANNEL, FINANCE_VERSION } from './version.js';
 import givingFixture from '../../contracts/examples/giving-summary-v1.synthetic.json';
 import { acceptConnectGivingSummaryV1 } from './connect-giving-consumer.js';
+import { runBudgetedReadBatch } from './query-budget.js';
 
 const PRODUCT = 'finance';
 const SUMMARY_CONTRACT = 'finance.summary.v1';
@@ -89,7 +90,7 @@ async function readSyntheticSummary(db) {
     'SELECT COALESCE(SUM(own_balance_cents),0) AS balance_cents FROM finance_church_balances',
     'SELECT COUNT(*) AS room_count, COALESCE(SUM(billed_cents),0) AS billed_cents FROM finance_daycare_rooms',
   ];
-  const results = await db.batch(statements.map((sql) => db.prepare(sql)));
+  const { results } = await runBudgetedReadBatch(db, 'summary', statements);
   const first = (index) => results[index]?.results?.[0] || {};
   if (first(0).value !== 'SYNTHETIC-NO-PRODUCTION-DATA') throw new Error('Synthetic fixture marker missing');
   return { church: first(1), balanceSheet: first(2), childcare: first(3) };
